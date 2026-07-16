@@ -203,9 +203,9 @@ function renderCharacterSelection(
   return region;
 }
 
-function renderReady(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
+function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const region = element(document, "section", "ready-state");
-  region.setAttribute("aria-label", snapshot.copy.readyTitle);
+  region.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena");
   const portrait = element(
     document,
     "div",
@@ -220,10 +220,10 @@ function renderReady(document: Document, snapshot: AppSnapshot, dispatch: Dispat
 
   const copy = element(document, "div", "ready-state__copy");
   copy.append(
-    element(document, "p", "page-intro__kicker", snapshot.copy.readyKicker),
-    element(document, "h2", "page-intro__title", snapshot.copy.readyTitle),
+    element(document, "p", "page-intro__kicker", snapshot.locale === "pt-BR" ? "GAMEPLAY ORIGINAL" : "ORIGINAL GAMEPLAY"),
+    element(document, "h2", "page-intro__title", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena"),
     element(document, "p", "ready-state__choice", (snapshot.selectedCharacter?.name ?? "") + " · " + (snapshot.activeExperience?.name ?? "")),
-    element(document, "p", "page-intro__description", snapshot.copy.readyMessage),
+    element(document, "p", "page-intro__description", snapshot.locale === "pt-BR" ? "Carregando o motor original de Bomba PvP." : "Loading the original Bomba PvP engine."),
   );
   const actions = element(document, "div", "ready-state__actions");
   actions.append(
@@ -311,7 +311,7 @@ export function renderApp(root: HTMLElement, snapshot: AppSnapshot, dispatch: Di
   if (snapshot.screen === "character-selection") {
     content.append(renderCharacterSelection(document, snapshot, dispatch));
   }
-  if (snapshot.screen === "launch-ready") content.append(renderReady(document, snapshot, dispatch));
+  if (snapshot.screen === "game-launch") content.append(renderGameLaunch(document, snapshot, dispatch));
   if (snapshot.screen === "laboratory") content.append(renderLaboratory(document, snapshot, dispatch));
 
   main.append(backdrop, renderBrand(document, snapshot, dispatch), content, renderFooter(document, snapshot));

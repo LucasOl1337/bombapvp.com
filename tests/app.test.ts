@@ -38,7 +38,7 @@ describe("Bomba PvP app", () => {
     expect(within(englishRoot).getByRole("heading", { name: "Choose your experience" })).toBeTruthy();
   });
 
-  it("transforma Sala contínua em uma jornada completa de seleção", () => {
+  it("envia a Sala contínua ao motor original após a seleção", () => {
     const root = createRoot();
     const visitedPaths: string[] = [];
     app = createBombApp({
@@ -69,16 +69,18 @@ describe("Bomba PvP app", () => {
 
     fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
-      screen: "launch-ready",
-      currentPath: "/jogar/pronto",
+      screen: "game-launch",
+      currentPath: "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034",
       selectedCharacter: { name: "Ranni" },
     });
-    expect(view.getByRole("region", { name: "Pronto para entrar" })).toBeTruthy();
-    expect(view.getByText("Ranni · Sala contínua")).toBeTruthy();
-    expect(visitedPaths).toEqual(["/jogar/personagem", "/jogar/pronto"]);
+    expect(view.getByRole("region", { name: "Abrindo arena" })).toBeTruthy();
+    expect(visitedPaths).toEqual([
+      "/jogar/personagem",
+      "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034",
+    ]);
   });
 
-  it("usa a mesma seleção para treino sem duplicar a experiência", () => {
+  it("envia o Treino ao motor original com o personagem escolhido", () => {
     const root = createRoot();
     app = createBombApp({
       hostname: "bombapvp.com",
@@ -94,17 +96,11 @@ describe("Bomba PvP app", () => {
     fireEvent.click(view.getByRole("button", { name: "Nico, Escolher" }));
     fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
-      screen: "launch-ready",
-      currentPath: "/treino/pronto",
+      screen: "game-launch",
+      currentPath: "/arena/?mode=training&character=5474c45c-2987-43e0-af2c-a6500c836881",
       selectedCharacter: { name: "Nico" },
     });
-
-    fireEvent.click(view.getByRole("button", { name: "Revisar personagem" }));
-    expect(app.getSnapshot()).toMatchObject({
-      screen: "character-selection",
-      currentPath: "/treino/personagem",
-      selectedCharacter: { name: "Nico" },
-    });
+    expect(view.getByText("Nico · Treino contra bots")).toBeTruthy();
   });
 
   it("trata o laboratório como produto próprio e declara sua fronteira de conta", () => {

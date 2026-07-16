@@ -1,0 +1,6309 @@
+import {
+  BASE_MOVE_MS,
+  BOMB_FUSE_MS,
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  FIXED_STEP_MS,
+  FLAME_DURATION_MS,
+  HUD_HEIGHT,
+  KEY_BINDINGS,
+  LOCAL_PLAYER_MOVEMENT_BINDINGS,
+  MIN_MOVE_MS,
+  PLAYER_COLORS,
+  ROUND_DURATION_MS,
+  ROUND_END_DELAY_MS,
+  SKILL_KEY,
+  SPEED_STEP_MS,
+  TARGET_WINS,
+  TILE_SIZE,
+} from "../PersonalConfig/config";
+import {
+  spriteForDirection,
+  type CharacterRosterEntry,
+  type DirectionalSprites,
+  type GameAssets,
+} from "./assets";
+import {
+  DEFAULT_ARENA_THEME_ID,
+  getArenaThemeById,
+  type ArenaThemePalette,
+} from "../Arenas/arena-theme-library";
+import { pickAnimationFrame } from "./animation-frame";
+import { SpriteTrimCache, type SpriteTrimBounds } from "./sprite-trim-cache";
+import {
+  ALL_PLAYER_IDS,
+  MENU_PLAYER_IDS,
+} from "../Gameplay/types";
+import type {
+  ArenaDefinition,
+  ArenaState,
+  BombState,
+  CharacterSkillId,
+  Direction,
+  FlameState,
+  MagicBeamState,
+  MatchScore,
+  MenuPlayerId,
+  Mode,
+  PixelCoord,
+  PlayerId,
+  PlayerState,
+  PowerUpState,
+  RoundOutcome,
+  SuddenDeathClosingTileState,
+  TileCoord,
+} from "../Gameplay/types";
+import { InputManager, NoopInputManager, type InputController } from "./input";
+import {
+  buildArenaRuntimeConfig,
+  createArena,
+  createDefaultArenaDefinition,
+  isWrapPortalTile,
+  tileKey,
+} from "../Arenas/arena";
+import {
+  applyPowerUpToPlayer,
+  formatBombFuseSeconds,
+  formatControlKey,
+  getBombFuseMsForPlayer,
+  getPowerUpDefinition,
+  getPowerUpLevel,
+  isPowerUpMaxed,
+  type SkillPowerUpType,
+  SKILL_POWER_UP_TYPES,
+} from "../Gameplay/powerups";
+import {
+  advancePickupChain,
+  createPickupChainState,
+  PICKUP_CHAIN_GUARD_MS,
+  registerPickupForChain,
+  type PickupChainState,
+} from "../Gameplay/pickup-chain";
+import type {
+  LobbyMode,
+  MatchStartConfig,
+  OnlineEndlessStats,
+  OnlineGameFrame,
+  OnlineGameSnapshot,
+  OnlineInputState,
+  OnlineSessionBridge,
+} from "../NetCode/protocol";
+import {
+  AUDIO_MUTED_STORAGE_KEY,
+  AUDIO_VOLUME_STORAGE_KEY,
+  SoundManager,
+  SFX_MANIFEST,
+} from "./sound-manager";
+import type { BotContext, BotDecision } from "./bot-ai";
+import {
+  buildBotDangerMap as botAI_buildDangerMap,
+  getBotDecision as botAI_getBotDecision,
+  getStableBotDirection as botAI_getStableBotDirection,
+} from "./bot-ai";
+import {
+  buildDangerMap,
+  getBombBlastKeys as projectBombBlastKeys,
+  SUDDEN_DEATH_FALL_MS,
+  SUDDEN_DEATH_TICK_MS,
+  type ProjectedBomb,
+} from "./danger-map";
+import {
+  AutoImprovementBridge,
+  type LabActionAck,
+  type LabNavigationSnapshot,
+} from "./auto-improvement-bridge";
+import type { SkillContext } from "../ultimate/skill-system";
+import {
+  createDefaultPlayerSkillState,
+  syncPlayerSkill as skill_syncPlayerSkill,
+  advancePlayerSkillTimers as skill_advancePlayerSkillTimers,
+  activatePlayerSkill as skill_activatePlayerSkill,
+  updatePlayerSkillChannel as skill_updatePlayerSkillChannel,
+  isPlayerImmuneDuringSkillChannel as skill_isPlayerImmuneDuringSkillChannel,
+  getCharacterSkillId,
+  KILLER_BEE_DASH_FRAME_MS,
+  NICO_SKILL_CHANNEL_MS,
+  NICO_SKILL_RELEASE_MS,
+  NICO_BEAM_DURATION_MS,
+  NICO_BEAM_CORE_WIDTH_PX,
+  NICO_BEAM_GLOW_WIDTH_PX,
+  collectNicoBeamTiles,
+  computeCrocodiloSurgeTiles,
+  CROCODILO_SKILL_CHANNEL_MS,
+  CROCODILO_SKILL_RELEASE_MS,
+} from "../ultimate/skill-system";
+import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
+import {
+  ONLINE_SNAPSHOT_INTERVAL_MS,
+  appendPendingOnlineInput,
+  captureOnlineLocalInput as online_captureLocalInput,
+  cloneOnlineInputState,
+  consumeLatchedOnlinePress,
+  createNeutralOnlineInput,
+  mergeLatchedOnlineInput,
+  playOnlineAudioTransition as online_playAudioTransition,
+  pushOnlineRenderSample as online_pushRenderSample,
+  updateVisualPlayerPositions as online_updateVisualPlayerPositions,
+} from "../NetCode/online-sync";
+import { SITE_COPY, type SiteLanguage } from "../UiLayouts/i18n";
+
+const KICK_SLIDE_MAX_TILES = 3;
+const KICK_FUSE_PENALTY_MS_PER_TILE = 250;
+const KICK_FUSE_MIN_MS = 450;
+const KICK_IMPACT_FEEDBACK_MS = 220;
+const EXPLOSION_SCREEN_SHAKE_MS = 160;
+const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_PX = 4;
+const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_MAX_PX = 6;
+const DEMOLITION_COMBO_MIN_CRATES = 2;
+const DEMOLITION_COMBO_DROP_TYPES: readonly SkillPowerUpType[] = [
+  "bomb-up",
+  "flame-up",
+  "speed-up",
+  "shield-up",
+  "short-fuse-up",
+];
+
+declare global {
+  interface Window {
+    render_game_to_text?: () => string;
+    advanceTime?: (ms: number) => void;
+  }
+}
+
+interface CenterOverlayState {
+  title: string;
+  subtitle: string;
+  footer: string | null;
+  victoryEmblem: boolean;
+  stalemateEmblem: boolean;
+}
+
+const directionDelta: Record<Direction, TileCoord> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+};
+const cardinalDirectionDeltas: readonly TileCoord[] = [
+  directionDelta.up,
+  directionDelta.down,
+  directionDelta.left,
+  directionDelta.right,
+];
+
+const PLAYER_HITBOX_HALF = TILE_SIZE * 0.5;
+const LANE_SNAP_THRESHOLD = TILE_SIZE * 0.45;
+const LANE_LOCK_THRESHOLD = 3;
+const LANE_SETTLE_EPSILON = 0.35;
+const LANE_SNAP_FACTOR = 2.6;
+const ROUND_START_CUE_MS = 1_250;
+const LAB_INITIAL_PLAN_TIMEOUT_MS = 25_000;
+const CHARACTER_MENU_KEYS: Record<MenuPlayerId, string> = {
+  1: "KeyG",
+  2: "KeyK",
+};
+const LOCAL_BOT_TOGGLE_KEY = "KeyB";
+const LOCAL_BOT_CYCLE_KEY = "KeyN";
+const MAX_LOCAL_BOT_FILL = 3;
+const BOT_BOMB_COOLDOWN_MS = 900;
+const FULLSCREEN_HUD_HEIGHT = 34;
+const FULLSCREEN_HUD_CENTER_WIDTH = 224;
+const WALK_FRAME_MS = 100;
+const SKILL_FRAME_MS = 100;
+const DEATH_FRAME_MS = 90;
+const CRATE_BREAK_DURATION_MS = 220;
+const POWER_UP_SPAWN_POP_MS = 120;
+const POWER_UP_REVEAL_HALO_MS = 260;
+const POWER_UP_REVEAL_HALO_START_RADIUS = 12;
+const POWER_UP_REVEAL_HALO_END_RADIUS = 26;
+const FLAME_DISSIPATE_TAIL_MS = 120;
+const SPAWN_PROTECTION_MS = 2200;
+const PERFECT_START_WINDOW_MS = 320;
+const PERFECT_START_BOOST_MS = 640;
+const PERFECT_START_SPEED_MULTIPLIER = 1.35;
+const PICKUP_SPRINT_BOOST_MS = 420;
+const DANGER_ADRENALINE_ETA_MS = 900;
+const DANGER_ADRENALINE_SPEED_MULTIPLIER = 1.18;
+const SPEED_SPARK_TRAIL_ACTIVE_ALPHA = 0.72;
+const SPEED_SPARK_TRAIL_PASSIVE_ALPHA = 0.42;
+const SUDDEN_DEATH_ELAPSED_MS = 40_000;
+const SUDDEN_DEATH_START_MS = ROUND_DURATION_MS - SUDDEN_DEATH_ELAPSED_MS;
+const SUDDEN_DEATH_IMPACT_LINGER_MS = 180;
+const SHIELD_GUARD_MS = 600;
+const SHIELD_BREAKAWAY_BOOST_MS = 520;
+const DANGER_OVERLAY_MAX_ETA_MS = BOMB_FUSE_MS + 600;
+const HUD_CRITICAL_DANGER_MS = 1_200;
+const DANGER_OVERLAY_PULSE_FAST_MS = 220;
+const DANGER_OVERLAY_PULSE_SLOW_MS = 420;
+const MATCH_RESULT_RESTART_DELAY_MS = 900;
+const CANVAS_BACKBUFFER_SCALE = 2;
+const CANVAS_VIEWPORT_PADDING = 32;
+const POWER_UP_PICKUP_NOTICE_MS = 2200;
+const PLAYER_SPRITE_HEIGHT_SCALE = 1.45;
+const PLAYER_SPRITE_MAX_WIDTH_SCALE = 1.2;
+const CANVAS_UI_PANEL_BG = "rgba(8, 8, 16, 0.82)";
+const CANVAS_UI_PANEL_BG_STRONG = "rgba(6, 6, 12, 0.92)";
+const CANVAS_UI_PANEL_BG_SOFT = "rgba(12, 12, 20, 0.72)";
+const CANVAS_UI_BORDER = "rgba(0, 229, 160, 0.22)";
+const CANVAS_UI_BORDER_STRONG = "rgba(0, 229, 160, 0.38)";
+const CANVAS_UI_TEXT = "#f0f4f8";
+const CANVAS_UI_MUTED = "#6b7a8d";
+const CANVAS_UI_MUTED_SOFT = "rgba(107, 122, 141, 0.68)";
+const CANVAS_UI_GOLD = "#00e5a0";
+const CANVAS_UI_GOLD_BRIGHT = "#5dffc8";
+const CANVAS_UI_GOLD_SOFT = "rgba(0, 229, 160, 0.14)";
+const CANVAS_UI_SUCCESS = "#5dffc8";
+const CANVAS_UI_DANGER = "#ff5f57";
+const CANVAS_UI_SHADOW = "rgba(2, 2, 8, 0.9)";
+
+function createEmptyDirectionalSprites(): DirectionalSprites {
+  return {
+    up: null,
+    down: null,
+    left: null,
+    right: null,
+    idle: { up: [], down: [], left: [], right: [] },
+    walk: { up: [], down: [], left: [], right: [] },
+    run: { up: [], down: [], left: [], right: [] },
+    cast: { up: [], down: [], left: [], right: [] },
+    attack: { up: [], down: [], left: [], right: [] },
+    death: { up: [], down: [], left: [], right: [] },
+  };
+}
+
+function createPlayerRecord<T>(factory: (playerId: PlayerId) => T): Record<PlayerId, T> {
+  return {
+    1: factory(1),
+    2: factory(2),
+    3: factory(3),
+    4: factory(4),
+  };
+}
+
+function createBooleanPlayerRecord(value: boolean): Record<PlayerId, boolean> {
+  return createPlayerRecord(() => value);
+}
+
+function createNumberPlayerRecord(value: number): Record<PlayerId, number> {
+  return createPlayerRecord(() => value);
+}
+
+function createDirectionPlayerRecord(value: Direction | null): Record<PlayerId, Direction | null> {
+  return createPlayerRecord(() => value);
+}
+
+function normalizeActivePlayerIds(playerIds: PlayerId[]): PlayerId[] {
+  const unique = Array.from(new Set(playerIds.filter((playerId): playerId is PlayerId => (
+    ALL_PLAYER_IDS as readonly number[]
+  ).includes(playerId)))) as PlayerId[];
+  return unique.length > 0 ? unique : [1, 2];
+}
+
+function createHeadlessCanvas(): {
+  width: number;
+  height: number;
+  style: Record<string, string>;
+  setAttribute: () => void;
+  getContext: (_kind?: string) => CanvasRenderingContext2D;
+} {
+  const noop = () => undefined;
+  const fakeContext = {
+    setTransform: noop,
+    clearRect: noop,
+    fillRect: noop,
+    strokeRect: noop,
+    beginPath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    closePath: noop,
+    stroke: noop,
+    fill: noop,
+    arc: noop,
+    ellipse: noop,
+    drawImage: noop,
+    fillText: noop,
+    strokeText: noop,
+    save: noop,
+    restore: noop,
+    translate: noop,
+    rotate: noop,
+    createLinearGradient: () => ({ addColorStop: noop }),
+  } as unknown as CanvasRenderingContext2D;
+  fakeContext.imageSmoothingEnabled = false;
+  return {
+    width: CANVAS_WIDTH * CANVAS_BACKBUFFER_SCALE,
+    height: CANVAS_HEIGHT * CANVAS_BACKBUFFER_SCALE,
+    style: {},
+    setAttribute: noop,
+    getContext: () => fakeContext,
+  };
+}
+
+interface MovementOption {
+  direction: Direction;
+  horizontal: boolean;
+  laneTarget: number;
+  canAdvanceForward: boolean;
+  combinedMove: PixelCoord;
+  laneOnlyMove: PixelCoord;
+  forwardOnlyMove: PixelCoord;
+  combinedFree: boolean;
+  laneOnlyFree: boolean;
+  forwardOnlyFree: boolean;
+}
+
+interface HudSkillSlot {
+  type: SkillPowerUpType;
+  level: number;
+  acquired: boolean;
+  keyLabel: string | null;
+  valueLabel: string;
+  recentlyCollected: boolean;
+  pickupProgress: number;
+}
+
+interface HudPlayerStatus {
+  label: string;
+  tone: "success" | "danger" | "muted";
+  critical: boolean;
+  dangerEtaMs: number | null;
+}
+
+interface CrateBreakAnimation {
+  tile: TileCoord;
+  elapsedMs: number;
+}
+
+interface BombKickImpactFeedback {
+  bombId: number;
+  elapsedMs: number;
+}
+
+interface PowerUpPickupNotice {
+  playerId: PlayerId;
+  type: SkillPowerUpType;
+  valueLabel: string;
+  chainGuard: boolean;
+  elapsedMs: number;
+  remainingMs: number;
+}
+
+interface PlayerDeathAnimationState {
+  startedAtMs: number;
+  direction: Direction;
+}
+
+interface SuddenDeathClosureEffect extends SuddenDeathClosingTileState {}
+
+interface ArenaRenderMetrics {
+  scale: number;
+  tileSize: number;
+  arenaX: number;
+  arenaY: number;
+  arenaPixelWidth: number;
+  arenaPixelHeight: number;
+}
+
+export interface LocalSessionReturnBrief {
+  mode: LobbyMode;
+  winner: PlayerId | null;
+  winnerName: string | null;
+  reason: RoundOutcome["reason"];
+  roundNumber: number;
+  scoreLine: string;
+  matchComplete: boolean;
+  finishedAtMs: number;
+}
+
+const LOCAL_SESSION_RETURN_BRIEF_STORAGE_KEY = "bomba-local-session-return-brief";
+const LOCAL_SESSION_RETURN_BRIEF_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export class GameApp {
+  private readonly canvas: HTMLCanvasElement;
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly input: InputController;
+  private readonly root: HTMLElement;
+  private readonly assets: GameAssets;
+  private readonly headless: boolean;
+  private onlineSession: OnlineSessionBridge | null = null;
+  private activePlayerIds: PlayerId[] = [1, 2];
+  private onlineLocalPlayerId: PlayerId = 1;
+  private externalInputPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private customPlayerLabels: Record<PlayerId, string | null> = createPlayerRecord(() => null);
+  private onlineInputs: Record<PlayerId, OnlineInputState> = createPlayerRecord(() => createNeutralOnlineInput());
+  private onlineSnapshotCooldownMs = 0;
+  private visualPlayerPositions: Record<PlayerId, PixelCoord> = createPlayerRecord(() => ({ x: 0, y: 0 }));
+  private onlineRenderSamples: OnlineRenderSample[] = [];
+  private onlineNextInputSeq = 0;
+  private onlinePendingInputs: PendingOnlineInput[] = [];
+  private onlineObservedRoundNumber: number | null = null;
+  private onlineAudioPrimed = false;
+
+  private lastTimestamp = 0;
+  private accumulatorMs = 0;
+
+  private baseArenaDefinition: ArenaDefinition = createDefaultArenaDefinition();
+  private mode: Mode = "boot";
+  private selectedCharacterIndex: Record<PlayerId, number> = createNumberPlayerRecord(0);
+  private pendingCharacterIndex: Record<PlayerId, number> = createNumberPlayerRecord(0);
+  private characterLocked: Record<PlayerId, boolean> = createBooleanPlayerRecord(true);
+  private characterMenuOpen: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private arena: ArenaState = createArena();
+  private players: Record<PlayerId, PlayerState> = this.createPlayers();
+  private bombs: BombState[] = [];
+  private flames: FlameState[] = [];
+  private magicBeams: MagicBeamState[] = [];
+  private nextBombId = 1;
+
+  private menuReady: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private matchResultChoice: Record<PlayerId, "rematch" | "lobby" | null> = createPlayerRecord(() => null);
+  private score: MatchScore = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  private roundNumber = 1;
+  private roundTimeMs = ROUND_DURATION_MS;
+  private paused = false;
+  private roundOutcome: RoundOutcome | null = null;
+  private roundStartCueMs = 0;
+  private matchWinner: PlayerId | null = null;
+  private matchResultCooldownMs = 0;
+  private autoPausedForHiddenTab = false;
+  private onlineRoomMode: LobbyMode = "classic";
+  private endlessKills: MatchScore = createNumberPlayerRecord(0);
+  private endlessRoundWins: MatchScore = createNumberPlayerRecord(0);
+  private readonly automationMode = typeof navigator !== "undefined" ? navigator.webdriver : false;
+  /** AIRI embeds the game in a sandboxed iframe, which can receive blur/hidden
+   * events even while the widget is visibly open. Its bridge advances the
+   * authoritative simulation explicitly, so the normal local-tab safety pause
+   * must not stop an AIRI-controlled match.
+   */
+  private readonly airiEmbedMode = typeof window !== "undefined"
+    && typeof window.location?.search === "string"
+    && new URLSearchParams(window.location.search).get("airi") === "1";
+  private automationControlledPlayer: PlayerId = 2;
+  private localBotFill = 0;
+  private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private liveBridgePlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private labLastTelemetryPositions: Record<PlayerId, PixelCoord | null> = createPlayerRecord(() => null);
+  private labLastMovementAtMs: Record<PlayerId, number> = createNumberPlayerRecord(0);
+  private botEnabled = false;
+  private botBombCooldownMs = 0;
+  private aiBridgeTick = 0;
+  private labActionAcks = new Map<string, LabActionAck>();
+  private labInitialPlansReady = false;
+  private labInitialPlanWaitStartedAtMs = 0;
+  private labStartupAbortTriggered = false;
+  private botCommittedDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
+  private botPendingReverseDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
+  private botPendingReverseFrames: Record<PlayerId, number> = createNumberPlayerRecord(0);
+  private animationClockMs = 0;
+  private crateBreakAnimations: CrateBreakAnimation[] = [];
+  private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
+  /** Presentation-only camera impact; not part of online simulation snapshots. */
+  private screenShakeMs = 0;
+  private screenShakeAmplitudePx = 0;
+  private powerUpRevealStartedAtMs = new Map<PowerUpState, number>();
+  private powerUpPickupNotices: PowerUpPickupNotice[] = [];
+  private pickupChains: Record<PlayerId, PickupChainState> = createPlayerRecord(() => createPickupChainState());
+  private playerDeathAnimations: Record<PlayerId, PlayerDeathAnimationState | null> = createPlayerRecord(() => null);
+  private suddenDeathActive = false;
+  private suddenDeathTickMs = SUDDEN_DEATH_TICK_MS;
+  private suddenDeathIndex = 0;
+  private suddenDeathPath: TileCoord[] = [];
+  private suddenDeathClosedTiles = new Set<string>();
+  private suddenDeathClosureEffects: SuddenDeathClosureEffect[] = [];
+  private showDangerOverlay = false;
+  private showBombPreview = false;
+  private readonly characterRoster: CharacterRosterEntry[];
+  private readonly characterSpriteCache = new Map<string, DirectionalSprites>();
+  private readonly characterSpriteLoads = new Map<string, Promise<DirectionalSprites>>();
+  private readonly spriteTrimCache = new SpriteTrimCache();
+  private readonly soundManager = new SoundManager();
+  private language: SiteLanguage = "pt";
+
+  // ── Performance: offscreen caches ──
+  private backdropCache: HTMLCanvasElement | null = null;
+  private arenaStaticCache: HTMLCanvasElement | null = null;
+  private arenaStaticDirty = true;
+  private cachedDangerMap: Map<string, number> | null = null;
+  private cachedBotDangerMap: Map<string, number> | null = null;
+  private botDangerCacheActive = false;
+  private arenaStaticMistGradient: CanvasGradient | null = null;
+
+  constructor(root: HTMLElement, assets: GameAssets, arenaDefinition: ArenaDefinition = createDefaultArenaDefinition()) {
+    this.root = root;
+    this.assets = assets;
+    this.baseArenaDefinition = arenaDefinition;
+    this.arena = createArena(this.baseArenaDefinition);
+    this.headless = typeof document === "undefined" || typeof window === "undefined";
+
+    if (this.headless) {
+      const fakeCanvas = createHeadlessCanvas();
+      this.canvas = fakeCanvas as unknown as HTMLCanvasElement;
+      this.ctx = fakeCanvas.getContext("2d") as CanvasRenderingContext2D;
+      this.input = new NoopInputManager();
+    } else {
+      this.canvas = document.createElement("canvas");
+      this.canvas.width = CANVAS_WIDTH * CANVAS_BACKBUFFER_SCALE;
+      this.canvas.height = CANVAS_HEIGHT * CANVAS_BACKBUFFER_SCALE;
+      this.canvas.setAttribute("aria-label", "BOMBA game canvas");
+      if ("dataset" in this.canvas && this.canvas.dataset) {
+        this.canvas.dataset.gameCanvas = "true";
+      } else {
+        this.canvas.setAttribute("data-game-canvas", "true");
+      }
+
+      const ctx = this.canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Canvas 2D context not available");
+      }
+      this.ctx = ctx;
+      this.ctx.setTransform(CANVAS_BACKBUFFER_SCALE, 0, 0, CANVAS_BACKBUFFER_SCALE, 0, 0);
+      this.ctx.imageSmoothingEnabled = false;
+      this.input = new InputManager(window);
+    }
+    const configuredRoster = this.assets.characterRoster ?? [];
+    const fallbackRoster: CharacterRosterEntry[] = [
+      { id: "default-p1", name: "Default P1", size: null, sprites: this.assets.players[1] ?? createEmptyDirectionalSprites() },
+      { id: "default-p2", name: "Default P2", size: null, sprites: this.assets.players[2] ?? createEmptyDirectionalSprites() },
+    ];
+    this.characterRoster = configuredRoster.length > 0
+      ? configuredRoster
+      : fallbackRoster;
+    const playerOneIndex = this.findDefaultCharacterIndex(1, 0);
+    const playerTwoIndex = this.findDefaultCharacterIndex(2, Math.min(1, this.characterRoster.length - 1));
+    this.selectedCharacterIndex = {
+      1: playerOneIndex,
+      2: playerTwoIndex,
+      3: this.findDefaultCharacterIndex(3, playerOneIndex),
+      4: this.findDefaultCharacterIndex(4, playerTwoIndex),
+    };
+    this.pendingCharacterIndex = { ...this.selectedCharacterIndex };
+    this.applyOfflineBotFill(this.automationMode ? 1 : 0, false);
+    this.primeCharacterSprites();
+  }
+
+  private getArenaGridWidth(): number {
+    return this.arena.config.grid.width;
+  }
+
+  private getArenaGridHeight(): number {
+    return this.arena.config.grid.height;
+  }
+
+  private getArenaPixelWidth(): number {
+    return this.getArenaGridWidth() * TILE_SIZE;
+  }
+
+  private getArenaPixelHeight(): number {
+    return this.getArenaGridHeight() * TILE_SIZE;
+  }
+
+  private isFullscreenMatchLayoutActive(): boolean {
+    if (this.headless || this.mode !== "match" || typeof document === "undefined") {
+      return false;
+    }
+    const stage = this.canvas.closest(".experience-match__stage");
+    return stage instanceof HTMLElement && stage.dataset.fullscreen === "true";
+  }
+
+  private getHudRenderHeight(): number {
+    return this.isFullscreenMatchLayoutActive() ? FULLSCREEN_HUD_HEIGHT : HUD_HEIGHT;
+  }
+
+  private getArenaRenderMetrics(): ArenaRenderMetrics {
+    const logicalArenaWidth = this.getArenaPixelWidth();
+    const logicalArenaHeight = this.getArenaPixelHeight();
+    const compactFullscreenLayout = this.isFullscreenMatchLayoutActive();
+    const hudHeight = this.getHudRenderHeight();
+    const playfieldPaddingX = compactFullscreenLayout ? 0 : 2;
+    const playfieldTop = hudHeight + (compactFullscreenLayout ? 1 : 2);
+    const playfieldBottom = CANVAS_HEIGHT - (compactFullscreenLayout ? 1 : 2);
+    const availableWidth = Math.max(120, CANVAS_WIDTH - playfieldPaddingX * 2);
+    const availableHeight = Math.max(120, playfieldBottom - playfieldTop);
+    const widthScale = availableWidth / logicalArenaWidth;
+    const heightScale = availableHeight / logicalArenaHeight;
+    const maxScale = compactFullscreenLayout ? 2.24 : 2.08;
+    const scale = Math.max(0.82, Math.min(maxScale, Math.min(widthScale, heightScale)));
+    const arenaPixelWidth = logicalArenaWidth * scale;
+    const arenaPixelHeight = logicalArenaHeight * scale;
+    const arenaX = Math.round((CANVAS_WIDTH - arenaPixelWidth) / 2);
+    const arenaY = Math.round(playfieldTop + (compactFullscreenLayout ? 1 : 2));
+    return {
+      scale,
+      tileSize: TILE_SIZE * scale,
+      arenaX,
+      arenaY,
+      arenaPixelWidth,
+      arenaPixelHeight,
+    };
+  }
+
+  private getArenaOffsetX(): number {
+    return this.getArenaRenderMetrics().arenaX;
+  }
+
+  private getArenaOffsetY(): number {
+    return this.getArenaRenderMetrics().arenaY;
+  }
+
+  private getPlayerSpawn(playerId: PlayerId) {
+    return this.arena.config.spawnMap[playerId];
+  }
+
+  private createBotContext(dangerMap?: Map<string, number>): BotContext {
+    return {
+      players: this.players,
+      activePlayerIds: this.activePlayerIds,
+      bombs: this.bombs,
+      flames: this.flames,
+      arena: this.arena,
+      suddenDeathActive: this.suddenDeathActive,
+      suddenDeathTickMs: this.suddenDeathTickMs,
+      suddenDeathIndex: this.suddenDeathIndex,
+      suddenDeathPath: this.suddenDeathPath,
+      suddenDeathClosureEffects: this.suddenDeathClosureEffects,
+      botBombCooldownMs: this.botBombCooldownMs,
+      botCommittedDirection: this.botCommittedDirection,
+      botPendingReverseDirection: this.botPendingReverseDirection,
+      botPendingReverseFrames: this.botPendingReverseFrames,
+      dangerMap,
+      canOccupyPosition: (_pos, _tile) => true,
+      evaluateMovementOption: (player, dir, dt) => this.evaluateMovementOption(player, dir, dt),
+      canMovementOptionAdvance: (pos, opt) => this.canMovementOptionAdvance(pos, opt),
+      areOppositeDirections: (a, b) => this.areOppositeDirections(a, b),
+      isPlayerOverlappingTile: (player, tile) => this.isPlayerOverlappingTile(player, tile),
+    };
+  }
+
+  private createSkillContext(): SkillContext {
+    return {
+      arena: this.arena,
+      bombs: this.bombs,
+      players: this.players,
+      activePlayerIds: this.activePlayerIds,
+      magicBeams: this.magicBeams,
+      selectedCharacterIndex: this.selectedCharacterIndex,
+      characterRoster: this.characterRoster,
+      canOccupyPosition: (player, pos) => this.canOccupyPosition(player, pos),
+      getTileFromPosition: (pos) => this.getTileFromPosition(pos),
+      normalizeArenaPosition: (pos) => this.normalizeArenaPosition(pos),
+      getWrappedDelta: (target, current, size) => this.getWrappedDelta(target, current, size),
+      resolveMovementDirection: (player, dir, dt) => this.resolveMovementDirection(player, dir, dt),
+      movePlayerSimulated: (player, dir, dt) => this.movePlayerSimulated(player, dir, dt),
+      clonePlayerState: (player) => this.clonePlayerState(player),
+      tryAbsorbInstantHit: (player, attackerId) => this.tryAbsorbInstantHit(player, attackerId),
+      breakCrateAtKey: (key) => this.breakCrateAtKey(key),
+      addFlame: (tile, durationMs, style) => this.addFlame(tile, durationMs, style),
+      soundManager: { playOneShot: (name: string) => this.soundManager.playOneShot(name as any) },
+    };
+  }
+
+  public attachOnlineSession(session: OnlineSessionBridge): void {
+    this.onlineSession = session;
+    this.onlineRoomMode = "classic";
+    this.customPlayerLabels = createPlayerRecord(() => null);
+    this.activePlayerIds = [1, 2];
+    this.localBotFill = 0;
+    this.botControlledPlayers = createBooleanPlayerRecord(false);
+    this.botEnabled = false;
+    this.menuReady = createBooleanPlayerRecord(false);
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.onlineLocalPlayerId = 1;
+    this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineNextInputSeq = 0;
+    this.onlinePendingInputs = [];
+    this.onlineObservedRoundNumber = null;
+    this.onlineAudioPrimed = false;
+    this.onlineRenderSamples = [];
+    this.endlessKills = createNumberPlayerRecord(0);
+    this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.syncPlayerLabels();
+  }
+
+  public startOnlineMatch(config: MatchStartConfig): void {
+    this.onlineRoomMode = config.roomMode ?? "classic";
+    this.baseArenaDefinition = config.arena;
+    this.arena = createArena(this.baseArenaDefinition);
+    this.activePlayerIds = normalizeActivePlayerIds(config.activePlayerIds);
+    this.onlineLocalPlayerId = config.localPlayerId;
+    this.customPlayerLabels = createPlayerRecord((playerId) => config.playerLabels?.[playerId] ?? null);
+    this.onlineNextInputSeq = 0;
+    this.onlinePendingInputs = [];
+    this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineAudioPrimed = false;
+    this.onlineRenderSamples = [];
+    this.selectedCharacterIndex = { ...config.characterSelections };
+    this.pendingCharacterIndex = { ...config.characterSelections };
+    this.characterLocked = createBooleanPlayerRecord(true);
+    this.characterMenuOpen = createBooleanPlayerRecord(false);
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.localBotFill = 0;
+    this.setBotPlayers(config.botPlayerIds ?? []);
+    this.applyEndlessStats(null);
+
+    if (config.role === "host") {
+      this.startMatch();
+      return;
+    }
+    this.soundManager.playOneShot("matchStart");
+    this.mode = "match";
+    this.matchWinner = null;
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+    this.roundOutcome = null;
+    this.roundStartCueMs = ROUND_START_CUE_MS;
+    this.menuReady = createBooleanPlayerRecord(false);
+    for (const playerId of this.activePlayerIds) {
+      this.menuReady[playerId] = true;
+    }
+  }
+
+  public applyOnlineSnapshot(snapshot: OnlineGameSnapshot): void {
+    const previousMode = this.mode;
+    const previousRoundNumber = this.roundNumber;
+    const previousRoundOutcome = this.roundOutcome;
+    const previousSuddenDeathActive = this.suddenDeathActive;
+    this.onlineRoomMode = snapshot.roomMode ?? "classic";
+    this.baseArenaDefinition = snapshot.arena;
+    this.playOnlineAudioTransition({
+      bombs: snapshot.bombs,
+      flames: snapshot.flames,
+      players: snapshot.players,
+      previousRoundOutcome: this.roundOutcome,
+      roundOutcome: snapshot.roundOutcome,
+      matchWinner: snapshot.matchWinner,
+      previousSuddenDeathActive,
+      suddenDeathActive: snapshot.suddenDeathActive,
+      breakableTiles: snapshot.breakableTiles,
+      powerUps: snapshot.powerUps,
+    });
+    if (this.onlineSession?.role === "guest" && this.onlineAudioPrimed) {
+      this.spawnCrateBreakAnimationsFromDiff(snapshot.breakableTiles);
+    }
+    const baseArena = createArena(this.baseArenaDefinition);
+    this.mode = snapshot.mode;
+    this.suddenDeathClosedTiles = new Set(snapshot.suddenDeathClosedTiles ?? []);
+    this.suddenDeathClosureEffects = (snapshot.suddenDeathClosingTiles ?? []).map((effect) => ({
+      tile: { ...effect.tile },
+      elapsedMs: effect.elapsedMs,
+      impacted: effect.impacted,
+    }));
+    this.arena = {
+      config: baseArena.config,
+      solid: new Set([...baseArena.solid, ...this.suddenDeathClosedTiles]),
+      breakable: new Set(snapshot.breakableTiles),
+      powerUps: snapshot.powerUps.map((powerUp) => ({
+        type: powerUp.type,
+        tile: { ...powerUp.tile },
+        revealed: powerUp.revealed,
+        collected: powerUp.collected,
+      })),
+    };
+    this.invalidateArenaCache();
+    this.players = createPlayerRecord((playerId) => this.clonePlayerState(snapshot.players[playerId]));
+    this.bombs = snapshot.bombs.map((bomb) => ({
+      ...bomb,
+      tile: { ...bomb.tile },
+    }));
+    this.flames = snapshot.flames.map((flame) => ({
+      ...flame,
+      tile: { ...flame.tile },
+    }));
+    this.magicBeams = (snapshot.magicBeams ?? []).map((beam) => ({
+      ...beam,
+      origin: { ...beam.origin },
+      tiles: beam.tiles.map((tile) => ({ ...tile })),
+    }));
+    this.nextBombId = snapshot.nextBombId;
+    this.score = { ...snapshot.score };
+    this.roundNumber = snapshot.roundNumber;
+    this.roundTimeMs = snapshot.roundTimeMs;
+    this.paused = snapshot.paused;
+    this.autoPausedForHiddenTab = false;
+    this.roundOutcome = snapshot.roundOutcome
+      ? { ...snapshot.roundOutcome }
+      : null;
+    this.syncRoundStartCue(
+      previousMode,
+      previousRoundNumber,
+      previousRoundOutcome,
+      snapshot.mode,
+      snapshot.roundNumber,
+      this.roundOutcome,
+    );
+    this.matchWinner = snapshot.matchWinner;
+    this.animationClockMs = snapshot.animationClockMs;
+    this.suddenDeathActive = snapshot.suddenDeathActive;
+    this.suddenDeathTickMs = snapshot.suddenDeathTickMs;
+    this.suddenDeathIndex = snapshot.suddenDeathIndex;
+    this.showDangerOverlay = snapshot.showDangerOverlay;
+    this.showBombPreview = snapshot.showBombPreview;
+    this.selectedCharacterIndex = { ...snapshot.selectedCharacterIndex };
+    this.pendingCharacterIndex = { ...snapshot.selectedCharacterIndex };
+    this.characterLocked = createBooleanPlayerRecord(true);
+    this.characterMenuOpen = createBooleanPlayerRecord(false);
+    this.activePlayerIds = normalizeActivePlayerIds(snapshot.activePlayerIds);
+    this.localBotFill = 0;
+    this.setBotPlayers(snapshot.botPlayerIds ?? []);
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.applyEndlessStats(snapshot.endlessStats);
+    this.syncRoundStartCue(
+      previousMode,
+      previousRoundNumber,
+      previousRoundOutcome,
+      snapshot.mode,
+      snapshot.roundNumber,
+      this.roundOutcome,
+    );
+    this.primeCharacterSprites();
+    this.resetOnlineRoundBuffers(snapshot.roundNumber);
+    this.pushOnlineRenderSample(snapshot.serverTimeMs, snapshot.serverTick, snapshot.players);
+    this.nextBombId = snapshot.nextBombId;
+    this.reconcileGuestState(snapshot.ackedInputSeq[this.onlineLocalPlayerId] ?? 0);
+
+    if (previousMode !== "match" || this.visualPlayerPositions[this.onlineLocalPlayerId].x === 0) {
+      this.syncVisualPlayerPositions();
+    }
+    this.onlineAudioPrimed = true;
+  }
+
+  public applyOnlineFrame(frame: OnlineGameFrame): void {
+    const previousMode = this.mode;
+    const previousRoundNumber = this.roundNumber;
+    const previousRoundOutcome = this.roundOutcome;
+    const previousSuddenDeathActive = this.suddenDeathActive;
+    this.onlineRoomMode = frame.roomMode ?? "classic";
+    this.playOnlineAudioTransition({
+      bombs: frame.bombs,
+      flames: frame.flames,
+      players: frame.players,
+      previousRoundOutcome: this.roundOutcome,
+      roundOutcome: frame.roundOutcome,
+      matchWinner: frame.matchWinner,
+      previousSuddenDeathActive,
+      suddenDeathActive: frame.suddenDeathActive,
+    });
+    this.mode = frame.mode;
+    this.players = createPlayerRecord((playerId) => this.clonePlayerState(frame.players[playerId]));
+    this.bombs = frame.bombs.map((bomb) => ({
+      ...bomb,
+      tile: { ...bomb.tile },
+    }));
+    this.flames = frame.flames.map((flame) => ({
+      ...flame,
+      tile: { ...flame.tile },
+    }));
+    this.magicBeams = (frame.magicBeams ?? []).map((beam) => ({
+      ...beam,
+      origin: { ...beam.origin },
+      tiles: beam.tiles.map((tile) => ({ ...tile })),
+    }));
+    this.score = { ...frame.score };
+    this.roundNumber = frame.roundNumber;
+    this.roundTimeMs = frame.roundTimeMs;
+    this.paused = frame.paused;
+    this.autoPausedForHiddenTab = false;
+    this.roundOutcome = frame.roundOutcome ? { ...frame.roundOutcome } : null;
+    this.syncRoundStartCue(
+      previousMode,
+      previousRoundNumber,
+      previousRoundOutcome,
+      frame.mode,
+      frame.roundNumber,
+      this.roundOutcome,
+    );
+    this.matchWinner = frame.matchWinner;
+    this.animationClockMs = frame.animationClockMs;
+    this.suddenDeathActive = frame.suddenDeathActive;
+    this.suddenDeathTickMs = frame.suddenDeathTickMs;
+    this.suddenDeathIndex = frame.suddenDeathIndex;
+    this.suddenDeathClosedTiles = new Set(frame.suddenDeathClosedTiles ?? []);
+    this.suddenDeathClosureEffects = (frame.suddenDeathClosingTiles ?? []).map((effect) => ({
+      tile: { ...effect.tile },
+      elapsedMs: effect.elapsedMs,
+      impacted: effect.impacted,
+    }));
+    this.arena.solid = new Set([...this.arena.config.tiles.solid, ...this.suddenDeathClosedTiles]);
+    this.selectedCharacterIndex = { ...frame.selectedCharacterIndex };
+    this.pendingCharacterIndex = { ...frame.selectedCharacterIndex };
+    this.activePlayerIds = normalizeActivePlayerIds(frame.activePlayerIds);
+    this.localBotFill = 0;
+    this.setBotPlayers(frame.botPlayerIds ?? []);
+    this.nextBombId = frame.nextBombId;
+    this.applyEndlessStats(frame.endlessStats);
+    this.syncRoundStartCue(
+      previousMode,
+      previousRoundNumber,
+      previousRoundOutcome,
+      frame.mode,
+      frame.roundNumber,
+      this.roundOutcome,
+    );
+    this.primeCharacterSprites();
+    this.resetOnlineRoundBuffers(frame.roundNumber);
+    this.pushOnlineRenderSample(frame.serverTimeMs, frame.serverTick, frame.players);
+    this.reconcileGuestState(frame.ackedInputSeq[this.onlineLocalPlayerId] ?? 0);
+
+    if (previousMode !== "match" || this.visualPlayerPositions[this.onlineLocalPlayerId].x === 0) {
+      this.syncVisualPlayerPositions();
+    }
+    this.onlineAudioPrimed = true;
+  }
+
+  public clearOnlinePeer(): void {
+    this.resetToLobbyState();
+    this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineNextInputSeq = 0;
+    this.onlinePendingInputs = [];
+    this.onlineObservedRoundNumber = null;
+    this.onlineAudioPrimed = false;
+    this.onlineRenderSamples = [];
+    this.botEnabled = false;
+    this.onlineRoomMode = "classic";
+  }
+
+  private resetToLobbyState(): void {
+    this.input.clearPresses();
+    this.mode = "menu";
+    this.activePlayerIds = [1, 2];
+    this.onlineLocalPlayerId = 1;
+    this.menuReady = createBooleanPlayerRecord(false);
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.score = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    this.endlessKills = createNumberPlayerRecord(0);
+    this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.onlineRoomMode = "classic";
+    this.roundNumber = 1;
+    this.matchWinner = null;
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+    this.roundOutcome = null;
+    this.botBombCooldownMs = 0;
+    this.labActionAcks.clear();
+    this.labInitialPlansReady = false;
+    this.labInitialPlanWaitStartedAtMs = 0;
+    this.labStartupAbortTriggered = false;
+    AutoImprovementBridge.invalidateDecisions(this.activePlayerIds, this.aiBridgeTick + 1);
+    this.botCommittedDirection = createDirectionPlayerRecord(null);
+    this.botPendingReverseDirection = createDirectionPlayerRecord(null);
+    this.botPendingReverseFrames = createNumberPlayerRecord(0);
+    this.animationClockMs = 0;
+    this.suddenDeathActive = false;
+    this.suddenDeathTickMs = SUDDEN_DEATH_TICK_MS;
+    this.suddenDeathIndex = 0;
+    this.suddenDeathClosedTiles = new Set();
+    this.suddenDeathClosureEffects = [];
+    this.suddenDeathPath = this.buildSuddenDeathPath();
+    this.onlineAudioPrimed = false;
+    if (!this.onlineSession) {
+      this.applyOfflineBotFill(this.localBotFill, false);
+    } else {
+      this.localBotFill = 0;
+      this.botControlledPlayers = createBooleanPlayerRecord(false);
+      this.botEnabled = false;
+    }
+    this.resetRound(false);
+  }
+
+  private playOnlineAudioTransition(next: {
+    bombs: BombState[];
+    flames: FlameState[];
+    players: Record<PlayerId, PlayerState>;
+    previousRoundOutcome: RoundOutcome | null;
+    roundOutcome: RoundOutcome | null;
+    matchWinner: PlayerId | null;
+    previousSuddenDeathActive: boolean;
+    suddenDeathActive: boolean;
+    breakableTiles?: string[];
+    powerUps?: PowerUpState[];
+  }): void {
+    online_playAudioTransition({
+      headless: this.headless,
+      role: this.onlineSession?.role ?? null,
+      audioPrimed: this.onlineAudioPrimed,
+      localPlayerId: this.onlineLocalPlayerId,
+      suppressLocalBombAudio: this.hasPendingLocalBombAudioSuppression(),
+      previousBombs: this.bombs,
+      previousFlames: this.flames,
+      previousBreakableTiles: Array.from(this.arena.breakable),
+      previousPlayers: this.players,
+      previousMatchWinner: this.matchWinner,
+      previousRoundOutcome: next.previousRoundOutcome,
+      previousSuddenDeathActive: next.previousSuddenDeathActive,
+      next,
+      didCollectRemotePowerUp: (powerUps) => this.didCollectRemotePowerUp(powerUps, next.players),
+      playSound: (name) => this.soundManager.playOneShot(name),
+    });
+  }
+
+  private hasPendingLocalBombAudioSuppression(): boolean {
+    if (!this.onlineSession || this.onlineSession.role !== "guest") {
+      return false;
+    }
+    return this.onlinePendingInputs.some((pending) => pending.input.bombPressed);
+  }
+
+  private didCollectRemotePowerUp(
+    nextPowerUps: PowerUpState[],
+    nextPlayers: Record<PlayerId, PlayerState>,
+  ): boolean {
+    const previousCollected = new Set(
+      this.arena.powerUps
+        .filter((powerUp) => powerUp.collected)
+        .map((powerUp) => `${powerUp.type}:${tileKey(powerUp.tile.x, powerUp.tile.y)}`),
+    );
+    const previousLocalTile = this.players[this.onlineLocalPlayerId]?.tile;
+    const nextLocalTile = nextPlayers[this.onlineLocalPlayerId]?.tile;
+    return nextPowerUps.some((powerUp) => (
+      powerUp.collected
+      && !previousCollected.has(`${powerUp.type}:${tileKey(powerUp.tile.x, powerUp.tile.y)}`)
+      && (
+        (previousLocalTile?.x === powerUp.tile.x && previousLocalTile.y === powerUp.tile.y)
+        || (nextLocalTile?.x === powerUp.tile.x && nextLocalTile.y === powerUp.tile.y)
+      )
+    ));
+  }
+
+  private spawnCrateBreakAnimationsFromDiff(nextBreakableTiles: string[]): void {
+    const nextBreakables = new Set(nextBreakableTiles);
+    for (const key of this.arena.breakable) {
+      if (!nextBreakables.has(key)) {
+        this.addCrateBreakAnimation(this.parseTileKey(key));
+      }
+    }
+  }
+
+  public receiveOnlineGuestInput(input: OnlineInputState): void {
+    this.onlineInputs[2] = mergeLatchedOnlineInput(this.onlineInputs[2], input);
+  }
+
+  public detachOnlineSession(): void {
+    if (!this.onlineSession) {
+      return;
+    }
+    this.onlineSession = null;
+    this.customPlayerLabels = createPlayerRecord(() => null);
+    this.clearOnlinePeer();
+    this.mode = "menu";
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+  }
+
+  public returnToMenu(): void {
+    if (this.onlineSession) {
+      this.detachOnlineSession();
+      return;
+    }
+    this.resetToLobbyState();
+    this.mode = "menu";
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+    if (!this.headless) {
+      this.render();
+    }
+  }
+
+  public removeServerPlayer(playerId: PlayerId): void {
+    const player = this.players[playerId];
+    if (!player) {
+      return;
+    }
+    if (player.alive) {
+      this.killPlayer(player);
+    }
+    player.active = false;
+    player.alive = false;
+    player.velocity = { x: 0, y: 0 };
+    player.activeBombs = 0;
+    this.botControlledPlayers[playerId] = false;
+    this.activePlayerIds = this.activePlayerIds.filter((id) => id !== playerId);
+    if (this.mode === "match" && !this.roundOutcome) {
+      this.evaluateRoundState();
+    }
+  }
+
+  public eliminateServerPlayer(playerId: PlayerId): void {
+    const player = this.players[playerId];
+    if (!player) {
+      return;
+    }
+    this.killPlayer(player);
+    if (this.mode === "match" && !this.roundOutcome) {
+      this.evaluateRoundState();
+    }
+  }
+
+  public setServerBotPlayers(botPlayerIds: PlayerId[]): void {
+    this.setBotPlayers(botPlayerIds);
+  }
+
+  public setServerCharacterSelections(characterSelections: Record<PlayerId, number>): void {
+    this.selectedCharacterIndex = { ...characterSelections };
+    this.pendingCharacterIndex = { ...characterSelections };
+    this.syncPlayerLabels();
+    this.primeCharacterSprites();
+  }
+
+  public setServerPlayerLabels(playerLabels: Record<PlayerId, string>): void {
+    this.customPlayerLabels = createPlayerRecord((playerId) => playerLabels[playerId] ?? null);
+    this.syncPlayerLabels();
+  }
+
+  public start(): void {
+    if (this.headless) {
+      return;
+    }
+    const storage = this.getLocalStorage();
+    const storedVolume = Number(this.readStorageItem(storage, AUDIO_VOLUME_STORAGE_KEY));
+    if (Number.isFinite(storedVolume)) {
+      this.soundManager.setVolume(storedVolume);
+    }
+    this.soundManager.setMuted(this.readStorageItem(storage, AUDIO_MUTED_STORAGE_KEY) === "true");
+    void this.soundManager.loadSounds(SFX_MANIFEST);
+    this.root.appendChild(this.canvas);
+    const liveLabSession = ([1, 2, 3, 4] as PlayerId[])
+      .some((playerId) => this.liveBridgePlayers[playerId]);
+    if (liveLabSession) {
+      AutoImprovementBridge.enable();
+      AutoImprovementBridge.mountSidePanels(this.root.ownerDocument?.body ?? document.body);
+    }
+    this.syncCanvasDisplaySize();
+    this.mode = "menu";
+    this.registerWindowHooks();
+    this.render();
+    window.requestAnimationFrame(this.loop);
+  }
+
+  public getCurrentMode(): Mode {
+    return this.mode;
+  }
+
+  public getLocalSessionReturnBrief(): LocalSessionReturnBrief | null {
+    const storage = this.getLocalStorage();
+    if (!storage) {
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      const raw = storage.getItem(LOCAL_SESSION_RETURN_BRIEF_STORAGE_KEY);
+      if (!raw) {
+        return null;
+      }
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+
+    if (!this.isLocalSessionReturnBrief(parsed)) {
+      return null;
+    }
+
+    if (Date.now() - parsed.finishedAtMs > LOCAL_SESSION_RETURN_BRIEF_MAX_AGE_MS) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  public setLanguage(language: SiteLanguage): void {
+    this.language = language;
+    if (!this.headless) {
+      this.render();
+    }
+  }
+
+  public setAudioVolume(volume: number): void {
+    this.soundManager.setVolume(volume);
+    this.writeStorageItem(AUDIO_VOLUME_STORAGE_KEY, String(this.soundManager.getVolume()));
+  }
+
+  public setAudioMuted(muted: boolean): void {
+    this.soundManager.setMuted(muted);
+    this.writeStorageItem(AUDIO_MUTED_STORAGE_KEY, String(muted));
+  }
+
+  public getAudioSettings(): { volume: number; muted: boolean } {
+    return { volume: this.soundManager.getVolume(), muted: this.soundManager.isMuted() };
+  }
+
+  public startOfflineBotMatch(botFill = 3, mode: LobbyMode = "classic"): void {
+    if (this.onlineSession) {
+      return;
+    }
+    this.customPlayerLabels = createPlayerRecord(() => null);
+    this.onlineRoomMode = mode;
+    this.mode = "menu";
+    this.paused = false;
+    this.roundOutcome = null;
+    this.matchWinner = null;
+    this.endlessKills = createNumberPlayerRecord(0);
+    this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.applyOfflineBotFill(botFill, false);
+    this.startMatch();
+  }
+
+  public setLiveBridgePlayers(playerIds: PlayerId[]): void {
+    const selected = new Set(playerIds);
+    this.liveBridgePlayers = createPlayerRecord((playerId) => selected.has(playerId));
+    this.labInitialPlansReady = false;
+    this.labInitialPlanWaitStartedAtMs = 0;
+    this.labStartupAbortTriggered = false;
+    AutoImprovementBridge.setControlledPlayerIds(playerIds);
+  }
+
+  public setOfflinePreferredCharacter(characterIndex: number): void {
+    if (this.onlineSession) {
+      return;
+    }
+    const nextIndex = this.wrapCharacterIndex(characterIndex);
+    this.selectedCharacterIndex[1] = nextIndex;
+    this.pendingCharacterIndex[1] = nextIndex;
+    this.characterLocked[1] = true;
+    this.characterMenuOpen[1] = false;
+    this.syncPlayerLabels();
+    this.primeCharacterSprites();
+  }
+
+  private setBotPlayers(botPlayerIds: PlayerId[]): void {
+    const nextBots = new Set(botPlayerIds);
+    this.botControlledPlayers = createPlayerRecord((playerId) => (
+      nextBots.has(playerId) && this.activePlayerIds.includes(playerId)
+    ));
+    this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
+    this.syncPlayerLabels();
+  }
+
+  private applyEndlessStats(stats: OnlineEndlessStats | null | undefined): void {
+    this.endlessKills = stats ? { ...stats.kills } : createNumberPlayerRecord(0);
+    this.endlessRoundWins = stats ? { ...stats.roundWins } : createNumberPlayerRecord(0);
+    if (this.onlineRoomMode === "endless") {
+      this.score = { ...this.endlessRoundWins };
+    }
+  }
+
+  private readonly loop = (timestamp: number): void => {
+    if (this.lastTimestamp === 0) {
+      this.lastTimestamp = timestamp;
+    }
+    const deltaMs = Math.min(50, timestamp - this.lastTimestamp);
+    this.lastTimestamp = timestamp;
+    this.accumulatorMs += deltaMs;
+
+    while (this.accumulatorMs >= FIXED_STEP_MS) {
+      this.update(FIXED_STEP_MS);
+      this.accumulatorMs -= FIXED_STEP_MS;
+    }
+
+    this.updateVisualPlayerPositions(deltaMs);
+    this.render();
+    this.input.endFrame();
+    window.requestAnimationFrame(this.loop);
+  };
+
+  private registerWindowHooks(): void {
+    window.addEventListener("resize", this.syncCanvasDisplaySize);
+    window.addEventListener("blur", this.handleWindowInactive);
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", this.handleDocumentVisibilityChange);
+    }
+    this.soundManager.bindUnlock(window);
+    window.render_game_to_text = () => this.renderGameToText();
+    window.advanceTime = (ms: number) => {
+      const steps = Math.max(1, Math.round(ms / FIXED_STEP_MS));
+      for (let step = 0; step < steps; step += 1) {
+        this.update(FIXED_STEP_MS);
+      }
+      this.render();
+      this.input.endFrame();
+    };
+  }
+
+  private readonly handleWindowInactive = (): void => {
+    this.pauseLocalMatchForHiddenTab();
+  };
+
+  private readonly handleDocumentVisibilityChange = (): void => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      this.pauseLocalMatchForHiddenTab();
+    }
+  };
+
+  private pauseLocalMatchForHiddenTab(): void {
+    if (this.airiEmbedMode || this.onlineSession || this.mode !== "match" || this.roundOutcome || this.paused) {
+      return;
+    }
+    this.paused = true;
+    this.autoPausedForHiddenTab = true;
+    this.input.clearPresses();
+    this.render();
+  }
+
+  /** Resume only a pause caused by the browser hiding or blurring the tab.
+   * Manual Escape pauses remain respected by the external controller.
+   */
+  public resumeAiriMatch(): void {
+    if (this.mode !== "match" || !this.autoPausedForHiddenTab) {
+      return;
+    }
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+    this.render();
+  }
+
+  private readonly syncCanvasDisplaySize = (): void => {
+    if (this.headless || typeof window === "undefined") {
+      return;
+    }
+    if (!("style" in this.canvas)) {
+      return;
+    }
+    const viewport = this.canvas.parentElement;
+    const viewportWidth = viewport?.clientWidth
+      ?? (typeof window.innerWidth === "number" ? window.innerWidth : CANVAS_WIDTH + CANVAS_VIEWPORT_PADDING);
+    const viewportHeight = viewport?.clientHeight
+      ?? (typeof window.innerHeight === "number" ? window.innerHeight : CANVAS_HEIGHT + CANVAS_VIEWPORT_PADDING);
+    const metrics = this.getArenaRenderMetrics();
+    const compactFullscreenLayout = this.isFullscreenMatchLayoutActive();
+    const hudHeight = this.getHudRenderHeight();
+    const viewportPadding = viewport ? (compactFullscreenLayout ? 2 : 6) : CANVAS_VIEWPORT_PADDING;
+    const availableWidth = Math.max(160, viewportWidth - viewportPadding);
+    const availableHeight = Math.max(160, viewportHeight - viewportPadding);
+    const contentHeight = Math.max(hudHeight + 8, metrics.arenaY + metrics.arenaPixelHeight + (compactFullscreenLayout ? 4 : 8));
+    const fitScale = Math.min(availableWidth / CANVAS_WIDTH, availableHeight / contentHeight);
+    const displayScale = Math.max(compactFullscreenLayout ? 0.66 : 0.5, fitScale);
+    const displayWidth = Math.max(1, Math.round(CANVAS_WIDTH * displayScale));
+    const displayHeight = Math.max(1, Math.round(CANVAS_HEIGHT * displayScale));
+    this.canvas.style.width = `${displayWidth}px`;
+    this.canvas.style.height = `${displayHeight}px`;
+    this.canvas.style.justifySelf = "center";
+    this.canvas.style.alignSelf = compactFullscreenLayout ? "center" : "start";
+  };
+
+  private captureOnlineLocalInput(): void {
+    if (!this.onlineSession || this.externalInputPlayers[this.onlineLocalPlayerId]) {
+      return;
+    }
+    const localBindings = KEY_BINDINGS[1];
+    const input = this.onlineInputs[this.onlineLocalPlayerId];
+    online_captureLocalInput(
+      input,
+      this.input.getDirectionFromCodes(LOCAL_PLAYER_MOVEMENT_BINDINGS),
+      this.input.consumePress(localBindings.bomb),
+      this.input.consumePress(localBindings.detonate),
+      this.input.consumePress(SKILL_KEY),
+      this.input.isDown(SKILL_KEY),
+    );
+  }
+
+  private forwardGuestInput(): void {
+    if (this.onlineSession?.role !== "guest") {
+      return;
+    }
+    const nextInput = cloneOnlineInputState(this.onlineInputs[this.onlineLocalPlayerId]);
+    const inputSeq = this.onlineNextInputSeq + 1;
+    this.onlineNextInputSeq = inputSeq;
+    this.onlineSession.sendGuestInput(nextInput, inputSeq);
+    appendPendingOnlineInput(this.onlinePendingInputs, { seq: inputSeq, input: nextInput });
+  }
+
+  private flushOnlineSnapshot(deltaMs: number): void {
+    if (
+      this.onlineSession?.role !== "host"
+      || (this.mode !== "match" && this.mode !== "match-result")
+    ) {
+      this.onlineSnapshotCooldownMs = 0;
+      return;
+    }
+    this.onlineSnapshotCooldownMs -= deltaMs;
+    if (this.onlineSnapshotCooldownMs > 0) {
+      return;
+    }
+    this.onlineSnapshotCooldownMs = ONLINE_SNAPSHOT_INTERVAL_MS;
+    this.onlineSession.sendHostSnapshot(this.createOnlineSnapshot());
+  }
+
+  private createOnlineSnapshot(): OnlineGameSnapshot {
+    return {
+      mode: this.mode,
+      roomMode: this.onlineRoomMode,
+      arena: buildArenaRuntimeConfig(this.baseArenaDefinition),
+      serverTimeMs: 0,
+      serverTick: 0,
+      frameId: 0,
+      ackedInputSeq: createNumberPlayerRecord(0),
+      breakableTiles: Array.from(this.arena.breakable),
+      powerUps: this.arena.powerUps.map((powerUp) => ({
+        type: powerUp.type,
+        tile: { ...powerUp.tile },
+        revealed: powerUp.revealed,
+        collected: powerUp.collected,
+      })),
+      players: createPlayerRecord((playerId) => this.clonePlayerState(this.players[playerId])),
+      bombs: this.bombs.map((bomb) => ({
+        ...bomb,
+        tile: { ...bomb.tile },
+      })),
+      flames: this.flames.map((flame) => ({
+        ...flame,
+        tile: { ...flame.tile },
+      })),
+      magicBeams: this.magicBeams.map((beam) => ({
+        ...beam,
+        origin: { ...beam.origin },
+        tiles: beam.tiles.map((tile) => ({ ...tile })),
+      })),
+      nextBombId: this.nextBombId,
+      score: { ...this.score },
+      roundNumber: this.roundNumber,
+      roundTimeMs: this.roundTimeMs,
+      paused: this.paused,
+      roundOutcome: this.roundOutcome ? { ...this.roundOutcome } : null,
+      matchWinner: this.matchWinner,
+      animationClockMs: this.animationClockMs,
+      suddenDeathActive: this.suddenDeathActive,
+      suddenDeathTickMs: this.suddenDeathTickMs,
+      suddenDeathIndex: this.suddenDeathIndex,
+      suddenDeathClosedTiles: Array.from(this.suddenDeathClosedTiles),
+      suddenDeathClosingTiles: this.suddenDeathClosureEffects.map((effect) => ({
+        tile: { ...effect.tile },
+        elapsedMs: effect.elapsedMs,
+        impacted: effect.impacted,
+      })),
+      showDangerOverlay: this.showDangerOverlay,
+      showBombPreview: this.showBombPreview,
+      selectedCharacterIndex: { ...this.selectedCharacterIndex },
+      activePlayerIds: [...this.activePlayerIds],
+      botPlayerIds: ALL_PLAYER_IDS.filter((playerId) => this.isBotControlled(playerId)),
+      endlessStats: this.onlineRoomMode === "endless"
+        ? {
+          kills: { ...this.endlessKills },
+          roundWins: { ...this.endlessRoundWins },
+        }
+        : null,
+    };
+  }
+
+  private clonePlayerState(player: PlayerState): PlayerState {
+    const skill = player.skill ?? createDefaultPlayerSkillState(this.getPlayerSkillId(player.id));
+    return {
+      ...player,
+      tile: { ...player.tile },
+      position: { ...player.position },
+      velocity: { ...player.velocity },
+      skill: {
+        ...skill,
+        projectedPosition: skill.projectedPosition ? { ...skill.projectedPosition } : null,
+      },
+    };
+  }
+
+  private update(deltaMs: number): void {
+    if (this.onlineSession?.role === "guest") {
+      this.updateVisualEffects(deltaMs);
+      if (this.mode === "match") {
+        this.updateRoundStartCue(deltaMs);
+        if (!this.headless) {
+          this.captureOnlineLocalInput();
+        }
+        this.forwardGuestInput();
+        this.updateGuestLocalPrediction(deltaMs);
+      } else if (this.mode === "match-result") {
+        this.updateMatchResult(deltaMs);
+      }
+      return;
+    }
+
+    if (this.onlineSession && !this.headless) {
+      this.captureOnlineLocalInput();
+    }
+
+    switch (this.mode) {
+      case "menu":
+        this.updateMenu();
+        break;
+      case "match":
+        this.updateMatch(deltaMs);
+        break;
+      case "match-result":
+        this.updateMatchResult(deltaMs);
+        break;
+      default:
+        break;
+    }
+
+    if (this.onlineSession?.role === "host") {
+      this.flushOnlineSnapshot(deltaMs);
+    }
+  }
+
+  public startServerAuthoritativeMatch(
+    activePlayerIds: PlayerId[],
+    characterSelections: Record<PlayerId, number>,
+    options: {
+      arena?: ArenaDefinition;
+      roomMode?: LobbyMode;
+      botPlayerIds?: PlayerId[];
+      endlessStats?: OnlineEndlessStats | null;
+      playerLabels?: Record<PlayerId, string>;
+    } = {},
+  ): void {
+    this.onlineSession = {
+      role: "host",
+      roomCode: "server",
+      sendGuestInput: (_input: OnlineInputState, _inputSeq: number) => undefined,
+      sendHostSnapshot: () => undefined,
+      sendMatchResultChoice: () => false,
+    };
+    this.onlineRoomMode = options.roomMode ?? "classic";
+    this.baseArenaDefinition = options.arena ?? this.baseArenaDefinition;
+    this.arena = createArena(this.baseArenaDefinition);
+    this.activePlayerIds = normalizeActivePlayerIds(activePlayerIds);
+    this.onlineLocalPlayerId = 1;
+    this.externalInputPlayers = createBooleanPlayerRecord(false);
+    this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineNextInputSeq = 0;
+    this.onlinePendingInputs = [];
+    this.onlineObservedRoundNumber = null;
+    this.onlineRenderSamples = [];
+    this.selectedCharacterIndex = { ...characterSelections };
+    this.pendingCharacterIndex = { ...characterSelections };
+    this.customPlayerLabels = createPlayerRecord((playerId) => options.playerLabels?.[playerId] ?? null);
+    this.characterLocked = createBooleanPlayerRecord(true);
+    this.characterMenuOpen = createBooleanPlayerRecord(false);
+    this.localBotFill = 0;
+    this.setBotPlayers(options.botPlayerIds ?? []);
+    this.applyEndlessStats(options.endlessStats);
+    this.primeCharacterSprites();
+    this.startMatch();
+  }
+
+  public setServerPlayerInput(playerId: PlayerId, input: OnlineInputState): void {
+    this.externalInputPlayers[playerId] = true;
+    this.onlineInputs[playerId] = mergeLatchedOnlineInput(this.onlineInputs[playerId], input);
+  }
+
+  public advanceServerSimulation(deltaMs: number): void {
+    const steps = Math.max(1, Math.round(deltaMs / FIXED_STEP_MS));
+    for (let step = 0; step < steps; step += 1) {
+      this.update(FIXED_STEP_MS);
+    }
+    this.input.endFrame();
+  }
+
+  public exportOnlineSnapshot(): OnlineGameSnapshot {
+    return this.createOnlineSnapshot();
+  }
+
+  private syncVisualPlayerPositions(): void {
+    this.visualPlayerPositions = createPlayerRecord((playerId) => this.getPlayerPixelPositionFromState(this.players[playerId]));
+  }
+
+  private pushOnlineRenderSample(
+    serverTimeMs: number,
+    serverTick: number,
+    players: Record<PlayerId, PlayerState>,
+  ): void {
+    online_pushRenderSample(
+      this.onlineRenderSamples,
+      this.headless,
+      serverTimeMs,
+      serverTick,
+      players,
+      (player) => this.getPlayerPixelPositionFromState(player),
+    );
+  }
+
+  private updateGuestLocalPrediction(deltaMs: number): void {
+    if (!this.onlineSession || this.onlineSession.role !== "guest" || this.mode !== "match" || this.paused || this.roundOutcome) {
+      return;
+    }
+
+    const localId = this.onlineLocalPlayerId;
+    const player = this.players[localId];
+    if (!player || !player.alive) {
+      return;
+    }
+    this.simulatePlayerInputStep(
+      player,
+      {
+        direction: this.getMovementDirection(localId),
+        bombPressed: this.consumeOnlineBombPress(localId),
+        detonatePressed: this.consumeOnlineDetonatePress(localId),
+        skillPressed: this.consumeOnlineSkillPress(localId),
+        skillHeld: this.isSkillHeld(localId),
+      },
+      deltaMs,
+    );
+  }
+
+  private reconcileGuestState(ackedInputSeq: number): void {
+    if (!this.onlineSession || this.onlineSession.role !== "guest") {
+      return;
+    }
+    if (this.mode !== "match") {
+      this.onlinePendingInputs = [];
+      return;
+    }
+
+    this.onlinePendingInputs = this.onlinePendingInputs.filter((pending) => pending.seq > ackedInputSeq);
+    const localPlayer = this.players[this.onlineLocalPlayerId];
+    if (!localPlayer || !localPlayer.alive) {
+      return;
+    }
+
+    let suppressFirstPendingSkillReplay = localPlayer.skill.phase !== "idle";
+    for (const pending of this.onlinePendingInputs) {
+      const predictedInput = suppressFirstPendingSkillReplay && pending.input.skillPressed
+        ? {
+            ...pending.input,
+            skillPressed: false,
+          }
+        : pending.input;
+      if (suppressFirstPendingSkillReplay && pending.input.skillPressed) {
+        suppressFirstPendingSkillReplay = false;
+      }
+      this.applyPredictedInputStep(localPlayer, predictedInput, FIXED_STEP_MS);
+    }
+  }
+
+  private resetOnlineRoundBuffers(roundNumber: number): void {
+    if (!this.onlineSession) {
+      return;
+    }
+    if (this.onlineObservedRoundNumber === roundNumber) {
+      return;
+    }
+    this.onlineObservedRoundNumber = roundNumber;
+    this.onlinePendingInputs = [];
+    this.onlineRenderSamples = [];
+    this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.syncVisualPlayerPositions();
+  }
+
+  private applyPredictedInputStep(player: PlayerState, input: OnlineInputState, deltaMs: number): void {
+    this.simulatePlayerInputStep(player, input, deltaMs, false);
+  }
+
+  private simulatePlayerInputStep(
+    player: PlayerState,
+    input: OnlineInputState,
+    deltaMs: number,
+    playAudio = true,
+  ): boolean {
+    player.spawnProtectionMs = Math.max(0, player.spawnProtectionMs - deltaMs);
+    player.flameGuardMs = Math.max(0, player.flameGuardMs - deltaMs);
+    player.breakawayBoostMs = Math.max(0, (player.breakawayBoostMs ?? 0) - deltaMs);
+    player.pickupSprintMs = Math.max(0, (player.pickupSprintMs ?? 0) - deltaMs);
+    this.updatePerfectStartBurst(player, input.direction, deltaMs);
+    this.syncPlayerSkill(player);
+    this.advancePlayerSkillTimers(player, deltaMs);
+
+    if (input.skillPressed) {
+      this.activatePlayerSkill(player, input.direction);
+    }
+
+    if (this.updatePlayerSkillChannel(player, input.direction, input.skillPressed, Boolean(input.skillHeld), deltaMs)) {
+      player.tile = this.getTileFromPosition(player.position);
+      return false;
+    }
+
+    let placedBomb = false;
+    if (input.bombPressed) {
+      placedBomb = this.placeBomb(player, playAudio);
+    }
+    if (input.detonatePressed) {
+      this.triggerRemoteDetonation(player);
+    }
+
+    if (input.direction) {
+      const actualDirection = this.resolveMovementDirection(player, input.direction, deltaMs);
+      player.direction = actualDirection;
+      this.movePlayer(player, actualDirection, deltaMs);
+    } else {
+      player.velocity.x = 0;
+      player.velocity.y = 0;
+    }
+    player.tile = this.getTileFromPosition(player.position);
+    return placedBomb;
+  }
+
+  private syncPlayerSkill(player: PlayerState): void {
+    skill_syncPlayerSkill(player, this.createSkillContext(), (playerId) => this.getPlayerSkillId(playerId));
+  }
+
+  private advancePlayerSkillTimers(player: PlayerState, deltaMs: number): void {
+    skill_advancePlayerSkillTimers(player, deltaMs);
+  }
+
+  private activatePlayerSkill(player: PlayerState, desiredDirection: Direction | null): void {
+    skill_activatePlayerSkill(player, desiredDirection, this.createSkillContext());
+  }
+
+  private updatePlayerSkillChannel(
+    player: PlayerState,
+    desiredDirection: Direction | null,
+    skillPressed: boolean,
+    skillHeld: boolean,
+    deltaMs: number,
+  ): boolean {
+    return skill_updatePlayerSkillChannel(player, desiredDirection, skillPressed, skillHeld, deltaMs, this.createSkillContext());
+  }
+
+  private isPlayerImmuneDuringSkillChannel(player: PlayerState): boolean {
+    return skill_isPlayerImmuneDuringSkillChannel(player);
+  }
+
+  private updateVisualPlayerPositions(deltaMs: number): void {
+    online_updateVisualPlayerPositions({
+      headless: this.headless,
+      hasSession: Boolean(this.onlineSession),
+      activePlayerIds: this.activePlayerIds,
+      onlineLocalPlayerId: this.onlineLocalPlayerId,
+      players: this.players,
+      visualPlayerPositions: this.visualPlayerPositions,
+      onlineRenderSamples: this.onlineRenderSamples,
+      deltaMs,
+      getPlayerPixelPositionFromState: (player) => this.getPlayerPixelPositionFromState(player),
+    });
+  }
+
+  private updateMenu(): void {
+    if (this.onlineSession) {
+      return;
+    }
+
+    if (this.input.consumePress(LOCAL_BOT_CYCLE_KEY)) {
+      this.applyOfflineBotFill((this.localBotFill + 1) % (MAX_LOCAL_BOT_FILL + 1));
+    }
+
+    if (this.input.consumePress(LOCAL_BOT_TOGGLE_KEY)) {
+      this.applyOfflineBotFill(this.localBotFill > 0 ? 0 : 1);
+    }
+
+    this.handleCharacterSelectionInput();
+    if (this.isAnyCharacterMenuOpen()) {
+      return;
+    }
+
+    for (const playerId of this.activePlayerIds) {
+      if (this.isBotControlled(playerId)) {
+        this.menuReady[playerId] = true;
+      }
+    }
+
+    if (this.automationMode && this.input.consumePress("Enter")) {
+      this.menuReady = createBooleanPlayerRecord(false);
+      for (const playerId of this.activePlayerIds) {
+        this.menuReady[playerId] = true;
+      }
+    }
+    this.handleReadyInput(this.menuReady);
+    if (this.activePlayerIds.every((playerId) => this.menuReady[playerId])) {
+      this.startMatch();
+    }
+  }
+
+  private updateMatch(deltaMs: number): void {
+    if (!this.roundOutcome && this.input.consumePress("Escape")) {
+      this.paused = !this.paused;
+      this.autoPausedForHiddenTab = false;
+    }
+
+    if (!this.onlineSession) {
+      this.handleCharacterSelectionInput();
+      if (this.isAnyCharacterMenuOpen()) {
+        return;
+      }
+    }
+
+    if (this.automationMode) {
+      if (this.input.consumePress("KeyA")) {
+        this.automationControlledPlayer = 1;
+      }
+      if (this.input.consumePress("KeyB")) {
+        this.automationControlledPlayer = 2;
+      }
+    }
+
+    if (this.paused) {
+      return;
+    }
+
+    if (this.roundOutcome) {
+      this.roundOutcome.countdownMs -= deltaMs;
+      if (this.roundOutcome.countdownMs <= 0) {
+        this.advanceAfterRound();
+      }
+      return;
+    }
+
+    if (this.isAwaitingInitialModelPlan()) {
+      this.pushLabTelemetry();
+      return;
+    }
+
+    this.updateRoundStartCue(deltaMs);
+    this.roundTimeMs = Math.max(0, this.roundTimeMs - deltaMs);
+    this.animationClockMs += deltaMs;
+    this.updateVisualEffects(deltaMs);
+    if (this.roundTimeMs <= 0) {
+      this.finishRound(null, "timer", "Clock hit zero. Draw round.");
+      return;
+    }
+
+    this.updateSuddenDeath(deltaMs);
+    this.botBombCooldownMs = Math.max(0, this.botBombCooldownMs - deltaMs);
+    this.updatePlayers(deltaMs);
+    this.updateBombs(deltaMs);
+    this.updateFlames(deltaMs);
+    this.collectPowerUps();
+    this.evaluateRoundState();
+
+    // Cache danger map so render doesn't need to recompute it
+    if (this.showDangerOverlay) {
+      this.cachedDangerMap = this.getDangerMap();
+    } else {
+      this.cachedDangerMap = null;
+    }
+
+    this.pushLabTelemetry();
+  }
+
+  private isAwaitingInitialModelPlan(): boolean {
+    if (!AutoImprovementBridge.isEnabled || this.labInitialPlansReady) {
+      return false;
+    }
+    const controlledPlayers = this.activePlayerIds.filter((playerId) => (
+      this.liveBridgePlayers[playerId] && this.players[playerId].alive
+    ));
+    if (!controlledPlayers.length) {
+      this.labInitialPlanWaitStartedAtMs = 0;
+      return false;
+    }
+    const missingPlayers = controlledPlayers.filter((playerId) => (
+      !AutoImprovementBridge.hasFreshDecision(playerId)
+    ));
+    this.labInitialPlansReady = missingPlayers.length === 0;
+    if (this.labInitialPlansReady) {
+      this.labInitialPlanWaitStartedAtMs = 0;
+      return false;
+    }
+    const now = Date.now();
+    if (!this.labInitialPlanWaitStartedAtMs) {
+      this.labInitialPlanWaitStartedAtMs = now;
+    } else if (
+      now - this.labInitialPlanWaitStartedAtMs >= LAB_INITIAL_PLAN_TIMEOUT_MS
+      && !this.labStartupAbortTriggered
+    ) {
+      this.abortUnavailableLabSession(missingPlayers);
+    }
+    return !this.labInitialPlansReady;
+  }
+
+  private abortUnavailableLabSession(missingPlayers: PlayerId[]): void {
+    this.labStartupAbortTriggered = true;
+    const players = missingPlayers.map((playerId) => `P${playerId}`).join(", ");
+    const message = `O 9router não entregou um plano válido para ${players} em 25 segundos. A sessão foi interrompida; tente novamente.`;
+    if (this.headless || typeof window === "undefined") {
+      this.paused = true;
+      return;
+    }
+    window.setTimeout(() => {
+      window.alert(message);
+      window.location.assign("/lab");
+    }, 0);
+  }
+
+  private pushLabTelemetry(): void {
+    if (!AutoImprovementBridge.isEnabled) {
+      return;
+    }
+    this.aiBridgeTick++;
+    AutoImprovementBridge.pushTelemetry({
+      tick: this.aiBridgeTick,
+      phase: this.mode,
+      roundNumber: this.roundNumber,
+      players: Object.values(this.players),
+      bombs: this.bombs,
+      flames: this.flames,
+      powerUps: this.arena.powerUps,
+      matchScore: this.score,
+      suddenDeath: {
+        active: this.suddenDeathActive,
+        index: this.suddenDeathIndex,
+      },
+      navigation: this.getLabNavigationSnapshot(),
+      actionAcks: [...this.labActionAcks.values()].map((ack) => ({
+        ...ack,
+        alive: this.players[Number(ack.playerId) as PlayerId]?.alive ?? false,
+      })),
+    });
+  }
+
+  private updateMatchResult(deltaMs: number): void {
+    if (this.onlineSession) {
+      return;
+    }
+
+    if (this.handleLocalMatchResultInput()) {
+      return;
+    }
+
+    if (!this.headless) {
+      return;
+    }
+
+    this.matchResultCooldownMs = Math.max(0, this.matchResultCooldownMs - deltaMs);
+    if (this.matchResultCooldownMs > 0) {
+      return;
+    }
+
+    if (this.activePlayerIds.length >= 2) {
+      this.startMatch();
+      return;
+    }
+    this.returnToMenu();
+  }
+
+  private handleLocalMatchResultInput(): boolean {
+    if (this.input.consumePress("Escape")) {
+      this.matchResultChoice[1] = "lobby";
+      this.returnToMenu();
+      return true;
+    }
+
+    if (this.input.consumePress("Enter") || this.input.consumePress("Space")) {
+      this.matchResultChoice[1] = "rematch";
+      this.startMatch();
+      return true;
+    }
+
+    return false;
+  }
+
+  private handleReadyInput(readyState: Record<PlayerId, boolean>): void {
+    for (const playerId of MENU_PLAYER_IDS) {
+      if (!this.activePlayerIds.includes(playerId)) {
+        continue;
+      }
+      if (this.isBotControlled(playerId)) {
+        continue;
+      }
+      if (this.input.consumePress(KEY_BINDINGS[playerId].ready)) {
+        readyState[playerId] = !readyState[playerId];
+      }
+    }
+  }
+
+  private handleCharacterSelectionInput(): void {
+    for (const id of MENU_PLAYER_IDS) {
+      if (!this.input.consumePress(CHARACTER_MENU_KEYS[id])) {
+        continue;
+      }
+      const opening = !this.characterMenuOpen[id];
+      this.characterMenuOpen[id] = opening;
+      if (opening) {
+        this.pendingCharacterIndex[id] = this.selectedCharacterIndex[id];
+        this.characterLocked[id] = false;
+      }
+    }
+
+    for (const id of MENU_PLAYER_IDS) {
+      if (!this.characterMenuOpen[id]) {
+        continue;
+      }
+      if (this.input.consumePress(KEY_BINDINGS[id].up)) {
+        this.cycleCharacterSelection(id, -1);
+      }
+      if (this.input.consumePress(KEY_BINDINGS[id].down)) {
+        this.cycleCharacterSelection(id, 1);
+      }
+      if (this.input.consumePress(KEY_BINDINGS[id].ready)) {
+        this.lockCharacterSelection(id);
+      }
+    }
+  }
+
+  private cycleCharacterSelection(playerId: PlayerId, delta: number): void {
+    const total = this.characterRoster.length;
+    if (total <= 0) {
+      return;
+    }
+    const current = this.pendingCharacterIndex[playerId];
+    this.pendingCharacterIndex[playerId] = (current + delta + total) % total;
+  }
+
+  private lockCharacterSelection(playerId: PlayerId): void {
+    this.selectedCharacterIndex[playerId] = this.pendingCharacterIndex[playerId];
+    this.characterLocked[playerId] = true;
+    this.characterMenuOpen[playerId] = false;
+  }
+
+  private isAnyCharacterMenuOpen(): boolean {
+    return MENU_PLAYER_IDS.some((playerId) => this.characterMenuOpen[playerId]);
+  }
+
+  private applyOfflineBotFill(botFill: number, preserveP1Ready = true): void {
+    if (this.onlineSession) {
+      return;
+    }
+    const nextFill = Math.max(0, Math.min(MAX_LOCAL_BOT_FILL, Math.floor(botFill)));
+    this.localBotFill = nextFill;
+    const nextActivePlayerIds: PlayerId[] = nextFill === 0
+      ? [1, 2]
+      : ([1, ...ALL_PLAYER_IDS.slice(1, 1 + nextFill)] as PlayerId[]);
+    this.activePlayerIds = normalizeActivePlayerIds(nextActivePlayerIds);
+    this.botControlledPlayers = createBooleanPlayerRecord(false);
+    if (nextFill > 0) {
+      for (const playerId of this.activePlayerIds) {
+        if (playerId !== 1) {
+          this.botControlledPlayers[playerId] = true;
+        }
+      }
+    }
+    for (const playerId of this.activePlayerIds) {
+      if (this.liveBridgePlayers[playerId]) {
+        this.botControlledPlayers[playerId] = true;
+      }
+    }
+    this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
+    const nextReady = createBooleanPlayerRecord(false);
+    nextReady[1] = preserveP1Ready ? this.menuReady[1] : false;
+    for (const playerId of this.activePlayerIds) {
+      if (playerId !== 1 && this.isBotControlled(playerId)) {
+        nextReady[playerId] = true;
+      }
+    }
+    this.menuReady = nextReady;
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.syncPlayerLabels();
+  }
+
+  private startMatch(): void {
+    // Prevent queued key presses from previous screens leaking into active gameplay.
+    this.input.clearPresses();
+    this.soundManager.playOneShot("matchStart");
+    this.menuReady = createBooleanPlayerRecord(false);
+    this.matchResultChoice = createPlayerRecord(() => null);
+    this.matchResultCooldownMs = 0;
+    this.score = this.onlineRoomMode === "endless"
+      ? { ...this.endlessRoundWins }
+      : { 1: 0, 2: 0, 3: 0, 4: 0 };
+    this.roundNumber = 1;
+    this.matchWinner = null;
+    this.resetRound();
+    this.mode = "match";
+  }
+
+  private resetRound(showStartCue = true): void {
+    this.arena = createArena(this.baseArenaDefinition);
+    this.invalidateArenaCache();
+    this.players = this.createPlayers();
+    this.bombs = [];
+    this.flames = [];
+    this.magicBeams = [];
+    this.crateBreakAnimations = [];
+    this.screenShakeMs = 0;
+    this.screenShakeAmplitudePx = 0;
+    this.powerUpRevealStartedAtMs.clear();
+    this.powerUpPickupNotices = [];
+    this.pickupChains = createPlayerRecord(() => createPickupChainState());
+    this.playerDeathAnimations = createPlayerRecord(() => null);
+    this.nextBombId = 1;
+    this.roundTimeMs = ROUND_DURATION_MS;
+    this.roundOutcome = null;
+    this.roundStartCueMs = showStartCue ? ROUND_START_CUE_MS : 0;
+    this.paused = false;
+    this.autoPausedForHiddenTab = false;
+    this.botBombCooldownMs = 0;
+    this.labActionAcks.clear();
+    this.labInitialPlansReady = false;
+    this.labInitialPlanWaitStartedAtMs = 0;
+    this.labStartupAbortTriggered = false;
+    AutoImprovementBridge.invalidateDecisions(this.activePlayerIds, this.aiBridgeTick + 1);
+    this.botCommittedDirection = createDirectionPlayerRecord(null);
+    this.botPendingReverseDirection = createDirectionPlayerRecord(null);
+    this.botPendingReverseFrames = createNumberPlayerRecord(0);
+    this.animationClockMs = 0;
+    this.suddenDeathActive = false;
+    this.suddenDeathTickMs = SUDDEN_DEATH_TICK_MS;
+    this.suddenDeathIndex = 0;
+    this.suddenDeathClosedTiles = new Set();
+    this.suddenDeathClosureEffects = [];
+    this.suddenDeathPath = this.buildSuddenDeathPath();
+  }
+
+  private createPlayers(): Record<PlayerId, PlayerState> {
+    const players = createPlayerRecord((playerId) => {
+      const spawn = this.getPlayerSpawn(playerId);
+      const name = this.isBotControlled(playerId) ? "BOT" : `P${playerId}`;
+      return this.createPlayer(playerId, name, spawn.tile, spawn.direction, this.activePlayerIds.includes(playerId));
+    });
+    this.visualPlayerPositions = createPlayerRecord((playerId) => this.getPlayerPixelPositionFromState(players[playerId]));
+    return players;
+  }
+
+  private syncPlayerLabels(): void {
+    for (const playerId of ALL_PLAYER_IDS) {
+      this.players[playerId].name = this.isBotControlled(playerId)
+        ? "BOT"
+        : (this.customPlayerLabels[playerId] || `P${playerId}`);
+    }
+  }
+
+  private getCharacterEntry(index: number): CharacterRosterEntry {
+    const entryBySelectionIndex = this.characterRoster.find((entry) => entry.selectionIndex === index);
+    if (entryBySelectionIndex) {
+      return entryBySelectionIndex;
+    }
+    const total = this.characterRoster.length;
+    const normalized = ((index % total) + total) % total;
+    return this.characterRoster[normalized];
+  }
+
+  private findDefaultCharacterIndex(playerId: PlayerId, fallbackIndex: number): number {
+    const configuredIndex = this.characterRoster.findIndex((entry) => entry.defaultSlot === playerId);
+    if (configuredIndex >= 0) {
+      return configuredIndex;
+    }
+    return fallbackIndex;
+  }
+
+  private wrapCharacterIndex(index: number): number {
+    const total = Math.max(1, this.characterRoster.length);
+    return ((index % total) + total) % total;
+  }
+
+  private getActiveCharacterEntry(playerId: PlayerId): CharacterRosterEntry {
+    return this.getCharacterEntry(this.selectedCharacterIndex[playerId]);
+  }
+
+  private getPreviewCharacterEntry(playerId: PlayerId): CharacterRosterEntry {
+    const index = this.characterMenuOpen[playerId]
+      ? this.pendingCharacterIndex[playerId]
+      : this.selectedCharacterIndex[playerId];
+    return this.getCharacterEntry(index);
+  }
+
+  private getPlayerSprites(playerId: PlayerId): DirectionalSprites {
+    const entry = this.getActiveCharacterEntry(playerId);
+    if (entry.sprites) {
+      return entry.sprites;
+    }
+    void this.loadCharacterSprites(entry);
+    return this.characterSpriteCache.get(entry.id) ?? this.getFallbackSpritesForEntry(entry);
+  }
+
+  private getFallbackSpritesForEntry(entry: CharacterRosterEntry): DirectionalSprites {
+    const fallbackSlot = entry.defaultSlot ?? 1;
+    return this.assets.players[fallbackSlot]
+      ?? this.assets.players[1]
+      ?? createEmptyDirectionalSprites();
+  }
+
+  private loadCharacterSprites(entry: CharacterRosterEntry): Promise<DirectionalSprites> {
+    if (entry.sprites) {
+      this.characterSpriteCache.set(entry.id, entry.sprites);
+      return Promise.resolve(entry.sprites);
+    }
+
+    const loadedSprites = this.characterSpriteCache.get(entry.id);
+    if (loadedSprites) {
+      return Promise.resolve(loadedSprites);
+    }
+
+    const pendingLoad = this.characterSpriteLoads.get(entry.id);
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    const load = this.assets.characterSpriteLoader(entry)
+      .then((sprites) => {
+        this.characterSpriteCache.set(entry.id, sprites);
+        return sprites;
+      })
+      .catch((error) => {
+        this.characterSpriteLoads.delete(entry.id);
+        throw error;
+      });
+    this.characterSpriteLoads.set(entry.id, load);
+    return load;
+  }
+
+  private primeCharacterSprites(): void {
+    for (const playerId of ALL_PLAYER_IDS) {
+      void this.loadCharacterSprites(this.getActiveCharacterEntry(playerId));
+    }
+  }
+
+  private getPlayerSkillId(playerId: PlayerId): CharacterSkillId | null {
+    return getCharacterSkillId(this.getActiveCharacterEntry(playerId).id);
+  }
+
+  private getCharacterLabel(playerId: PlayerId, maxLength = 18): string {
+    return this.shortenCharacterName(this.getActiveCharacterEntry(playerId).name, maxLength);
+  }
+
+  private getPlayerSlotLabel(playerId: PlayerId): string {
+    return this.isBotControlled(playerId) ? "BOT" : `P${playerId}`;
+  }
+
+  private shortenCharacterName(name: string, maxLength = 30): string {
+    if (name.length <= maxLength) {
+      return name;
+    }
+    return `${name.slice(0, maxLength - 3)}...`;
+  }
+
+  private createPlayer(
+    id: PlayerId,
+    name: string,
+    tile: TileCoord,
+    direction: Direction,
+    active: boolean,
+  ): PlayerState {
+    const center = this.getTileCenter(tile);
+    return {
+      id,
+      name,
+      active,
+      tile: { ...tile },
+      position: center,
+      velocity: { x: 0, y: 0 },
+      alive: active,
+      direction,
+      lastMoveDirection: null,
+      maxBombs: 1,
+      activeBombs: 0,
+      flameRange: 1,
+      speedLevel: 0,
+      remoteLevel: 0,
+      shieldCharges: 0,
+      bombPassLevel: 0,
+      kickLevel: 0,
+      shortFuseLevel: 0,
+      flameGuardMs: 0,
+      spawnProtectionMs: SPAWN_PROTECTION_MS,
+      perfectStartWindowMs: PERFECT_START_WINDOW_MS,
+      perfectStartBoostMs: 0,
+      breakawayBoostMs: 0,
+      pickupSprintMs: 0,
+      skill: createDefaultPlayerSkillState(null),
+    };
+  }
+
+  private updatePlayers(deltaMs: number): void {
+    this.cachedBotDangerMap = null;
+    this.botDangerCacheActive = true;
+    try {
+      for (const id of this.activePlayerIds) {
+        const player = this.players[id];
+        if (!player.alive) {
+          continue;
+        }
+
+        const botDecision = this.isBotControlled(id) ? this.getBotDecision(player) : null;
+        const automationBomb = this.automationMode
+          ? this.automationControlledPlayer === id && this.input.consumePress("Space")
+          : false;
+        const onlineBomb = this.consumeOnlineBombPress(id);
+        const nativeBindings = MENU_PLAYER_IDS.includes(id as MenuPlayerId)
+          ? KEY_BINDINGS[id as MenuPlayerId]
+          : null;
+        const nativeBomb = this.shouldUseNativeControls()
+          ? nativeBindings ? this.input.consumePress(nativeBindings.bomb) : false
+          : false;
+        const wantsBomb = botDecision?.placeBomb || automationBomb || nativeBomb || onlineBomb;
+        const wantsDetonate = botDecision?.detonate
+          || this.consumeOnlineDetonatePress(id)
+          || (this.shouldUseNativeControls()
+            ? nativeBindings ? this.input.consumePress(nativeBindings.detonate) : false
+            : false);
+        const nativeSkillPressed = this.shouldUseNativeControls() && nativeBindings
+          ? this.input.consumePress(nativeBindings.skill)
+          : false;
+        const modelSkillPressed = botDecision?.skillAction === "release"
+          ? Boolean(botDecision.useSkill) && (player.skill.phase === "channeling" || player.skill.phase === "releasing")
+          : Boolean(botDecision?.useSkill);
+        const wantsSkill = modelSkillPressed
+          || this.consumeOnlineSkillPress(id)
+          || (nativeSkillPressed
+            && !this.isBotControlled(id)
+            && (!this.automationMode || this.automationControlledPlayer === id));
+        const skillHeld = botDecision?.skillHeld ?? this.isSkillHeld(id);
+
+        const desiredDirection = botDecision?.direction ?? this.getMovementDirection(id);
+        const liveBridgeControlled = AutoImprovementBridge.isEnabled && this.isLiveBridgeControlled(id);
+        const direction = liveBridgeControlled
+          ? desiredDirection
+          : this.isBotControlled(id)
+            ? this.getStableBotDirection(player, desiredDirection, deltaMs)
+            : desiredDirection;
+        const actionRequestId = liveBridgeControlled ? botDecision?.requestId : undefined;
+        const positionBefore = actionRequestId ? { ...player.position } : null;
+        const tileBefore = actionRequestId ? { ...player.tile } : null;
+        const skillPhaseBefore = player.skill.phase;
+        const detonationBomb = actionRequestId && wantsDetonate
+          ? this.getOldestOwnedBomb(player.id)
+          : null;
+        const detonationFuseBefore = detonationBomb?.fuseMs ?? 0;
+        const placedBomb = this.simulatePlayerInputStep(
+          player,
+          {
+            direction,
+            bombPressed: wantsBomb,
+            detonatePressed: wantsDetonate,
+            skillPressed: wantsSkill,
+            skillHeld,
+          },
+          deltaMs,
+        );
+        if (actionRequestId && positionBefore && tileBefore) {
+          this.recordLabActionAck({
+            requestId: actionRequestId,
+            microActionIndex: botDecision?.microActionIndex ?? 0,
+            playerId: String(id),
+            direction,
+            tileBefore,
+            tileAfter: { ...player.tile },
+            movementDelta: {
+              x: player.position.x - positionBefore.x,
+              y: player.position.y - positionBefore.y,
+            },
+            positionChanged: player.position.x !== positionBefore.x || player.position.y !== positionBefore.y,
+            tileChanged: player.tile.x !== tileBefore.x || player.tile.y !== tileBefore.y,
+            bombAttempted: Boolean(botDecision?.placeBomb),
+            bombPlaced: placedBomb,
+            detonateAttempted: Boolean(botDecision?.detonate),
+            detonated: Boolean(detonationBomb && detonationFuseBefore > 0 && detonationBomb.fuseMs <= 0),
+            skillAction: botDecision?.skillAction ?? "none",
+            skillPressed: modelSkillPressed,
+            skillHeld: Boolean(botDecision?.skillHeld),
+            skillPhaseBefore,
+            skillPhaseAfter: player.skill.phase,
+            alive: player.alive,
+            updatedAtTick: this.aiBridgeTick + 1,
+          });
+        }
+        if (this.isBotControlled(id) && direction && player.skill.phase !== "channeling") {
+          this.rememberBotDirection(id, player.direction);
+        }
+        if (placedBomb && botDecision?.placeBomb && this.isBotControlled(id)) {
+          this.botBombCooldownMs = BOT_BOMB_COOLDOWN_MS;
+        }
+      }
+    } finally {
+      this.botDangerCacheActive = false;
+      this.cachedBotDangerMap = null;
+    }
+  }
+
+  private getMovementDirection(id: PlayerId): Direction | null {
+    if (this.isBotControlled(id)) {
+      return null;
+    }
+    if (this.onlineSession) {
+      const input = this.onlineInputs[id];
+      if (input) {
+        return input.direction;
+      }
+    }
+    if (this.automationMode) {
+      if (this.automationControlledPlayer === id) {
+        return this.input.getMovementDirection(2) ?? this.input.getMovementDirection(1);
+      }
+      return null;
+    }
+    if (MENU_PLAYER_IDS.includes(id as MenuPlayerId)) {
+      return this.input.getMovementDirection(id as MenuPlayerId);
+    }
+    return null;
+  }
+
+  private isSkillHeld(id: PlayerId): boolean {
+    if (this.isBotControlled(id)) {
+      return false;
+    }
+    if (this.onlineSession) {
+      return Boolean(this.onlineInputs[id]?.skillHeld);
+    }
+    if (this.automationMode) {
+      return this.automationControlledPlayer === id
+        && MENU_PLAYER_IDS.includes(id as MenuPlayerId)
+        && this.input.isDown(KEY_BINDINGS[id as MenuPlayerId].skill);
+    }
+    if (!this.shouldUseNativeControls() || !MENU_PLAYER_IDS.includes(id as MenuPlayerId)) {
+      return false;
+    }
+    return this.input.isDown(KEY_BINDINGS[id as MenuPlayerId].skill);
+  }
+
+  private isBotControlled(id: PlayerId): boolean {
+    return Boolean(this.botControlledPlayers?.[id]) && this.activePlayerIds.includes(id);
+  }
+
+  private isLiveBridgeControlled(id: PlayerId): boolean {
+    return Boolean(this.liveBridgePlayers?.[id]) && this.activePlayerIds.includes(id);
+  }
+
+  private shouldUseNativeControls(): boolean {
+    if (this.onlineSession) {
+      return false;
+    }
+    return true;
+  }
+
+  private consumeOnlineBombPress(id: PlayerId): boolean {
+    return consumeLatchedOnlinePress(Boolean(this.onlineSession), this.onlineInputs[id], "bombPressed");
+  }
+
+  private consumeOnlineDetonatePress(id: PlayerId): boolean {
+    return consumeLatchedOnlinePress(Boolean(this.onlineSession), this.onlineInputs[id], "detonatePressed");
+  }
+
+  private consumeOnlineSkillPress(id: PlayerId): boolean {
+    return consumeLatchedOnlinePress(Boolean(this.onlineSession), this.onlineInputs[id], "skillPressed");
+  }
+
+  private getBotDecision(player: PlayerState): BotDecision {
+    if (AutoImprovementBridge.isEnabled && this.isLiveBridgeControlled(player.id)) {
+      // Per-player AI explicitly disabled → stand completely idle (no built-in AI)
+      if (!AutoImprovementBridge.isPlayerEnabled(player.id)) {
+        return { direction: null, placeBomb: false, detonate: false, useSkill: false, skillHeld: false };
+      }
+      const aiDecision = AutoImprovementBridge.getDecision(player.id);
+      if (aiDecision) return AutoImprovementBridge.toBotDecision(aiDecision);
+      // Strict / Codex-only mode → stand idle rather than falling back to built-in AI
+      if (AutoImprovementBridge.isStrictMode) {
+        return { direction: null, placeBomb: false, detonate: false };
+      }
+    }
+    return botAI_getBotDecision(player, this.createBotContext(this.getSharedBotDangerMap()));
+  }
+
+  private recordLabActionAck(frame: LabActionAck): void {
+    const key = `${frame.playerId}:${frame.requestId}:${frame.microActionIndex}`;
+    const previous = this.labActionAcks.get(key);
+    this.labActionAcks.set(key, previous
+      ? {
+          ...frame,
+          movementDelta: {
+            x: previous.movementDelta.x + frame.movementDelta.x,
+            y: previous.movementDelta.y + frame.movementDelta.y,
+          },
+          positionChanged: previous.positionChanged || frame.positionChanged,
+          tileChanged: previous.tileChanged || frame.tileChanged,
+          bombAttempted: previous.bombAttempted || frame.bombAttempted,
+          bombPlaced: previous.bombPlaced || frame.bombPlaced,
+          detonateAttempted: previous.detonateAttempted || frame.detonateAttempted,
+          detonated: previous.detonated || frame.detonated,
+          skillPressed: previous.skillPressed || frame.skillPressed,
+          skillHeld: frame.skillHeld,
+          skillPhaseBefore: previous.skillPhaseBefore,
+          tileBefore: previous.tileBefore,
+          tileAfter: frame.tileAfter,
+        }
+      : frame);
+    while (this.labActionAcks.size > 64) {
+      this.labActionAcks.delete(this.labActionAcks.keys().next().value as string);
+    }
+  }
+
+  private getSharedBotDangerMap(): Map<string, number> {
+    if (!this.botDangerCacheActive) {
+      return botAI_buildDangerMap(this.createBotContext());
+    }
+    if (!this.cachedBotDangerMap) {
+      this.cachedBotDangerMap = botAI_buildDangerMap(this.createBotContext());
+    }
+    return this.cachedBotDangerMap;
+  }
+
+  private getOldestOwnedBomb(playerId: PlayerId): BombState | null {
+    let selectedBomb: BombState | null = null;
+    for (const bomb of this.bombs) {
+      if (bomb.ownerId !== playerId) {
+        continue;
+      }
+      if (!selectedBomb || bomb.id < selectedBomb.id) {
+        selectedBomb = bomb;
+      }
+    }
+    return selectedBomb;
+  }
+
+  private getDangerMap(extraBomb?: ProjectedBomb): Map<string, number> {
+    return buildDangerMap(this.createBotContext(), extraBomb);
+  }
+
+  private getBombBlastKeys(origin: TileCoord, range: number): Set<string> {
+    return projectBombBlastKeys(origin, range, this.arena);
+  }
+
+  private getMoveDuration(player: PlayerState): number {
+    return Math.max(MIN_MOVE_MS, BASE_MOVE_MS - player.speedLevel * SPEED_STEP_MS);
+  }
+
+  private getMoveSpeed(player: PlayerState): number {
+    const speed = TILE_SIZE / (this.getMoveDuration(player) / 1000);
+    const hasSpeedBoost = (
+      (player.perfectStartBoostMs ?? 0) > 0
+      || (player.breakawayBoostMs ?? 0) > 0
+      || (player.pickupSprintMs ?? 0) > 0
+    );
+    if (hasSpeedBoost) {
+      return speed * PERFECT_START_SPEED_MULTIPLIER;
+    }
+    return this.hasDangerAdrenalineStep(player)
+      ? speed * DANGER_ADRENALINE_SPEED_MULTIPLIER
+      : speed;
+  }
+
+  private hasDangerAdrenalineStep(player: PlayerState): boolean {
+    if (
+      !player.alive
+      || player.spawnProtectionMs > 0
+      || player.flameGuardMs > 0
+      || this.isPlayerImmuneDuringSkillChannel(player)
+    ) {
+      return false;
+    }
+    const tile = this.getTileFromPosition(player.position);
+    const etaMs = this.getDangerMap().get(tileKey(tile.x, tile.y));
+    return etaMs !== undefined && etaMs > 0 && etaMs <= DANGER_ADRENALINE_ETA_MS;
+  }
+
+  private updatePerfectStartBurst(player: PlayerState, direction: Direction | null, deltaMs: number): void {
+    const windowMs = Math.max(0, player.perfectStartWindowMs ?? 0);
+    const boostMs = Math.max(0, player.perfectStartBoostMs ?? 0);
+
+    if (direction && windowMs > 0 && boostMs <= 0) {
+      player.perfectStartWindowMs = 0;
+      player.perfectStartBoostMs = PERFECT_START_BOOST_MS;
+      return;
+    }
+
+    player.perfectStartWindowMs = Math.max(0, windowMs - deltaMs);
+    player.perfectStartBoostMs = Math.max(0, boostMs - deltaMs);
+  }
+
+  private getStableBotDirection(
+    player: PlayerState,
+    desiredDirection: Direction | null,
+    deltaMs: number,
+  ): Direction | null {
+    return botAI_getStableBotDirection(
+      player,
+      desiredDirection,
+      deltaMs,
+      this.createBotContext(this.getSharedBotDangerMap()),
+    );
+  }
+
+  private rememberBotDirection(playerId: PlayerId, direction: Direction): void {
+    if (this.botCommittedDirection[playerId] === direction) {
+      return;
+    }
+    this.botCommittedDirection[playerId] = direction;
+  }
+
+  private normalizeTileAxis(value: number, size: number): number {
+    const wrapped = value % size;
+    return wrapped < 0 ? wrapped + size : wrapped;
+  }
+
+  private normalizeTile(tile: TileCoord): TileCoord {
+    return {
+      x: this.normalizeTileAxis(tile.x, this.getArenaGridWidth()),
+      y: this.normalizeTileAxis(tile.y, this.getArenaGridHeight()),
+    };
+  }
+
+  private normalizeAxisPosition(value: number, span: number): number {
+    const wrapped = value % span;
+    return wrapped < 0 ? wrapped + span : wrapped;
+  }
+
+  private normalizeArenaPosition(position: PixelCoord): PixelCoord {
+    return {
+      x: this.normalizeAxisPosition(position.x, this.getArenaPixelWidth()),
+      y: this.normalizeAxisPosition(position.y, this.getArenaPixelHeight()),
+    };
+  }
+
+  private getWrappedDelta(current: number, previous: number, span: number): number {
+    let delta = current - previous;
+    if (delta > span * 0.5) {
+      delta -= span;
+    } else if (delta < -span * 0.5) {
+      delta += span;
+    }
+    return delta;
+  }
+
+  private positionChanged(from: PixelCoord, to: PixelCoord): boolean {
+    return (
+      Math.abs(this.getWrappedDelta(to.x, from.x, this.getArenaPixelWidth())) > 0.01
+      || Math.abs(this.getWrappedDelta(to.y, from.y, this.getArenaPixelHeight())) > 0.01
+    );
+  }
+
+  private canMovementOptionAdvance(from: PixelCoord, option: MovementOption): boolean {
+    return (
+      (option.combinedFree && this.positionChanged(from, option.combinedMove))
+      || (option.laneOnlyFree && this.positionChanged(from, option.laneOnlyMove))
+      || (option.forwardOnlyFree && this.positionChanged(from, option.forwardOnlyMove))
+    );
+  }
+
+  private resolveMovementDirection(player: PlayerState, desiredDirection: Direction, deltaMs: number): Direction {
+    const desiredOption = this.evaluateMovementOption(player, desiredDirection, deltaMs);
+    const desiredCanMove = this.canMovementOptionAdvance(player.position, desiredOption);
+
+    const lastDirection = player.lastMoveDirection;
+    if (!lastDirection || lastDirection === desiredDirection || !this.arePerpendicular(lastDirection, desiredDirection)) {
+      return desiredDirection;
+    }
+
+    if (desiredCanMove) {
+      return desiredDirection;
+    }
+
+    const continueOption = this.evaluateMovementOption(player, lastDirection, deltaMs);
+    const continueAdvances = this.canMovementOptionAdvance(player.position, continueOption);
+
+    return continueAdvances ? lastDirection : desiredDirection;
+  }
+
+  private evaluateMovementOption(player: PlayerState, direction: Direction, deltaMs: number): MovementOption {
+    const delta = directionDelta[direction];
+    const step = this.getMoveSpeed(player) * (deltaMs / 1000);
+    const horizontal = delta.x !== 0;
+    const laneTarget = horizontal
+      ? this.getNearestLaneCenter(player.position.y)
+      : this.getNearestLaneCenter(player.position.x);
+    const laneDistance = horizontal
+      ? Math.abs(laneTarget - player.position.y)
+      : Math.abs(laneTarget - player.position.x);
+
+    let nextX = player.position.x;
+    let nextY = player.position.y;
+    const canAdvanceForward = laneDistance <= LANE_LOCK_THRESHOLD;
+
+    if (horizontal) {
+      if (laneDistance <= LANE_SNAP_THRESHOLD) {
+        nextY = this.approach(player.position.y, laneTarget, step * LANE_SNAP_FACTOR);
+      }
+      if (canAdvanceForward) {
+        nextX += delta.x * step;
+      }
+    } else {
+      if (laneDistance <= LANE_SNAP_THRESHOLD) {
+        nextX = this.approach(player.position.x, laneTarget, step * LANE_SNAP_FACTOR);
+      }
+      if (canAdvanceForward) {
+        nextY += delta.y * step;
+      }
+    }
+
+    const combinedMove = this.normalizeArenaPosition({ x: nextX, y: nextY });
+    const laneOnlyMove = this.normalizeArenaPosition(horizontal
+      ? { x: player.position.x, y: nextY }
+      : { x: nextX, y: player.position.y });
+    const forwardOnlyMove = this.normalizeArenaPosition(horizontal
+      ? { x: nextX, y: player.position.y }
+      : { x: player.position.x, y: nextY });
+
+    return {
+      direction,
+      horizontal,
+      laneTarget,
+      canAdvanceForward,
+      combinedMove,
+      laneOnlyMove,
+      forwardOnlyMove,
+      combinedFree: this.canOccupyPosition(player, combinedMove),
+      laneOnlyFree: this.canOccupyPosition(player, laneOnlyMove),
+      forwardOnlyFree: this.canOccupyPosition(player, forwardOnlyMove),
+    };
+  }
+
+  private movePlayer(player: PlayerState, direction: Direction, deltaMs: number): void {
+    this.movePlayerInternal(player, direction, deltaMs, true);
+  }
+
+  private movePlayerSimulated(player: PlayerState, direction: Direction, deltaMs: number): void {
+    this.movePlayerInternal(player, direction, deltaMs, false);
+  }
+
+  private movePlayerInternal(player: PlayerState, direction: Direction, deltaMs: number, allowBombPush: boolean): void {
+    const start = { ...player.position };
+    let option = this.evaluateMovementOption(player, direction, deltaMs);
+
+    if (allowBombPush && !option.combinedFree && !option.forwardOnlyFree && option.canAdvanceForward) {
+      const pushed = this.tryPushBomb(player, direction);
+      if (pushed) {
+        option = this.evaluateMovementOption(player, direction, deltaMs);
+      }
+    }
+
+    if (option.combinedFree && this.positionChanged(start, option.combinedMove)) {
+      player.position = this.normalizeArenaPosition(option.combinedMove);
+      player.velocity = {
+        x: this.getWrappedDelta(player.position.x, start.x, this.getArenaPixelWidth()) / (deltaMs / 1000),
+        y: this.getWrappedDelta(player.position.y, start.y, this.getArenaPixelHeight()) / (deltaMs / 1000),
+      };
+      if (
+        Math.abs(player.position.x - start.x) > 0.01 ||
+        Math.abs(player.position.y - start.y) > 0.01
+      ) {
+        player.lastMoveDirection = direction;
+      }
+      return;
+    }
+
+    let moved = false;
+    if (option.laneOnlyFree && this.positionChanged(start, option.laneOnlyMove)) {
+      player.position = this.normalizeArenaPosition(option.laneOnlyMove);
+      moved = true;
+    }
+    if (option.forwardOnlyFree && !moved && this.positionChanged(start, option.forwardOnlyMove)) {
+      player.position = this.normalizeArenaPosition(option.forwardOnlyMove);
+      moved = true;
+    }
+
+    player.velocity = moved
+      ? {
+          x: this.getWrappedDelta(player.position.x, start.x, this.getArenaPixelWidth()) / (deltaMs / 1000),
+          y: this.getWrappedDelta(player.position.y, start.y, this.getArenaPixelHeight()) / (deltaMs / 1000),
+        }
+      : { x: 0, y: 0 };
+
+    if (moved && (player.velocity.x !== 0 || player.velocity.y !== 0)) {
+      player.lastMoveDirection = direction;
+    }
+
+    if (option.horizontal && Math.abs(player.position.y - option.laneTarget) <= LANE_SETTLE_EPSILON) {
+      player.position.y = option.laneTarget;
+    }
+    if (!option.horizontal && Math.abs(player.position.x - option.laneTarget) <= LANE_SETTLE_EPSILON) {
+      player.position.x = option.laneTarget;
+    }
+    player.position = this.normalizeArenaPosition(player.position);
+  }
+
+  private arePerpendicular(a: Direction, b: Direction): boolean {
+    const aHorizontal = a === "left" || a === "right";
+    const bHorizontal = b === "left" || b === "right";
+    return aHorizontal !== bHorizontal;
+  }
+
+  private areOppositeDirections(a: Direction, b: Direction): boolean {
+    return (
+      (a === "up" && b === "down")
+      || (a === "down" && b === "up")
+      || (a === "left" && b === "right")
+      || (a === "right" && b === "left")
+    );
+  }
+
+  private tryPushBomb(player: PlayerState, direction: Direction): boolean {
+    if (player.kickLevel <= 0) {
+      return false;
+    }
+    const fromTile = this.getTileFromPosition(player.position);
+    const delta = directionDelta[direction];
+    const bombTile = this.normalizeTile({ x: fromTile.x + delta.x, y: fromTile.y + delta.y });
+    return this.tryPushBombAtTile(bombTile, direction, KICK_SLIDE_MAX_TILES);
+  }
+
+  private findBombAtTile(tile: TileCoord): BombState | null {
+    const normalized = this.normalizeTile(tile);
+    const key = tileKey(normalized.x, normalized.y);
+    return this.bombs.find((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key) ?? null;
+  }
+
+  private tryPushBombAtTile(tile: TileCoord, direction: Direction, distance: number): boolean {
+    const bomb = this.findBombAtTile(tile);
+    if (!bomb) {
+      return false;
+    }
+    const delta = directionDelta[direction];
+    let targetTile = { ...bomb.tile };
+    let movedTiles = 0;
+    let impactBreakableKey: string | null = null;
+    for (let step = 0; step < distance; step += 1) {
+      const nextTile = this.normalizeTile({ x: targetTile.x + delta.x, y: targetTile.y + delta.y });
+      const targetKey = tileKey(nextTile.x, nextTile.y);
+      if (this.arena.solid.has(targetKey)) {
+        break;
+      }
+      if (this.arena.breakable.has(targetKey)) {
+        impactBreakableKey = targetKey;
+        break;
+      }
+      if (this.bombs.some((item) => item.id !== bomb.id && item.tile.x === nextTile.x && item.tile.y === nextTile.y)) {
+        break;
+      }
+      if (this.hasPlayerOnTile(nextTile)) {
+        break;
+      }
+      targetTile = nextTile;
+      movedTiles += 1;
+    }
+    if (movedTiles <= 0) {
+      return false;
+    }
+    bomb.tile = this.normalizeTile(targetTile);
+    bomb.fuseMs = Math.max(KICK_FUSE_MIN_MS, bomb.fuseMs - movedTiles * KICK_FUSE_PENALTY_MS_PER_TILE);
+    if (this.flames.some((flame) => flame.tile.x === bomb.tile.x && flame.tile.y === bomb.tile.y)) {
+      bomb.fuseMs = 0;
+    }
+    bomb.ownerCanPass = false;
+    this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => effect.bombId !== bomb.id);
+    this.bombKickImpactFeedback.push({ bombId: bomb.id, elapsedMs: 0 });
+    if (impactBreakableKey) {
+      this.breakCrateAtKey(impactBreakableKey);
+    }
+    return true;
+  }
+
+  private hasPlayerOnTile(tile: TileCoord): boolean {
+    const normalizedTile = this.normalizeTile(tile);
+    for (const id of this.activePlayerIds) {
+      const player = this.players[id];
+      if (!player.alive) {
+        continue;
+      }
+      const playerTile = this.getTileFromPosition(player.position);
+      if (playerTile.x === normalizedTile.x && playerTile.y === normalizedTile.y) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private canOccupyPosition(player: PlayerState, position: PixelCoord): boolean {
+    const wrapped = this.normalizeArenaPosition(position);
+    const left = wrapped.x - PLAYER_HITBOX_HALF;
+    const right = wrapped.x + PLAYER_HITBOX_HALF;
+    const top = wrapped.y - PLAYER_HITBOX_HALF;
+    const bottom = wrapped.y + PLAYER_HITBOX_HALF;
+
+    const minTileX = Math.floor(left / TILE_SIZE);
+    const maxTileX = Math.floor((right - 0.001) / TILE_SIZE);
+    const minTileY = Math.floor(top / TILE_SIZE);
+    const maxTileY = Math.floor((bottom - 0.001) / TILE_SIZE);
+
+    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+      for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+        if (this.isTileBlockedForPlayer(player, tileX, tileY)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  private isTileBlockedForPlayer(player: PlayerState, tileX: number, tileY: number): boolean {
+    const normalized = this.normalizeTile({ x: tileX, y: tileY });
+    const key = tileKey(normalized.x, normalized.y);
+    if (this.arena.solid.has(key) || this.arena.breakable.has(key)) {
+      return true;
+    }
+
+    for (const bomb of this.bombs) {
+      if (bomb.tile.x !== normalized.x || bomb.tile.y !== normalized.y) {
+        continue;
+      }
+      if (player.bombPassLevel > 0) {
+        continue;
+      }
+      if (bomb.ownerId === player.id && bomb.ownerCanPass) {
+        continue;
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  private getLabNavigationSnapshot(): Record<string, LabNavigationSnapshot> {
+    const now = Date.now();
+    const result: Record<string, LabNavigationSnapshot> = {};
+
+    for (const playerId of this.activePlayerIds) {
+      if (!this.liveBridgePlayers[playerId]) continue;
+      const player = this.players[playerId];
+      const previous = this.labLastTelemetryPositions[playerId];
+      const delta = previous
+        ? { x: player.position.x - previous.x, y: player.position.y - previous.y }
+        : { x: 0, y: 0 };
+      const moved = Math.hypot(delta.x, delta.y) >= 0.75;
+      if (moved || !this.labLastMovementAtMs[playerId]) {
+        this.labLastMovementAtMs[playerId] = now;
+      }
+      this.labLastTelemetryPositions[playerId] = { ...player.position };
+
+      const walkableDirections: Direction[] = [];
+      const blockedDirections: Direction[] = [];
+      for (const direction of ["up", "down", "left", "right"] as const) {
+        const step = directionDelta[direction];
+        const blocked = this.isTileBlockedForPlayer(
+          player,
+          player.tile.x + step.x,
+          player.tile.y + step.y,
+        );
+        (blocked ? blockedDirections : walkableDirections).push(direction);
+      }
+
+      const dangerMap = this.cachedDangerMap ?? this.getDangerMap();
+      const localTiles: LabNavigationSnapshot["localTiles"] = [];
+      for (let offsetY = -3; offsetY <= 3; offsetY += 1) {
+        for (let offsetX = -3; offsetX <= 3; offsetX += 1) {
+          const tile = this.normalizeTile({ x: player.tile.x + offsetX, y: player.tile.y + offsetY });
+          const key = tileKey(tile.x, tile.y);
+          let kind: LabNavigationSnapshot["localTiles"][number]["kind"] = "open";
+          if (this.arena.solid.has(key)) kind = "solid";
+          else if (this.arena.breakable.has(key)) kind = "breakable";
+          else if (this.flames.some((flame) => tileKey(flame.tile.x, flame.tile.y) === key)) kind = "flame";
+          else if (this.bombs.some((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key)) kind = "bomb";
+          else if (this.arena.powerUps.some((powerUp) => tileKey(powerUp.tile.x, powerUp.tile.y) === key)) kind = "powerup";
+          else if (tile.x === player.tile.x && tile.y === player.tile.y) kind = "self";
+          else if (this.activePlayerIds.some((otherId) => {
+            if (otherId === playerId || !this.players[otherId].alive) return false;
+            const otherTile = this.players[otherId].tile;
+            return otherTile.x === tile.x && otherTile.y === tile.y;
+          })) kind = "enemy";
+          localTiles.push({
+            x: tile.x,
+            y: tile.y,
+            kind,
+            dangerEtaMs: dangerMap.get(key) ?? null,
+          });
+        }
+      }
+
+      result[String(playerId)] = {
+        tile: { ...player.tile },
+        walkableDirections,
+        blockedDirections,
+        stalledForMs: player.alive ? Math.max(0, now - this.labLastMovementAtMs[playerId]) : 0,
+        lastMovementDelta: delta,
+        localTiles,
+      };
+    }
+
+    return result;
+  }
+
+  private getTileCenter(tile: TileCoord): PixelCoord {
+    const normalized = this.normalizeTile(tile);
+    return {
+      x: normalized.x * TILE_SIZE + TILE_SIZE * 0.5,
+      y: normalized.y * TILE_SIZE + TILE_SIZE * 0.5,
+    };
+  }
+
+  private getTileFromPosition(position: PixelCoord): TileCoord {
+    const wrapped = this.normalizeArenaPosition(position);
+    return {
+      x: this.normalizeTileAxis(Math.floor(wrapped.x / TILE_SIZE), this.getArenaGridWidth()),
+      y: this.normalizeTileAxis(Math.floor(wrapped.y / TILE_SIZE), this.getArenaGridHeight()),
+    };
+  }
+
+  private getNearestLaneCenter(value: number): number {
+    const half = TILE_SIZE * 0.5;
+    const lane = Math.round((value - half) / TILE_SIZE);
+    return lane * TILE_SIZE + half;
+  }
+
+  private approach(current: number, target: number, amount: number): number {
+    if (current < target) {
+      return Math.min(target, current + amount);
+    }
+    if (current > target) {
+      return Math.max(target, current - amount);
+    }
+    return current;
+  }
+
+  private isPlayerOverlappingTile(player: PlayerState, tile: TileCoord): boolean {
+    const left = player.position.x - PLAYER_HITBOX_HALF;
+    const right = player.position.x + PLAYER_HITBOX_HALF;
+    const top = player.position.y - PLAYER_HITBOX_HALF;
+    const bottom = player.position.y + PLAYER_HITBOX_HALF;
+    const tileLeft = tile.x * TILE_SIZE;
+    const tileRight = tileLeft + TILE_SIZE;
+    const tileTop = tile.y * TILE_SIZE;
+    const tileBottom = tileTop + TILE_SIZE;
+
+    return left < tileRight && right > tileLeft && top < tileBottom && bottom > tileTop;
+  }
+
+  private placeBomb(player: PlayerState, playAudio = true): boolean {
+    if (!player.alive || player.activeBombs >= player.maxBombs) {
+      return false;
+    }
+    const tile = this.getTileFromPosition(player.position);
+    player.tile = tile;
+    const key = tileKey(tile.x, tile.y);
+    if (this.bombs.some((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key)) {
+      return false;
+    }
+
+    this.bombs.push({
+      id: this.nextBombId,
+      ownerId: player.id,
+      tile: { ...tile },
+      fuseMs: getBombFuseMsForPlayer(player),
+      ownerCanPass: true,
+      flameRange: player.flameRange,
+    });
+    this.cachedBotDangerMap = null;
+    this.nextBombId += 1;
+    player.activeBombs += 1;
+    if (playAudio) {
+      this.soundManager.playOneShot("bombPlace");
+    }
+    return true;
+  }
+
+  private triggerRemoteDetonation(player: PlayerState): void {
+    if (!player.alive || player.remoteLevel <= 0) {
+      return;
+    }
+    const selectedBomb = this.getOldestOwnedBomb(player.id);
+    if (selectedBomb) {
+      selectedBomb.fuseMs = 0;
+    }
+  }
+
+  private updateBombs(deltaMs: number): void {
+    for (const bomb of this.bombs) {
+      if (bomb.ownerCanPass) {
+        const owner = this.players[bomb.ownerId];
+        if (!this.isPlayerOverlappingTile(owner, bomb.tile)) {
+          bomb.ownerCanPass = false;
+        }
+      }
+      bomb.fuseMs -= deltaMs;
+    }
+
+    const queue = this.bombs.filter((bomb) => bomb.fuseMs <= 0).map((bomb) => bomb.id);
+    const exploded = new Set<number>();
+    while (queue.length > 0) {
+      const bombId = queue.shift();
+      if (bombId === undefined || exploded.has(bombId)) {
+        continue;
+      }
+      exploded.add(bombId);
+      this.explodeBomb(bombId, queue);
+    }
+  }
+
+  private explodeBomb(bombId: number, queue: number[]): void {
+    const index = this.bombs.findIndex((item) => item.id === bombId);
+    if (index === -1) {
+      return;
+    }
+
+    const [bomb] = this.bombs.splice(index, 1);
+    this.players[bomb.ownerId].activeBombs = Math.max(0, this.players[bomb.ownerId].activeBombs - 1);
+    this.soundManager.playOneShot("bombExplode");
+    this.triggerExplosionScreenShake();
+    const flameTiles = new Set<string>();
+    const brokenCrateKeys: string[] = [];
+    const range = bomb.flameRange;
+    flameTiles.add(tileKey(bomb.tile.x, bomb.tile.y));
+
+    for (const direction of cardinalDirectionDeltas) {
+      for (let step = 1; step <= range; step += 1) {
+        const x = bomb.tile.x + direction.x * step;
+        const y = bomb.tile.y + direction.y * step;
+        if (x < 0 || y < 0 || x >= this.getArenaGridWidth() || y >= this.getArenaGridHeight()) {
+          break;
+        }
+        const key = tileKey(x, y);
+        if (this.arena.solid.has(key)) {
+          break;
+        }
+
+        flameTiles.add(key);
+        this.armBombAtTile({ x, y }, queue);
+
+        if (this.breakCrateAtKey(key)) {
+          brokenCrateKeys.push(key);
+          break;
+        }
+      }
+    }
+
+    this.ensureDemolitionComboDrop(brokenCrateKeys);
+    if (brokenCrateKeys.length > 0) {
+      this.soundManager.playOneShot("crateBreak");
+    }
+
+    flameTiles.forEach((key) => {
+      const [xText, yText] = key.split(",");
+      this.addFlame({ x: Number(xText), y: Number(yText) }, FLAME_DURATION_MS, "normal", queue);
+    });
+    this.soundManager.playOneShot("flames");
+    this.resolvePlayerDeathsAtTileKeys(flameTiles, bomb.ownerId);
+  }
+
+  private triggerExplosionScreenShake(): void {
+    const stackedAmplitude = this.screenShakeMs > 0
+      ? Math.min(EXPLOSION_SCREEN_SHAKE_AMPLITUDE_MAX_PX, this.screenShakeAmplitudePx + 1)
+      : EXPLOSION_SCREEN_SHAKE_AMPLITUDE_PX;
+    this.screenShakeAmplitudePx = stackedAmplitude;
+    this.screenShakeMs = EXPLOSION_SCREEN_SHAKE_MS;
+  }
+
+  private getScreenShakeOffset(): PixelCoord {
+    if (this.screenShakeMs <= 0 || this.screenShakeAmplitudePx <= 0) {
+      return { x: 0, y: 0 };
+    }
+    const intensity = Math.min(1, this.screenShakeMs / EXPLOSION_SCREEN_SHAKE_MS);
+    const amplitude = this.screenShakeAmplitudePx * intensity;
+    // Deterministic presentation offset from the animation clock (not simulation RNG).
+    const phase = this.animationClockMs;
+    return {
+      x: Math.sin(phase * 0.073) * amplitude,
+      y: Math.cos(phase * 0.091) * amplitude,
+    };
+  }
+
+  private armBombAtTile(tile: TileCoord, queue?: number[]): void {
+    const bomb = this.bombs.find((item) => item.tile.x === tile.x && item.tile.y === tile.y);
+    if (!bomb) {
+      return;
+    }
+    bomb.fuseMs = 0;
+    if (queue && !queue.includes(bomb.id)) {
+      queue.push(bomb.id);
+    }
+  }
+
+  private revealPowerUpAt(key: string): void {
+    const item = this.arena.powerUps.find((powerUp) => tileKey(powerUp.tile.x, powerUp.tile.y) === key);
+    if (item && !item.revealed) {
+      item.revealed = true;
+      this.powerUpRevealStartedAtMs.set(item, this.animationClockMs);
+    }
+  }
+
+  private ensureDemolitionComboDrop(brokenCrateKeys: string[]): void {
+    if (brokenCrateKeys.length < DEMOLITION_COMBO_MIN_CRATES) {
+      return;
+    }
+
+    const sortedKeys = [...brokenCrateKeys].sort();
+    const occupiedKeys = new Set(this.arena.powerUps
+      .filter((powerUp) => !powerUp.collected)
+      .map((powerUp) => tileKey(powerUp.tile.x, powerUp.tile.y)));
+    const freeKeys = sortedKeys.filter((key) => !occupiedKeys.has(key));
+    if (freeKeys.length === 0) {
+      return;
+    }
+
+    let hash = 0;
+    for (const key of sortedKeys) {
+      for (let index = 0; index < key.length; index += 1) {
+        hash = ((hash * 31) + key.charCodeAt(index)) >>> 0;
+      }
+    }
+
+    const dropKey = freeKeys[hash % freeKeys.length];
+    const type = DEMOLITION_COMBO_DROP_TYPES[hash % DEMOLITION_COMBO_DROP_TYPES.length] ?? "speed-up";
+    if (!dropKey) {
+      return;
+    }
+
+    const comboDrop: PowerUpState = {
+      tile: this.parseTileKey(dropKey),
+      type,
+      revealed: true,
+      collected: false,
+    };
+    this.arena.powerUps.push(comboDrop);
+    this.powerUpRevealStartedAtMs.set(comboDrop, this.animationClockMs);
+  }
+
+  private breakCrateAtKey(key: string): boolean {
+    if (!this.arena.breakable.has(key)) {
+      return false;
+    }
+    this.arena.breakable.delete(key);
+    this.invalidateArenaCache();
+    this.revealPowerUpAt(key);
+    this.addCrateBreakAnimation(this.parseTileKey(key));
+    return true;
+  }
+
+  private addCrateBreakAnimation(tile: TileCoord): void {
+    const existing = this.crateBreakAnimations.find((effect) => (
+      effect.tile.x === tile.x && effect.tile.y === tile.y
+    ));
+    if (existing) {
+      existing.elapsedMs = 0;
+      return;
+    }
+    this.crateBreakAnimations.push({
+      tile: { ...tile },
+      elapsedMs: 0,
+    });
+  }
+
+  private parseTileKey(key: string): TileCoord {
+    const [xText, yText] = key.split(",");
+    return {
+      x: Number(xText),
+      y: Number(yText),
+    };
+  }
+
+  private updateVisualEffects(deltaMs: number): void {
+    if (this.screenShakeMs > 0) {
+      this.screenShakeMs = Math.max(0, this.screenShakeMs - deltaMs);
+      if (this.screenShakeMs <= 0) {
+        this.screenShakeAmplitudePx = 0;
+      }
+    }
+
+    for (const playerId of this.activePlayerIds) {
+      advancePickupChain(this.pickupChains[playerId], deltaMs);
+    }
+
+    if (this.powerUpPickupNotices.length > 0) {
+      for (const notice of this.powerUpPickupNotices) {
+        notice.elapsedMs += deltaMs;
+        notice.remainingMs -= deltaMs;
+      }
+      this.powerUpPickupNotices = this.powerUpPickupNotices.filter((notice) => notice.remainingMs > 0);
+    }
+
+    if (this.crateBreakAnimations.length > 0) {
+      for (const effect of this.crateBreakAnimations) {
+        effect.elapsedMs += deltaMs;
+      }
+      this.crateBreakAnimations = this.crateBreakAnimations.filter((effect) => (
+        effect.elapsedMs < CRATE_BREAK_DURATION_MS
+      ));
+    }
+
+    if (this.bombKickImpactFeedback.length > 0) {
+      for (const effect of this.bombKickImpactFeedback) {
+        effect.elapsedMs += deltaMs;
+      }
+      this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => (
+        effect.elapsedMs < KICK_IMPACT_FEEDBACK_MS
+        && this.bombs.some((bomb) => bomb.id === effect.bombId)
+      ));
+    }
+
+    if (this.magicBeams.length > 0) {
+      for (const beam of this.magicBeams) {
+        beam.remainingMs -= deltaMs;
+      }
+      this.magicBeams = this.magicBeams.filter((beam) => beam.remainingMs > 0);
+    }
+
+    if (this.suddenDeathClosureEffects.length === 0) {
+      return;
+    }
+    for (const effect of this.suddenDeathClosureEffects) {
+      effect.elapsedMs += deltaMs;
+      if (!effect.impacted && effect.elapsedMs >= SUDDEN_DEATH_FALL_MS) {
+        effect.impacted = true;
+        if (this.onlineSession?.role === "guest") {
+          const key = tileKey(effect.tile.x, effect.tile.y);
+          this.suddenDeathClosedTiles.add(key);
+          this.arena.solid.add(key);
+          this.invalidateArenaCache();
+        } else {
+          this.applySuddenDeathClosure(effect.tile);
+        }
+      }
+    }
+    this.suddenDeathClosureEffects = this.suddenDeathClosureEffects.filter((effect) => (
+      effect.elapsedMs < SUDDEN_DEATH_FALL_MS + SUDDEN_DEATH_IMPACT_LINGER_MS
+    ));
+  }
+
+  private addFlame(
+    tile: TileCoord,
+    durationMs: number = FLAME_DURATION_MS,
+    style: FlameState["style"] = "normal",
+    queue?: number[],
+  ): void {
+    this.armBombAtTile(tile, queue);
+    const existing = this.flames.find((flame) => flame.tile.x === tile.x && flame.tile.y === tile.y);
+    if (existing) {
+      existing.remainingMs = Math.max(existing.remainingMs, durationMs);
+      existing.style = existing.style === "toxic" || style === "toxic"
+        ? "toxic"
+        : style;
+      return;
+    }
+    this.flames.push({ tile: { ...tile }, remainingMs: durationMs, style });
+  }
+
+  private updateSuddenDeath(deltaMs: number): void {
+    if (!this.suddenDeathActive && this.roundTimeMs <= SUDDEN_DEATH_START_MS) {
+      this.suddenDeathActive = true;
+      this.suddenDeathTickMs = 0;
+      this.soundManager.playOneShot("suddenDeathAlarm");
+    }
+
+    if (!this.suddenDeathActive || this.suddenDeathPath.length === 0 || this.suddenDeathIndex >= this.suddenDeathPath.length) {
+      return;
+    }
+
+    this.suddenDeathTickMs -= deltaMs;
+    while (this.suddenDeathTickMs <= 0 && this.suddenDeathIndex < this.suddenDeathPath.length) {
+      const tile = this.suddenDeathPath[this.suddenDeathIndex];
+      this.startSuddenDeathClosure(tile);
+      this.suddenDeathIndex += 1;
+      this.suddenDeathTickMs += SUDDEN_DEATH_TICK_MS;
+    }
+  }
+
+  private startSuddenDeathClosure(tile: TileCoord): void {
+    const key = tileKey(tile.x, tile.y);
+    if (this.suddenDeathClosedTiles.has(key) || this.arena.solid.has(key)) {
+      return;
+    }
+    const existing = this.suddenDeathClosureEffects.find((effect) => (
+      effect.tile.x === tile.x && effect.tile.y === tile.y
+    ));
+    if (existing) {
+      existing.elapsedMs = 0;
+      existing.impacted = false;
+      return;
+    }
+    this.suddenDeathClosureEffects.push({
+      tile: { ...tile },
+      elapsedMs: 0,
+      impacted: false,
+    });
+  }
+
+  private applySuddenDeathClosure(tile: TileCoord): void {
+    const key = tileKey(tile.x, tile.y);
+    if (this.suddenDeathClosedTiles.has(key)) {
+      return;
+    }
+    this.breakCrateAtKey(key);
+    this.arena.powerUps = this.arena.powerUps.filter((powerUp) => (
+      powerUp.tile.x !== tile.x || powerUp.tile.y !== tile.y
+    ));
+    const bomb = this.bombs.find((item) => item.tile.x === tile.x && item.tile.y === tile.y);
+    if (bomb) {
+      bomb.fuseMs = 0;
+    }
+    this.suddenDeathClosedTiles.add(key);
+    this.arena.solid.add(key);
+    this.invalidateArenaCache();
+    this.resolveSuddenDeathClosureImpact(tile);
+  }
+
+  private resolveSuddenDeathClosureImpact(tile: TileCoord): void {
+    for (const id of this.activePlayerIds) {
+      const player = this.players[id];
+      if (!player.alive) {
+        continue;
+      }
+      player.tile = this.getTileFromPosition(player.position);
+      if (player.tile.x !== tile.x || player.tile.y !== tile.y) {
+        continue;
+      }
+      if (this.isPlayerImmuneDuringSkillChannel(player)) {
+        continue;
+      }
+      this.killPlayer(player);
+    }
+  }
+
+  private buildSuddenDeathPath(): TileCoord[] {
+    return this.arena.config.suddenDeathPath
+      .filter((tile) => !this.arena.solid.has(tileKey(tile.x, tile.y)))
+      .map((tile) => ({ ...tile }));
+  }
+
+  private updateFlames(deltaMs: number): void {
+    for (const flame of this.flames) {
+      flame.remainingMs -= deltaMs;
+    }
+    this.flames = this.flames.filter((flame) => flame.remainingMs > 0);
+  }
+
+  resolvePlayerDeathsFromFlames(): void {
+    this.resolvePlayerDeathsAtTileKeys(this.flames.map((flame) => tileKey(flame.tile.x, flame.tile.y)));
+  }
+
+  private resolvePlayerDeathsAtTileKeys(keys: Iterable<string>, attackerId: PlayerId | null = null): void {
+    const flameKeys = new Set(keys);
+    if (flameKeys.size === 0) {
+      return;
+    }
+    for (const id of this.activePlayerIds) {
+      const player = this.players[id];
+      if (!player.alive) {
+        continue;
+      }
+      player.tile = this.getTileFromPosition(player.position);
+      if (flameKeys.has(tileKey(player.tile.x, player.tile.y))) {
+        this.tryAbsorbInstantHit(player, attackerId);
+      }
+    }
+  }
+
+  private tryAbsorbInstantHit(player: PlayerState, attackerId: PlayerId | null = null): boolean {
+    if (player.spawnProtectionMs > 0) {
+      return false;
+    }
+    if (this.isPlayerImmuneDuringSkillChannel(player)) {
+      return false;
+    }
+    if (player.flameGuardMs > 0) {
+      return false;
+    }
+    if (player.shieldCharges > 0) {
+      player.shieldCharges -= 1;
+      player.flameGuardMs = SHIELD_GUARD_MS;
+      player.breakawayBoostMs = Math.max(player.breakawayBoostMs ?? 0, SHIELD_BREAKAWAY_BOOST_MS);
+      this.soundManager.playOneShot("shieldBlock");
+      return false;
+    }
+    if (this.onlineRoomMode === "endless" && attackerId && attackerId !== player.id) {
+      this.endlessKills[attackerId] += 1;
+    }
+    this.killPlayer(player);
+    return true;
+  }
+
+  private killPlayer(player: PlayerState): void {
+    if (!player.alive) {
+      return;
+    }
+    player.alive = false;
+    player.velocity = { x: 0, y: 0 };
+    player.skill = createDefaultPlayerSkillState(player.skill.id);
+    this.playerDeathAnimations[player.id] = {
+      startedAtMs: this.animationClockMs,
+      direction: player.lastMoveDirection ?? player.direction,
+    };
+  }
+
+  private collectPowerUps(): void {
+    for (const id of this.activePlayerIds) {
+      const player = this.players[id];
+      if (!player.alive) {
+        continue;
+      }
+      const tile = this.getTileFromPosition(player.position);
+      player.tile = tile;
+
+      for (const powerUp of this.arena.powerUps) {
+        if (!powerUp.revealed || powerUp.collected) {
+          continue;
+        }
+        if (powerUp.tile.x === tile.x && powerUp.tile.y === tile.y) {
+          if (isPowerUpMaxed(player, powerUp.type)) {
+            const existingNotice = this.getPowerUpPickupNotice(id, powerUp.type);
+            if (existingNotice?.valueLabel !== "MAX") {
+              this.addPowerUpPickupNotice(id, powerUp.type, false, "MAX");
+            }
+            continue;
+          }
+          powerUp.collected = true;
+          applyPowerUpToPlayer(player, powerUp.type);
+          const chainGuard = registerPickupForChain(this.pickupChains[id], powerUp.type);
+          if (chainGuard) {
+            player.flameGuardMs = Math.max(player.flameGuardMs, PICKUP_CHAIN_GUARD_MS);
+          }
+          player.pickupSprintMs = Math.max(player.pickupSprintMs ?? 0, PICKUP_SPRINT_BOOST_MS);
+          this.addPowerUpPickupNotice(id, powerUp.type, chainGuard);
+          this.soundManager.playOneShot("powerCollect");
+        }
+      }
+    }
+  }
+
+  private evaluateRoundState(): void {
+    const alivePlayers = this.activePlayerIds.filter((id) => this.players[id].alive);
+    if (alivePlayers.length > 1) {
+      return;
+    }
+    if (alivePlayers.length === 0) {
+      this.finishRound(null, "double-ko", "Double KO. Nobody scores.");
+      return;
+    }
+    this.finishRound(alivePlayers[0], "elimination", `${this.players[alivePlayers[0]].name} wins the round.`);
+  }
+
+  private finishRound(winner: PlayerId | null, reason: RoundOutcome["reason"], message: string): void {
+    if (this.roundOutcome) {
+      return;
+    }
+    const clinchesMatch = this.onlineRoomMode !== "endless" && winner
+      ? this.score[winner] + 1 >= TARGET_WINS
+      : false;
+    this.soundManager.playOneShot("roundEnd");
+    if (clinchesMatch) {
+      this.soundManager.playOneShot("matchWin");
+    }
+    if (winner) {
+      if (this.onlineRoomMode === "endless") {
+        this.score[winner] = this.endlessRoundWins[winner] + 1;
+      } else {
+        this.score[winner] += 1;
+      }
+    }
+    this.roundOutcome = {
+      winner,
+      reason,
+      message,
+      countdownMs: ROUND_END_DELAY_MS,
+    };
+    this.persistLocalSessionReturnBrief(winner, reason, clinchesMatch);
+  }
+
+  private persistLocalSessionReturnBrief(
+    winner: PlayerId | null,
+    reason: RoundOutcome["reason"],
+    matchComplete: boolean,
+  ): void {
+    if (this.onlineSession) {
+      return;
+    }
+    const storage = this.getLocalStorage();
+    if (!storage) {
+      return;
+    }
+
+    const brief: LocalSessionReturnBrief = {
+      mode: this.onlineRoomMode,
+      winner,
+      winnerName: winner ? this.getPlayerBriefName(winner) : null,
+      reason,
+      roundNumber: this.roundNumber,
+      scoreLine: this.buildLocalSessionScoreLine(),
+      matchComplete,
+      finishedAtMs: Date.now(),
+    };
+
+    try {
+      storage.setItem(LOCAL_SESSION_RETURN_BRIEF_STORAGE_KEY, JSON.stringify(brief));
+    } catch {
+      // Returning players should never lose the current match because storage is unavailable.
+    }
+  }
+
+  private getLocalStorage(): Storage | null {
+    if (this.headless || typeof window === "undefined") {
+      return null;
+    }
+    try {
+      return window.localStorage ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private readStorageItem(storage: Storage | null, key: string): string | null {
+    try {
+      return storage?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeStorageItem(key: string, value: string): void {
+    try {
+      this.getLocalStorage()?.setItem(key, value);
+    } catch {
+      // Audio controls remain usable when storage is blocked or full.
+    }
+  }
+
+  private isLocalSessionReturnBrief(value: unknown): value is LocalSessionReturnBrief {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const candidate = value as Partial<LocalSessionReturnBrief>;
+    return (candidate.mode === "classic" || candidate.mode === "endless")
+      && (candidate.winner === null || ALL_PLAYER_IDS.includes(candidate.winner as PlayerId))
+      && (typeof candidate.winnerName === "string" || candidate.winnerName === null)
+      && (candidate.reason === "elimination" || candidate.reason === "timer" || candidate.reason === "double-ko")
+      && typeof candidate.roundNumber === "number"
+      && Number.isFinite(candidate.roundNumber)
+      && candidate.roundNumber >= 1
+      && typeof candidate.scoreLine === "string"
+      && candidate.scoreLine.length > 0
+      && typeof candidate.matchComplete === "boolean"
+      && typeof candidate.finishedAtMs === "number"
+      && Number.isFinite(candidate.finishedAtMs);
+  }
+
+  private buildLocalSessionScoreLine(): string {
+    return this.activePlayerIds
+      .map((playerId) => `${this.getPlayerBriefName(playerId)} ${this.score[playerId]}`)
+      .join(" | ");
+  }
+
+  private hasMatchWinnerScore(): boolean {
+    return this.activePlayerIds.some((playerId) => this.score[playerId] >= TARGET_WINS);
+  }
+
+  private getRoundedCountdownSeconds(countdownMs: number): number {
+    return Math.max(0, Math.ceil(countdownMs / 1000));
+  }
+
+  private formatActiveScore(): string {
+    return this.activePlayerIds
+      .map((playerId) => `P${playerId} ${this.score[playerId]}`)
+      .join(" - ");
+  }
+
+  private getPlayerBriefName(playerId: PlayerId): string {
+    const player = this.players[playerId];
+    if (!player) {
+      return `P${playerId}`;
+    }
+    return player.name === "BOT" ? `BOT P${playerId}` : player.name;
+  }
+
+  private advanceAfterRound(): void {
+    if (this.onlineRoomMode === "endless") {
+      const winner = this.roundOutcome?.winner ?? null;
+      if (winner) {
+        this.endlessRoundWins[winner] += 1;
+      }
+      this.score = { ...this.endlessRoundWins };
+      this.input.clearPresses();
+      this.roundNumber += 1;
+      this.resetRound();
+      return;
+    }
+    for (const playerId of this.activePlayerIds) {
+      if (this.score[playerId] >= TARGET_WINS) {
+        this.matchWinner = playerId;
+        this.matchResultChoice = createPlayerRecord(() => null);
+        this.matchResultCooldownMs = MATCH_RESULT_RESTART_DELAY_MS;
+        this.input.clearPresses();
+        this.mode = "match-result";
+        return;
+      }
+    }
+    this.input.clearPresses();
+    this.roundNumber += 1;
+    this.resetRound();
+  }
+
+  private getPlayerPixelPositionFromState(player: PlayerState): PixelCoord {
+    return {
+      x: player.position.x - TILE_SIZE * 0.5,
+      y: player.position.y - TILE_SIZE * 0.5,
+    };
+  }
+
+  private getPlayerPixelPosition(player: PlayerState): PixelCoord {
+    if (this.headless) {
+      return this.getPlayerPixelPositionFromState(player);
+    }
+    return this.visualPlayerPositions[player.id] ?? this.getPlayerPixelPositionFromState(player);
+  }
+
+  private render(): void {
+    this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    this.ctx.save();
+    const shakeOffset = this.getScreenShakeOffset();
+    this.ctx.translate(shakeOffset.x, shakeOffset.y);
+    this.renderBackdrop();
+
+    if (this.mode === "menu") {
+      this.renderMenu();
+      this.ctx.restore();
+      return;
+    }
+
+    this.renderArena();
+    this.renderHud();
+
+    if (this.mode === "match") {
+      this.renderMatchOverlay();
+      if (this.isAnyCharacterMenuOpen()) {
+        this.renderCharacterSelectionOverlay();
+      }
+      this.ctx.restore();
+      return;
+    }
+
+    this.renderMatchResult();
+    if (this.isAnyCharacterMenuOpen()) {
+      this.renderCharacterSelectionOverlay();
+    }
+    this.ctx.restore();
+  }
+
+  private buildBackdropCache(): HTMLCanvasElement {
+    const offscreen = document.createElement("canvas");
+    offscreen.width = CANVAS_WIDTH * CANVAS_BACKBUFFER_SCALE;
+    offscreen.height = CANVAS_HEIGHT * CANVAS_BACKBUFFER_SCALE;
+    const c = offscreen.getContext("2d")!;
+    c.setTransform(CANVAS_BACKBUFFER_SCALE, 0, 0, CANVAS_BACKBUFFER_SCALE, 0, 0);
+
+    const metrics = this.getArenaRenderMetrics();
+    const arenaWidth = metrics.arenaPixelWidth;
+    const arenaHeight = metrics.arenaPixelHeight;
+    const arenaX = metrics.arenaX;
+    const arenaY = metrics.arenaY;
+    const arenaRight = arenaX + arenaWidth;
+    const arenaBottom = arenaY + arenaHeight;
+    const frameX = arenaX - 10;
+    const frameY = arenaY - 10;
+    const frameWidth = arenaWidth + 20;
+    const frameHeight = arenaHeight + 20;
+
+    const gradient = c.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    gradient.addColorStop(0, "#0a0a12");
+    gradient.addColorStop(0.38, "#07070e");
+    gradient.addColorStop(1, "#050508");
+    c.fillStyle = gradient;
+    c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const mist = c.createRadialGradient(CANVAS_WIDTH - 92, 84, 18, CANVAS_WIDTH - 92, 84, 214);
+    mist.addColorStop(0, "rgba(0, 229, 160, 0.08)");
+    mist.addColorStop(0.4, "rgba(0, 168, 112, 0.05)");
+    mist.addColorStop(1, "rgba(5, 5, 12, 0)");
+    c.fillStyle = mist;
+    c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const floorGlow = c.createLinearGradient(0, arenaBottom - 24, 0, CANVAS_HEIGHT);
+    floorGlow.addColorStop(0, "rgba(0, 20, 16, 0)");
+    floorGlow.addColorStop(1, "rgba(2, 2, 8, 0.92)");
+    c.fillStyle = floorGlow;
+    c.fillRect(0, arenaBottom - 24, CANVAS_WIDTH, CANVAS_HEIGHT - arenaBottom + 24);
+
+    c.fillStyle = "rgba(6, 6, 14, 0.76)";
+    c.beginPath();
+    c.moveTo(0, arenaY - 10);
+    c.lineTo(arenaX - 2, arenaY + 44);
+    c.lineTo(arenaX - 10, arenaBottom + 42);
+    c.lineTo(0, CANVAS_HEIGHT);
+    c.closePath();
+    c.fill();
+
+    c.beginPath();
+    c.moveTo(CANVAS_WIDTH, arenaY - 2);
+    c.lineTo(arenaRight + 2, arenaY + 58);
+    c.lineTo(arenaRight + 12, arenaBottom + 40);
+    c.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT);
+    c.closePath();
+    c.fill();
+
+    c.fillStyle = "rgba(4, 4, 10, 0.5)";
+    c.fillRect(frameX + 4, frameY + 14, frameWidth - 8, frameHeight - 4);
+
+    c.fillStyle = "rgba(0, 229, 160, 0.08)";
+    c.beginPath();
+    c.moveTo(frameX, frameY + 4);
+    c.lineTo(frameX + frameWidth, frameY + 4);
+    c.lineTo(frameX + frameWidth - 6, frameY + 18);
+    c.lineTo(frameX + 6, frameY + 18);
+    c.closePath();
+    c.fill();
+
+    c.strokeStyle = "rgba(0, 229, 160, 0.16)";
+    c.lineWidth = 1;
+    c.strokeRect(frameX + 0.5, frameY + 0.5, frameWidth - 1, frameHeight - 1);
+
+    c.fillStyle = "rgba(168, 255, 100, 0.04)";
+    c.beginPath();
+    c.ellipse(CANVAS_WIDTH - 84, arenaBottom + 16, 104, 76, -0.35, 0, Math.PI * 2);
+    c.fill();
+
+    c.fillStyle = "rgba(4, 4, 10, 0.34)";
+    c.beginPath();
+    c.moveTo(24, arenaY + 54);
+    c.lineTo(56, arenaY + 120);
+    c.lineTo(42, arenaBottom - 30);
+    c.lineTo(14, arenaBottom - 40);
+    c.closePath();
+    c.fill();
+
+    c.strokeStyle = "rgba(0, 229, 160, 0.04)";
+    c.lineWidth = 2;
+    for (let i = 0; i < 6; i += 1) {
+      c.beginPath();
+      c.moveTo(12 + i * 8, arenaY + 84 + i * 18);
+      c.lineTo(34 + i * 8, arenaY + 56 + i * 16);
+      c.stroke();
+    }
+
+    const vignette = c.createRadialGradient(
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      120,
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      360,
+    );
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.34)");
+    c.fillStyle = vignette;
+    c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    return offscreen;
+  }
+
+  private renderBackdrop(): void {
+    if (!this.backdropCache) {
+      this.backdropCache = this.buildBackdropCache();
+    }
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.drawImage(this.backdropCache, 0, 0);
+    this.ctx.restore();
+  }
+
+  private renderMenu(): void {
+    this.renderArena();
+    this.renderHud();
+
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG;
+    this.ctx.fillRect(12, HUD_HEIGHT + 10, 456, 48);
+    this.ctx.strokeStyle = CANVAS_UI_BORDER_STRONG;
+    this.ctx.strokeRect(12.5, HUD_HEIGHT + 10.5, 455, 47);
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 9px Inter";
+    this.ctx.fillStyle = CANVAS_UI_TEXT;
+    this.ctx.fillText("MENU LOCAL  |  E/P READY  |  G/K CHARACTER", 22, HUD_HEIGHT + 27);
+    this.ctx.font = "600 8px Inter";
+    this.ctx.fillStyle = CANVAS_UI_MUTED;
+    this.ctx.fillText(
+      `B toggle bot rapido  |  N cicla bots: ${this.localBotFill}  |  ativos: ${this.activePlayerIds.length}`,
+      22,
+      HUD_HEIGHT + 43,
+    );
+
+    if (this.isAnyCharacterMenuOpen()) {
+      this.renderCharacterSelectionOverlay();
+    }
+  }
+
+  private renderCharacterSelectionOverlay(): void {
+    this.ctx.fillStyle = "rgba(8, 6, 5, 0.78)";
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    this.drawCharacterSelectionPanel(1, 28, 112);
+    this.drawCharacterSelectionPanel(2, 252, 112);
+  }
+
+  private drawCharacterSelectionPanel(playerId: PlayerId, x: number, y: number): void {
+    const panelWidth = 200;
+    const panelHeight = 244;
+    const isOpen = this.characterMenuOpen[playerId];
+    const entry = this.getPreviewCharacterEntry(playerId);
+    const currentIndex = this.pendingCharacterIndex[playerId];
+
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+    this.ctx.fillRect(x, y, panelWidth, panelHeight);
+    this.ctx.strokeStyle = CANVAS_UI_BORDER_STRONG;
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, panelWidth - 1, panelHeight - 1);
+
+    this.ctx.textAlign = "left";
+    this.ctx.fillStyle = CANVAS_UI_GOLD_BRIGHT;
+    this.ctx.font = "700 13px Inter";
+    this.ctx.fillText(`P${playerId} CHARACTER`, x + 10, y + 20);
+    this.ctx.fillStyle = CANVAS_UI_TEXT;
+    this.ctx.font = "600 11px Inter";
+    this.ctx.fillText(this.shortenCharacterName(entry.name, 24), x + 10, y + 40);
+    this.ctx.fillText(`${currentIndex + 1}/${this.characterRoster.length}`, x + 10, y + 56);
+
+    for (let row = 0; row < 5; row += 1) {
+      const offset = row - 2;
+      const index = (currentIndex + offset + this.characterRoster.length) % this.characterRoster.length;
+      const item = this.characterRoster[index];
+      const rowY = y + 76 + row * 26;
+      const selected = offset === 0;
+      this.ctx.fillStyle = selected ? CANVAS_UI_GOLD_SOFT : "rgba(255, 255, 255, 0.03)";
+      this.ctx.fillRect(x + 8, rowY - 14, panelWidth - 16, 22);
+      this.ctx.fillStyle = selected ? CANVAS_UI_TEXT : CANVAS_UI_MUTED;
+      this.ctx.font = selected ? "700 11px Inter" : "500 10px Inter";
+      this.ctx.fillText(this.shortenCharacterName(item.name, 26), x + 12, rowY);
+    }
+
+    this.ctx.fillStyle = CANVAS_UI_MUTED;
+    this.ctx.font = "500 10px Inter";
+    this.ctx.fillText(
+      playerId === 1 ? "W/S browse  E lock  G close" : "UP/DN browse  P lock  K close",
+      x + 10,
+      y + 222,
+    );
+    if (isOpen) {
+      this.ctx.fillStyle = CANVAS_UI_TEXT;
+      this.ctx.fillText("Selection is live after lock.", x + 10, y + 238);
+    }
+  }
+
+  private drawHudPanel(x: number, y: number, width: number, height: number, accent: string): void {
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG;
+    this.ctx.fillRect(x, y, width, height);
+    this.ctx.fillStyle = accent;
+    this.ctx.fillRect(x, y, width, 3);
+    this.ctx.strokeStyle = CANVAS_UI_BORDER;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+  }
+
+  private renderCompactPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
+    const player = this.players[playerId];
+    const palette = PLAYER_COLORS[playerId];
+    const compactWidth = Math.max(108, width);
+    const status = this.getPlayerHudStatus(playerId);
+    const scoreText = this.onlineRoomMode === "endless"
+      ? `K${this.endlessKills[playerId]} W${this.endlessRoundWins[playerId]}`
+      : `W${this.score[playerId]}`;
+    const statText = `B${player.maxBombs} F${player.flameRange} S${player.speedLevel}`;
+
+    this.drawHudPanel(x, y, compactWidth, 18, palette.glow);
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 7px Inter";
+    this.drawHudText(this.getPlayerSlotLabel(playerId), x + 6, y + 7, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 6px Inter";
+    this.drawHudText(scoreText, x + 30, y + 7, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.textAlign = "right";
+    this.drawHudText(status.label, x + compactWidth - 6, y + 7, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "500 6px Inter";
+    this.drawHudText(statText, x + compactWidth - 6, y + 14, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
+  }
+
+  private renderCompactHud(): void {
+    const hudHeight = this.getHudRenderHeight();
+    const leftPlayers = this.activePlayerIds.filter((playerId) => playerId === 1 || playerId === 3);
+    const rightPlayers = this.activePlayerIds.filter((playerId) => playerId === 2 || playerId === 4);
+    const centerWidth = Math.min(FULLSCREEN_HUD_CENTER_WIDTH, CANVAS_WIDTH - 240);
+    const centerX = Math.round((CANVAS_WIDTH - centerWidth) / 2);
+    const suddenDeathHud = this.getSuddenDeathHudState();
+    const sideWidth = Math.max(140, Math.floor((centerX - 14) / Math.max(1, leftPlayers.length || 1)));
+    const rightStartX = centerX + centerWidth + 10;
+    const rightAvailable = Math.max(0, CANVAS_WIDTH - rightStartX - 10);
+    const rightWidth = Math.max(140, Math.floor(rightAvailable / Math.max(1, rightPlayers.length || 1)));
+
+    const hudGradient = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, hudHeight);
+    hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.76)");
+    hudGradient.addColorStop(0.5, "rgba(24, 20, 16, 0.72)");
+    hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.76)");
+    this.ctx.fillStyle = hudGradient;
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, hudHeight);
+    this.ctx.fillStyle = CANVAS_UI_BORDER;
+    this.ctx.fillRect(0, hudHeight - 1, CANVAS_WIDTH, 1);
+
+    leftPlayers.forEach((playerId, index) => {
+      this.renderCompactPlayerHud(playerId, 6 + index * sideWidth, 7, sideWidth - 4);
+    });
+    rightPlayers.forEach((playerId, index) => {
+      this.renderCompactPlayerHud(playerId, rightStartX + index * rightWidth, 7, rightWidth - 4);
+    });
+
+    this.drawHudPanel(centerX, 5, centerWidth, 22, CANVAS_UI_BORDER_STRONG);
+    this.ctx.textAlign = "center";
+    this.ctx.font = "700 7px Inter";
+    this.drawHudText(
+      this.onlineRoomMode === "endless"
+        ? `R${this.roundNumber}  ENDLESS`
+        : `R${this.roundNumber}  FT${TARGET_WINS}`,
+      centerX + centerWidth / 2,
+      7,
+      CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
+    );
+    this.ctx.font = "700 15px Inter";
+    this.drawHudText(
+      Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
+      centerX + centerWidth / 2,
+      18,
+      CANVAS_UI_TEXT,
+      CANVAS_UI_SHADOW,
+    );
+    this.ctx.font = "600 6px Inter";
+    if (!this.roundOutcome) {
+      this.drawHudText(
+        suddenDeathHud.label,
+        centerX + centerWidth / 2,
+        25,
+        suddenDeathHud.active ? CANVAS_UI_DANGER : CANVAS_UI_MUTED,
+        CANVAS_UI_SHADOW,
+      );
+      this.drawSuddenDeathMeter(
+        centerX + 8,
+        28,
+        centerWidth - 16,
+        suddenDeathHud.progress,
+        suddenDeathHud.active,
+      );
+    }
+  }
+
+  private renderHud(): void {
+    if (this.isFullscreenMatchLayoutActive()) {
+      this.renderCompactHud();
+      return;
+    }
+    const hudGradient = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, HUD_HEIGHT);
+    hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.96)");
+    hudGradient.addColorStop(0.5, "rgba(25, 21, 17, 0.96)");
+    hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.96)");
+    this.ctx.fillStyle = hudGradient;
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, HUD_HEIGHT);
+    this.ctx.fillStyle = CANVAS_UI_BORDER;
+    this.ctx.fillRect(0, HUD_HEIGHT - 2, CANVAS_WIDTH, 2);
+
+    const playerCount = Math.max(1, this.activePlayerIds.length);
+    const twoPlayerLayout = playerCount === 2;
+    const hudPanelY = 14;
+
+    if (twoPlayerLayout) {
+      const panelWidth = 168;
+      const leftPlayerId = this.activePlayerIds[0];
+      const rightPlayerId = this.activePlayerIds[1];
+      if (leftPlayerId !== undefined) {
+        this.renderPlayerHud(leftPlayerId, 8, hudPanelY, panelWidth);
+      }
+      if (rightPlayerId !== undefined) {
+        this.renderPlayerHud(rightPlayerId, CANVAS_WIDTH - panelWidth - 8, hudPanelY, panelWidth);
+      }
+    } else {
+      const slotWidth = (CANVAS_WIDTH - 12) / playerCount;
+      this.activePlayerIds.forEach((playerId, index) => {
+        this.renderPlayerHud(playerId, 6 + index * slotWidth, hudPanelY, slotWidth - 6);
+      });
+    }
+
+    this.ctx.textAlign = "center";
+    this.ctx.font = "700 7px Inter";
+    this.drawHudText(
+      this.onlineRoomMode === "endless"
+        ? `R${this.roundNumber} | ENDLESS`
+        : `R${this.roundNumber} | FIRST TO ${TARGET_WINS}`,
+      CANVAS_WIDTH / 2,
+      6,
+      CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
+    );
+    this.ctx.font = "700 8px Inter";
+    this.drawHudText("TIME", CANVAS_WIDTH / 2, 14, CANVAS_UI_GOLD, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 16px Inter";
+    this.drawHudText(
+      Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
+      CANVAS_WIDTH / 2,
+      27,
+      CANVAS_UI_TEXT,
+      CANVAS_UI_SHADOW,
+    );
+    if (!this.roundOutcome) {
+      const suddenDeathHud = this.getSuddenDeathHudState();
+      this.ctx.textAlign = "center";
+      this.ctx.font = "700 8px Inter";
+      this.drawHudText(
+        suddenDeathHud.label,
+        240,
+        HUD_HEIGHT - 18,
+        suddenDeathHud.active ? CANVAS_UI_DANGER : CANVAS_UI_MUTED,
+        CANVAS_UI_SHADOW,
+      );
+      this.drawSuddenDeathMeter(
+        CANVAS_WIDTH / 2 - 80,
+        HUD_HEIGHT - 12,
+        160,
+        suddenDeathHud.progress,
+        suddenDeathHud.active,
+      );
+    }
+  }
+
+  private renderPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
+    const player = this.players[playerId];
+    const palette = PLAYER_COLORS[playerId];
+    const title = this.getPlayerSlotLabel(playerId);
+    const statLine = `B${player.maxBombs} F${player.flameRange} S${player.speedLevel} Q${player.shortFuseLevel}`;
+    const status = this.getPlayerHudStatus(playerId);
+    const compact = width < 230;
+    const recentPickup = this.getLatestPowerUpPickupNotice(playerId);
+    const subtitleText = recentPickup
+      ? this.formatPowerUpPickupNotice(recentPickup, compact ? 8 : 12)
+      : this.shortenCharacterName(this.getCharacterLabel(playerId, compact ? 8 : 12), compact ? 8 : 12);
+    const subtitleColor = recentPickup
+      ? recentPickup.chainGuard ? CANVAS_UI_GOLD_BRIGHT : getPowerUpDefinition(recentPickup.type).tint
+      : CANVAS_UI_TEXT;
+    const allSkillSlots = this.getHudSkillSlots(playerId);
+    const skillSlots = compact
+      ? this.getCompactHudSkillSlots(allSkillSlots)
+      : allSkillSlots;
+
+    this.drawHudPanel(x, y, width, 42, palette.glow);
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 8px Inter";
+    this.drawHudText(title, x + 6, y + 10, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "500 6px Inter";
+    this.drawHudText(
+      subtitleText,
+      x + 6,
+      y + 18,
+      subtitleColor,
+      CANVAS_UI_SHADOW,
+    );
+    this.ctx.textAlign = "right";
+    this.drawHudText(
+      compact ? statLine : status.label,
+      x + width - 6,
+      y + 10,
+      compact
+        ? (player.alive ? CANVAS_UI_SUCCESS : CANVAS_UI_MUTED_SOFT)
+        : this.getHudStatusColor(status),
+      CANVAS_UI_SHADOW,
+    );
+    this.drawHudText(
+      compact ? status.label : statLine,
+      x + width - 6,
+      y + 18,
+      compact ? this.getHudStatusColor(status) : CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
+    );
+    if (this.onlineRoomMode === "endless") {
+      this.drawEndlessHudStats(x + 6, y + 28, playerId, palette);
+    } else {
+      this.drawRoundPips(x + 6, y + 25, this.score[playerId], palette);
+    }
+
+    const insetX = x + 4;
+    const insetY = compact
+      ? y + 29
+      : (this.onlineRoomMode === "endless" ? y + 32 : y + 30);
+    const insetWidth = Math.max(12, width - 8);
+    const gap = 2;
+    const slotCount = skillSlots.length;
+    const slotWidth = Math.max(10, Math.floor((insetWidth - gap * (slotCount - 1)) / slotCount));
+    for (let index = 0; index < slotCount; index += 1) {
+      const slot = skillSlots[index];
+      const slotX = insetX + index * (slotWidth + gap);
+      this.drawHudSkillSlot(slotX, insetY, slotWidth, 10, slot);
+    }
+  }
+
+  private drawRoundPips(
+    x: number,
+    y: number,
+    wins: number,
+    palette: { primary: string; secondary: string; glow: string },
+  ): void {
+    for (let index = 0; index < TARGET_WINS; index += 1) {
+      const centerX = x + 5 + index * 12;
+      const filled = index < wins;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, y + 4, 4.5, 0, Math.PI * 2);
+      this.ctx.fillStyle = filled ? CANVAS_UI_GOLD_BRIGHT : "rgba(255, 255, 255, 0.08)";
+      this.ctx.fill();
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeStyle = filled ? palette.primary : CANVAS_UI_BORDER;
+      this.ctx.stroke();
+      if (!filled) {
+        continue;
+      }
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, y + 4, 1.75, 0, Math.PI * 2);
+      this.ctx.fillStyle = "#fff7df";
+      this.ctx.fill();
+    }
+  }
+
+  private drawEndlessHudStats(
+    x: number,
+    y: number,
+    playerId: PlayerId,
+    palette: { primary: string; secondary: string; glow: string },
+  ): void {
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 6px Inter";
+    this.drawHudText(
+      `K ${this.endlessKills[playerId]}  W ${this.endlessRoundWins[playerId]}`,
+      x,
+      y,
+      palette.primary,
+      CANVAS_UI_SHADOW,
+    );
+  }
+
+  private getHudSkillSlots(playerId: PlayerId): HudSkillSlot[] {
+    return SKILL_POWER_UP_TYPES.map((type) => this.getHudSkillSlot(playerId, type));
+  }
+
+  private getCompactHudSkillSlots(allSkillSlots: HudSkillSlot[]): HudSkillSlot[] {
+    const basicTypes: readonly SkillPowerUpType[] = ["bomb-up", "flame-up", "speed-up"];
+    const acquiredBasicTypes = new Set(
+      allSkillSlots
+        .filter((slot) => slot.acquired && basicTypes.includes(slot.type))
+        .map((slot) => slot.type),
+    );
+    const selectedTypes = new Set<SkillPowerUpType>(acquiredBasicTypes);
+
+    for (const slot of allSkillSlots) {
+      if (selectedTypes.size >= 4) {
+        break;
+      }
+      if (slot.acquired && !basicTypes.includes(slot.type)) {
+        selectedTypes.add(slot.type);
+      }
+    }
+    for (const slot of allSkillSlots) {
+      if (selectedTypes.size >= 4) {
+        break;
+      }
+      selectedTypes.add(slot.type);
+    }
+
+    return allSkillSlots.filter((slot) => selectedTypes.has(slot.type));
+  }
+
+  private getHudSkillSlot(playerId: PlayerId, type: SkillPowerUpType): HudSkillSlot {
+    const player = this.players[playerId];
+    const detonateKeyLabel = this.getDetonateHudKeyLabel(playerId);
+    const rawLevel = getPowerUpLevel(player, type);
+    const level = type === "bomb-up" || type === "flame-up"
+      ? Math.max(0, rawLevel - 1)
+      : rawLevel;
+    const valueLabel = type === "remote-up"
+      ? (level > 0 ? "ON" : "--")
+      : type === "short-fuse-up"
+        ? formatBombFuseSeconds(player)
+        : `x${level}`;
+    const pickupNotice = this.getPowerUpPickupNotice(playerId, type);
+
+    return {
+      type,
+      level,
+      acquired: level > 0,
+      keyLabel: type === "remote-up" && level > 0 ? detonateKeyLabel : null,
+      valueLabel,
+      recentlyCollected: Boolean(pickupNotice),
+      pickupProgress: pickupNotice
+        ? Math.max(0, Math.min(1, pickupNotice.remainingMs / POWER_UP_PICKUP_NOTICE_MS))
+        : 0,
+    } satisfies HudSkillSlot;
+  }
+
+  private addPowerUpPickupNotice(
+    playerId: PlayerId,
+    type: SkillPowerUpType,
+    chainGuard = false,
+    valueLabel?: string,
+  ): void {
+    const slot = this.getHudSkillSlot(playerId, type);
+    const notice: PowerUpPickupNotice = {
+      playerId,
+      type,
+      valueLabel: valueLabel ?? slot.valueLabel,
+      chainGuard,
+      elapsedMs: 0,
+      remainingMs: POWER_UP_PICKUP_NOTICE_MS,
+    };
+    this.powerUpPickupNotices = [
+      notice,
+      ...this.powerUpPickupNotices.filter((entry) => !(entry.playerId === playerId && entry.type === type)),
+    ].slice(0, 6);
+  }
+
+  private getLatestPowerUpPickupNotice(playerId: PlayerId): PowerUpPickupNotice | null {
+    return this.powerUpPickupNotices.find((notice) => notice.playerId === playerId) ?? null;
+  }
+
+  private getPowerUpPickupNotice(playerId: PlayerId, type: SkillPowerUpType): PowerUpPickupNotice | null {
+    return this.powerUpPickupNotices.find((notice) => (
+      notice.playerId === playerId && notice.type === type
+    )) ?? null;
+  }
+
+  private formatPowerUpPickupNotice(notice: PowerUpPickupNotice, maxLength: number): string {
+    const definition = getPowerUpDefinition(notice.type);
+    if (notice.chainGuard) {
+      return maxLength <= 8 ? "CHAIN!" : `CHAIN ${definition.shortLabel} ${notice.valueLabel}`;
+    }
+    if (notice.type === "short-fuse-up") {
+      return `${definition.shortLabel} ${notice.valueLabel}`;
+    }
+    const label = maxLength <= 8 ? definition.shortLabel : definition.label;
+    return this.shortenCharacterName(`+${label} ${notice.valueLabel}`, maxLength);
+  }
+
+  private getDetonateHudKeyLabel(playerId: PlayerId): string | null {
+    if (this.onlineSession) {
+      if (playerId !== this.onlineLocalPlayerId) {
+        return null;
+      }
+      return formatControlKey(KEY_BINDINGS[1].detonate);
+    }
+    if (MENU_PLAYER_IDS.includes(playerId as MenuPlayerId)) {
+      return formatControlKey(KEY_BINDINGS[playerId as MenuPlayerId].detonate);
+    }
+    return null;
+  }
+
+  private getPlayerHudStatus(playerId: PlayerId): HudPlayerStatus {
+    const player = this.players[playerId];
+    if (!player.alive) {
+      return { label: "DOWN", tone: "muted", critical: false, dangerEtaMs: null };
+    }
+    if (player.skill.phase === "channeling") {
+      return { label: "ICE", tone: "success", critical: false, dangerEtaMs: null };
+    }
+    if (player.flameGuardMs > 0) {
+      return {
+        label: `GUARD ${(player.flameGuardMs / 1000).toFixed(1)}s`,
+        tone: "success",
+        critical: false,
+        dangerEtaMs: null,
+      };
+    }
+
+    const dangerEtaMs = this.getPlayerDangerEtaMs(playerId);
+    if (dangerEtaMs !== null && dangerEtaMs <= HUD_CRITICAL_DANGER_MS) {
+      const roundedDangerEtaMs = Math.max(0, Math.round(dangerEtaMs));
+      return {
+        label: `DANGER ${(roundedDangerEtaMs / 1000).toFixed(1)}s`,
+        tone: "danger",
+        critical: true,
+        dangerEtaMs: roundedDangerEtaMs,
+      };
+    }
+
+    const pickupChain = this.pickupChains[playerId];
+    if (pickupChain.previousType !== null && pickupChain.remainingMs > 0) {
+      return {
+        label: `CHAIN ${(pickupChain.remainingMs / 1000).toFixed(1)}s`,
+        tone: "success",
+        critical: false,
+        dangerEtaMs: null,
+      };
+    }
+
+    return { label: "LIVE", tone: "success", critical: false, dangerEtaMs: null };
+  }
+
+  private getHudStatusColor(status: HudPlayerStatus): string {
+    if (status.tone === "danger") {
+      return CANVAS_UI_DANGER;
+    }
+    if (status.tone === "muted") {
+      return CANVAS_UI_MUTED_SOFT;
+    }
+    return CANVAS_UI_SUCCESS;
+  }
+
+  private getPlayerDangerEtaMs(playerId: PlayerId): number | null {
+    if (this.mode !== "match" || this.roundOutcome) {
+      return null;
+    }
+
+    const player = this.players[playerId];
+    if (!player.alive || player.spawnProtectionMs > 0 || player.flameGuardMs > 0) {
+      return null;
+    }
+
+    const tile = this.getTileFromPosition(player.position);
+    const dangerMap = this.cachedDangerMap ?? this.getDangerMap();
+    const etaMs = dangerMap.get(tileKey(tile.x, tile.y));
+    return etaMs === undefined ? null : Math.max(0, etaMs);
+  }
+
+  private drawHudSkillSlot(x: number, y: number, width: number, height: number, slot: HudSkillSlot): void {
+    const definition = getPowerUpDefinition(slot.type);
+    const tint = slot.acquired ? definition.tint : "rgba(180, 167, 147, 0.4)";
+    this.ctx.fillStyle = slot.acquired ? CANVAS_UI_PANEL_BG_STRONG : CANVAS_UI_PANEL_BG_SOFT;
+    this.ctx.fillRect(x, y, width, height);
+    if (slot.recentlyCollected) {
+      const pulse = 0.12 + slot.pickupProgress * 0.24;
+      this.ctx.globalAlpha = pulse;
+      this.ctx.fillStyle = definition.tint;
+      this.ctx.fillRect(x, y, width, height);
+      this.ctx.globalAlpha = 1;
+    }
+    this.ctx.strokeStyle = slot.recentlyCollected
+      ? definition.tint
+      : (slot.acquired ? tint : CANVAS_UI_BORDER);
+    this.ctx.lineWidth = slot.recentlyCollected ? 1.5 : 1;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+    this.ctx.lineWidth = 1;
+
+    const icon = this.assets.powerUps[slot.type];
+    if (icon) {
+      this.ctx.globalAlpha = slot.acquired ? 1 : 0.4;
+      this.ctx.drawImage(icon, x + 1, y + 1, 8, 8);
+      this.ctx.globalAlpha = 1;
+    } else {
+      this.ctx.textAlign = "center";
+      this.ctx.font = "700 6px Inter";
+      this.drawHudText(definition.shortLabel, x + 5, y + 7, tint, CANVAS_UI_SHADOW);
+    }
+
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 6px Inter";
+    const valueColor = slot.acquired ? CANVAS_UI_TEXT : CANVAS_UI_MUTED_SOFT;
+    this.drawHudText(slot.valueLabel, x + 11, y + 7, valueColor, CANVAS_UI_SHADOW);
+    if (slot.keyLabel && width >= 24) {
+      this.ctx.textAlign = "right";
+      this.ctx.font = "500 6px Inter";
+      this.drawHudText(slot.keyLabel, x + width - 2, y + 7, tint, CANVAS_UI_SHADOW);
+    }
+  }
+
+  private rebuildArenaStaticCache(): void {
+    const logicalArenaWidth = this.getArenaPixelWidth();
+    const logicalArenaHeight = this.getArenaPixelHeight();
+    if (!this.arenaStaticCache) {
+      this.arenaStaticCache = document.createElement("canvas");
+    }
+    this.arenaStaticCache.width = Math.max(1, Math.ceil(logicalArenaWidth * CANVAS_BACKBUFFER_SCALE));
+    this.arenaStaticCache.height = Math.max(1, Math.ceil(logicalArenaHeight * CANVAS_BACKBUFFER_SCALE));
+    const c = this.arenaStaticCache.getContext("2d")!;
+    c.setTransform(CANVAS_BACKBUFFER_SCALE, 0, 0, CANVAS_BACKBUFFER_SCALE, 0, 0);
+    c.clearRect(0, 0, logicalArenaWidth, logicalArenaHeight);
+
+    const savedCtx = this.ctx;
+    // Temporarily redirect draw calls to the offscreen canvas
+    (this as unknown as { ctx: CanvasRenderingContext2D }).ctx = c;
+
+    const arenaWidth = this.getArenaGridWidth();
+    const arenaHeight = this.getArenaGridHeight();
+    const centerX = Math.floor(arenaWidth / 2);
+    const centerY = Math.floor(arenaHeight / 2);
+    const sideColumn = Math.min(2, arenaWidth - 3);
+    const farSideColumn = Math.max(arenaWidth - 3, sideColumn + 1);
+    const sideRow = Math.min(2, arenaHeight - 3);
+    const farSideRow = Math.max(arenaHeight - 3, sideRow + 1);
+    for (let y = 0; y < arenaHeight; y += 1) {
+      for (let x = 0; x < arenaWidth; x += 1) {
+        const screenX = x * TILE_SIZE;
+        const screenY = y * TILE_SIZE;
+        const key = tileKey(x, y);
+        const isWrapPortal = isWrapPortalTile(x, y, this.arena.config);
+        const isCenterLane = x === centerX || y === centerY;
+        const isSideLane = x === sideColumn || x === farSideColumn || y === sideRow || y === farSideRow;
+        const isSpawnBay = (x <= 2 && y <= 2)
+          || (x >= arenaWidth - 3 && y <= 2)
+          || (x <= 2 && y >= arenaHeight - 3)
+          || (x >= arenaWidth - 3 && y >= arenaHeight - 3);
+        const floorVariant = isSpawnBay
+          ? "spawn"
+          : isWrapPortal
+            ? "portal"
+            : isCenterLane || isSideLane
+              ? "lane"
+              : "base";
+        const floorSprite = isSpawnBay
+          ? this.assets.floor.spawn
+          : isWrapPortal || isCenterLane || isSideLane
+            ? this.assets.floor.lane
+            : this.assets.floor.base;
+        if (floorSprite) {
+          c.drawImage(floorSprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
+        } else {
+          this.drawArenaFloorTile(screenX, screenY, floorVariant, (x + y) % 2);
+        }
+
+        if (this.arena.solid.has(key)) {
+          if (this.suddenDeathClosedTiles.has(key)) {
+            this.drawSuddenDeathClosedSlot(screenX, screenY);
+          } else {
+            this.drawWall(screenX, screenY);
+          }
+        } else if (this.arena.breakable.has(key)) {
+          this.drawCrate(screenX, screenY);
+        } else if (isWrapPortal) {
+          c.strokeStyle = this.getArenaPalette().portalRing;
+          c.strokeRect(screenX + 7.5, screenY + 7.5, TILE_SIZE - 15, TILE_SIZE - 15);
+        }
+      }
+    }
+
+    c.strokeStyle = this.getArenaPalette().arenaFrame;
+    c.strokeRect(
+      -0.5,
+      -0.5,
+      arenaWidth * TILE_SIZE + 1,
+      arenaHeight * TILE_SIZE + 1,
+    );
+
+    c.fillStyle = this.getArenaPalette().arenaGlow;
+    c.fillRect(0, 0, arenaWidth * TILE_SIZE, arenaHeight * TILE_SIZE);
+
+    // Restore the real context
+    (this as unknown as { ctx: CanvasRenderingContext2D }).ctx = savedCtx;
+    this.arenaStaticDirty = false;
+  }
+
+  private invalidateArenaCache(): void {
+    this.arenaStaticDirty = true;
+    this.backdropCache = null;
+    this.arenaStaticMistGradient = null;
+  }
+
+  private renderArena(): void {
+    // Blit cached static layer (floor, walls, crates)
+    if (this.arenaStaticDirty || !this.arenaStaticCache) {
+      this.rebuildArenaStaticCache();
+    }
+    const metrics = this.getArenaRenderMetrics();
+    const logicalArenaWidth = this.getArenaPixelWidth();
+    const logicalArenaHeight = this.getArenaPixelHeight();
+    this.ctx.save();
+    this.ctx.translate(metrics.arenaX, metrics.arenaY);
+    this.ctx.scale(metrics.scale, metrics.scale);
+    this.ctx.drawImage(this.arenaStaticCache!, 0, 0, logicalArenaWidth, logicalArenaHeight);
+
+    // Dynamic elements drawn on top every frame
+    for (const effect of this.crateBreakAnimations) {
+      this.drawCrateBreakAnimation(effect);
+    }
+
+    this.drawDangerOverlay();
+    this.drawBombPreviewOverlay();
+
+    for (const powerUp of this.arena.powerUps) {
+      if (powerUp.revealed && !powerUp.collected) {
+        this.drawPowerUp(powerUp);
+      }
+    }
+
+    for (const bomb of this.bombs) {
+      this.drawBomb(bomb);
+    }
+
+    for (const flame of this.flames) {
+      this.drawFlame(flame);
+    }
+
+    for (const id of ALL_PLAYER_IDS) {
+      this.drawPlayerSkillPreview(this.players[id]);
+    }
+
+    for (const beam of this.magicBeams) {
+      this.drawMagicBeam(beam);
+    }
+
+    for (const id of ALL_PLAYER_IDS) {
+      this.drawPlayer(this.players[id]);
+    }
+
+    for (const effect of this.suddenDeathClosureEffects) {
+      this.drawSuddenDeathClosureEffect(effect);
+    }
+
+    // Arena mist overlay (single pre-cached gradient)
+    if (!this.arenaStaticMistGradient) {
+      const palette = this.getArenaPalette();
+      this.arenaStaticMistGradient = this.ctx.createLinearGradient(0, 0, 0, logicalArenaHeight);
+      this.arenaStaticMistGradient.addColorStop(0, palette.arenaMistTop);
+      this.arenaStaticMistGradient.addColorStop(0.35, "rgba(74, 108, 153, 0)");
+      this.arenaStaticMistGradient.addColorStop(1, palette.arenaMistBottom);
+    }
+    this.ctx.fillStyle = this.arenaStaticMistGradient;
+    this.ctx.fillRect(0, 0, logicalArenaWidth, logicalArenaHeight);
+    this.ctx.restore();
+  }
+
+  private getArenaPalette(): ArenaThemePalette {
+    return this.getArenaThemeDefinition()?.palette
+      ?? getArenaThemeById(DEFAULT_ARENA_THEME_ID)?.palette
+      ?? getArenaThemeById("arcane-citadel")!.palette;
+  }
+
+  private getArenaThemeDefinition() {
+    return getArenaThemeById(this.arena.config.themeId)
+      ?? this.assets.arenaTheme
+      ?? getArenaThemeById(DEFAULT_ARENA_THEME_ID)
+      ?? getArenaThemeById("arcane-citadel")!;
+  }
+
+  private drawArenaFloorTile(
+    x: number,
+    y: number,
+    variant: "base" | "lane" | "spawn" | "portal",
+    checker: number,
+  ): void {
+    const theme = this.getArenaThemeDefinition();
+    const palette = theme.palette;
+    let outer = checker === 0 ? palette.floorBase : palette.floorBaseAlt;
+    let inner = checker === 0 ? palette.floorBaseAlt : palette.floorBase;
+    if (variant === "lane") {
+      outer = checker === 0 ? palette.floorLane : palette.floorLaneAlt;
+      inner = checker === 0 ? palette.floorLaneAlt : palette.floorLane;
+    } else if (variant === "spawn") {
+      outer = checker === 0 ? palette.floorSpawn : palette.floorSpawnAlt;
+      inner = checker === 0 ? palette.floorSpawnAlt : palette.floorSpawn;
+    } else if (variant === "portal") {
+      outer = checker === 0 ? palette.floorPortal : palette.floorPortalAlt;
+      inner = checker === 0 ? palette.floorPortalAlt : palette.floorPortal;
+    }
+
+    this.ctx.fillStyle = outer;
+    this.ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    this.ctx.fillStyle = inner;
+    this.ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    this.ctx.fillStyle = palette.floorEdgeLight;
+    this.ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, 2);
+    this.ctx.fillRect(x + 2, y + 2, 2, TILE_SIZE - 4);
+    this.ctx.fillStyle = palette.floorEdgeDark;
+    this.ctx.fillRect(x + 2, y + TILE_SIZE - 4, TILE_SIZE - 4, 2);
+    this.ctx.fillRect(x + TILE_SIZE - 4, y + 2, 2, TILE_SIZE - 4);
+    this.ctx.strokeStyle = palette.floorBorder;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+
+    if (variant === "base") {
+      this.ctx.fillStyle = palette.floorCenterMark;
+      if (theme.motif.floorPattern === "diamond") {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + TILE_SIZE * 0.5, y + 12);
+        this.ctx.lineTo(x + TILE_SIZE - 12, y + TILE_SIZE * 0.5);
+        this.ctx.lineTo(x + TILE_SIZE * 0.5, y + TILE_SIZE - 12);
+        this.ctx.lineTo(x + 12, y + TILE_SIZE * 0.5);
+        this.ctx.closePath();
+        this.ctx.fill();
+      } else if (theme.motif.floorPattern === "vein") {
+        this.ctx.fillRect(x + 9, y + 18, TILE_SIZE - 18, 2);
+        this.ctx.fillRect(x + 15, y + 10, 2, TILE_SIZE - 20);
+        this.ctx.fillRect(x + 23, y + 14, 2, 10);
+      } else {
+        this.ctx.fillRect(x + 14, y + 14, TILE_SIZE - 28, TILE_SIZE - 28);
+      }
+      return;
+    }
+
+    if (variant === "lane") {
+      this.ctx.fillStyle = palette.floorCenterMark;
+      if (theme.motif.lanePattern === "stripe") {
+        this.ctx.fillRect(x + 8, y + 11, 4, TILE_SIZE - 22);
+        this.ctx.fillRect(x + TILE_SIZE - 12, y + 11, 4, TILE_SIZE - 22);
+        this.ctx.fillRect(x + 17, y + 8, 6, TILE_SIZE - 16);
+      } else if (theme.motif.lanePattern === "chevron") {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + 10, y + 16);
+        this.ctx.lineTo(x + 18, y + 10);
+        this.ctx.lineTo(x + 26, y + 16);
+        this.ctx.lineTo(x + 22, y + 16);
+        this.ctx.lineTo(x + 18, y + 13);
+        this.ctx.lineTo(x + 14, y + 16);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + 10, y + 24);
+        this.ctx.lineTo(x + 18, y + 18);
+        this.ctx.lineTo(x + 26, y + 24);
+        this.ctx.lineTo(x + 22, y + 24);
+        this.ctx.lineTo(x + 18, y + 21);
+        this.ctx.lineTo(x + 14, y + 24);
+        this.ctx.closePath();
+        this.ctx.fill();
+      } else {
+        this.ctx.fillRect(x + 10, y + 17, TILE_SIZE - 20, 6);
+        this.ctx.fillRect(x + 17, y + 10, 6, TILE_SIZE - 20);
+      }
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeStyle = variant === "spawn" ? palette.spawnRing : palette.portalRing;
+    if (theme.motif.spawnPattern === "diamond") {
+      this.ctx.beginPath();
+      this.ctx.moveTo(x + TILE_SIZE * 0.5, y + 8);
+      this.ctx.lineTo(x + TILE_SIZE - 8, y + TILE_SIZE * 0.5);
+      this.ctx.lineTo(x + TILE_SIZE * 0.5, y + TILE_SIZE - 8);
+      this.ctx.lineTo(x + 8, y + TILE_SIZE * 0.5);
+      this.ctx.closePath();
+      this.ctx.stroke();
+    } else {
+      this.ctx.beginPath();
+      this.ctx.arc(x + TILE_SIZE * 0.5, y + TILE_SIZE * 0.5, TILE_SIZE * 0.22, 0, Math.PI * 2);
+      this.ctx.stroke();
+      if (theme.motif.spawnPattern === "seal") {
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.arc(x + TILE_SIZE * 0.5, y + TILE_SIZE * 0.5, TILE_SIZE * 0.31, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
+    }
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(x + 10.5, y + 10.5, TILE_SIZE - 21, TILE_SIZE - 21);
+    this.ctx.restore();
+  }
+
+  private getDangerOverlayTiles(): Array<{ x: number; y: number; etaMs: number }> {
+    const dangerMap = this.cachedDangerMap ?? this.getDangerMap();
+    const tiles: Array<{ x: number; y: number; etaMs: number }> = [];
+    for (const [key, etaMs] of dangerMap.entries()) {
+      if (etaMs > DANGER_OVERLAY_MAX_ETA_MS) {
+        continue;
+      }
+      const [xText, yText] = key.split(",");
+      const x = Number(xText);
+      const y = Number(yText);
+      if (Number.isNaN(x) || Number.isNaN(y)) {
+        continue;
+      }
+      if (x < 0 || y < 0 || x >= this.getArenaGridWidth() || y >= this.getArenaGridHeight()) {
+        continue;
+      }
+      if (this.arena.solid.has(key)) {
+        continue;
+      }
+      tiles.push({ x, y, etaMs: Math.max(0, Math.round(etaMs)) });
+    }
+    tiles.sort((a, b) => a.etaMs - b.etaMs || a.y - b.y || a.x - b.x);
+    return tiles;
+  }
+
+  private drawDangerOverlay(): void {
+    if (!this.showDangerOverlay) {
+      return;
+    }
+    const dangerTiles = this.getDangerOverlayTiles();
+    for (const tile of dangerTiles) {
+      let fill = "rgba(245, 96, 26, 0.14)";
+      let stroke = "rgba(232, 210, 162, 0.34)";
+      if (tile.etaMs <= 0) {
+        fill = "rgba(255, 62, 62, 0.42)";
+        stroke = "rgba(255, 189, 176, 0.72)";
+      } else if (tile.etaMs <= 700) {
+        fill = "rgba(255, 120, 72, 0.34)";
+        stroke = "rgba(255, 216, 186, 0.65)";
+      } else if (tile.etaMs <= 1500) {
+        fill = "rgba(215, 172, 84, 0.24)";
+        stroke = "rgba(247, 229, 177, 0.5)";
+      }
+      const screenX = tile.x * TILE_SIZE;
+      const screenY = tile.y * TILE_SIZE;
+      this.ctx.fillStyle = fill;
+      this.ctx.fillRect(screenX + 5, screenY + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+      this.ctx.strokeStyle = stroke;
+      this.ctx.strokeRect(screenX + 5.5, screenY + 5.5, TILE_SIZE - 11, TILE_SIZE - 11);
+
+      const urgency = 1 - Math.min(1, tile.etaMs / DANGER_OVERLAY_MAX_ETA_MS);
+      const pulsePeriodMs = DANGER_OVERLAY_PULSE_SLOW_MS
+        - urgency * (DANGER_OVERLAY_PULSE_SLOW_MS - DANGER_OVERLAY_PULSE_FAST_MS);
+      const pulse = 0.5 + 0.5 * Math.sin((this.animationClockMs / pulsePeriodMs) * Math.PI * 2);
+      const markerY = screenY + TILE_SIZE - 7 - Math.round(pulse * (TILE_SIZE - 14));
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.36 + urgency * 0.34 + pulse * 0.18;
+      this.ctx.strokeStyle = stroke;
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.moveTo(screenX + 9, screenY + TILE_SIZE - 9);
+      this.ctx.lineTo(screenX + TILE_SIZE - 9, screenY + 9);
+      this.ctx.stroke();
+      this.ctx.fillStyle = stroke;
+      this.ctx.fillRect(screenX + TILE_SIZE - 7, markerY, 3, 3);
+      this.ctx.restore();
+    }
+  }
+
+  private getBombPreviewPlayerId(): PlayerId {
+    if (this.onlineSession) {
+      return this.onlineLocalPlayerId;
+    }
+    if (this.automationMode) {
+      return this.automationControlledPlayer;
+    }
+    return 1;
+  }
+
+  private getBombPreviewTiles(playerId: PlayerId): TileCoord[] {
+    if (!this.showBombPreview || this.mode !== "match") {
+      return [];
+    }
+    const player = this.players[playerId];
+    if (!player.alive || player.activeBombs >= player.maxBombs) {
+      return [];
+    }
+    const origin = this.getTileFromPosition(player.position);
+    const originKey = tileKey(origin.x, origin.y);
+    if (this.bombs.some((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === originKey)) {
+      return [];
+    }
+    const blastKeys = this.getBombBlastKeys(origin, player.flameRange);
+    const tiles: TileCoord[] = [];
+    for (const key of blastKeys) {
+      const [xText, yText] = key.split(",");
+      const x = Number(xText);
+      const y = Number(yText);
+      if (
+        Number.isNaN(x)
+        || Number.isNaN(y)
+        || x < 0
+        || y < 0
+        || x >= this.getArenaGridWidth()
+        || y >= this.getArenaGridHeight()
+      ) {
+        continue;
+      }
+      tiles.push({ x, y });
+    }
+    tiles.sort((a, b) => a.y - b.y || a.x - b.x);
+    return tiles;
+  }
+
+  private drawBombPreviewOverlay(): void {
+    if (!this.showBombPreview || this.mode !== "match" || this.roundOutcome || this.paused) {
+      return;
+    }
+    const previewPlayerId = this.getBombPreviewPlayerId();
+    const previewTiles = this.getBombPreviewTiles(previewPlayerId);
+    if (previewTiles.length === 0) {
+      return;
+    }
+    const origin = this.getTileFromPosition(this.players[previewPlayerId].position);
+    for (const tile of previewTiles) {
+      const screenX = tile.x * TILE_SIZE;
+      const screenY = tile.y * TILE_SIZE;
+      const isOrigin = tile.x === origin.x && tile.y === origin.y;
+      const isTerminalCrate = this.arena.breakable.has(tileKey(tile.x, tile.y));
+      this.ctx.fillStyle = isOrigin
+        ? "rgba(255, 128, 64, 0.34)"
+        : isTerminalCrate
+          ? "rgba(255, 176, 48, 0.38)"
+          : "rgba(245, 96, 26, 0.22)";
+      this.ctx.fillRect(screenX + 6, screenY + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+      this.ctx.strokeStyle = isOrigin
+        ? "rgba(255, 243, 212, 0.82)"
+        : isTerminalCrate
+          ? "rgba(255, 238, 168, 0.9)"
+          : "rgba(236, 214, 168, 0.56)";
+      this.ctx.strokeRect(screenX + 6.5, screenY + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
+    }
+  }
+
+  private drawWall(x: number, y: number): void {
+    if (this.assets.props.wall) {
+      this.ctx.fillStyle = "rgba(8, 10, 14, 0.35)";
+      this.ctx.fillRect(x + 1, y + TILE_SIZE - 5, TILE_SIZE - 2, 5);
+      this.ctx.drawImage(this.assets.props.wall, x, y, TILE_SIZE, TILE_SIZE);
+      this.ctx.fillStyle = "rgba(226, 221, 190, 0.08)";
+      this.ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, 2);
+      return;
+    }
+    const theme = this.getArenaThemeDefinition();
+    const palette = theme.palette;
+    this.ctx.fillStyle = palette.wallShadow;
+    this.ctx.fillRect(x + 2, y + TILE_SIZE - 5, TILE_SIZE - 4, 4);
+    this.ctx.fillStyle = palette.wallOuter;
+    this.ctx.fillRect(x + 2, y + 3, TILE_SIZE - 4, TILE_SIZE - 6);
+    this.ctx.fillStyle = palette.wallInner;
+    this.ctx.fillRect(x + 5, y + 9, TILE_SIZE - 10, TILE_SIZE - 17);
+    this.ctx.fillStyle = palette.wallTop;
+    this.ctx.fillRect(x + 3, y + 4, TILE_SIZE - 6, 6);
+    this.ctx.fillStyle = palette.wallAccent;
+    if (theme.motif.wallStyle === "royal") {
+      this.ctx.fillRect(x + 6, y + 11, TILE_SIZE - 12, 2);
+      this.ctx.fillRect(x + 6, y + 18, TILE_SIZE - 12, 2);
+      this.ctx.fillRect(x + 11, y + 8, 2, TILE_SIZE - 18);
+      this.ctx.fillRect(x + TILE_SIZE - 13, y + 8, 2, TILE_SIZE - 18);
+    } else if (theme.motif.wallStyle === "frost") {
+      this.ctx.fillRect(x + 8, y + 11, TILE_SIZE - 16, 2);
+      this.ctx.fillRect(x + 11, y + 16, TILE_SIZE - 22, 2);
+      this.ctx.fillRect(x + 14, y + 21, TILE_SIZE - 28, 2);
+    } else if (theme.motif.wallStyle === "obsidian") {
+      this.ctx.fillRect(x + 7, y + 12, TILE_SIZE - 14, 1);
+      this.ctx.fillRect(x + 9, y + 17, TILE_SIZE - 18, 1);
+      this.ctx.fillRect(x + 13, y + 22, TILE_SIZE - 26, 1);
+    } else {
+      this.ctx.fillRect(x + 7, y + 12, TILE_SIZE - 14, 2);
+      this.ctx.fillRect(x + 11, y + 17, TILE_SIZE - 22, 2);
+    }
+    this.ctx.strokeStyle = palette.wallBorder;
+    this.ctx.strokeRect(x + 2.5, y + 3.5, TILE_SIZE - 5, TILE_SIZE - 7);
+  }
+
+  private drawSuddenDeathClosedSlot(x: number, y: number): void {
+    this.drawWall(x, y);
+    const palette = this.getArenaPalette();
+    this.ctx.fillStyle = palette.suddenDeathWash;
+    this.ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    this.ctx.strokeStyle = palette.suddenDeathStroke;
+    this.ctx.strokeRect(x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9);
+  }
+
+  private drawSuddenDeathClosureEffect(effect: SuddenDeathClosureEffect): void {
+    const x = effect.tile.x * TILE_SIZE;
+    const y = effect.tile.y * TILE_SIZE;
+    const fallProgress = Math.min(1, effect.elapsedMs / SUDDEN_DEATH_FALL_MS);
+    const dropOffset = effect.impacted
+      ? 0
+      : Math.round((1 - fallProgress) * (1 - fallProgress) * TILE_SIZE * 1.8);
+
+    this.ctx.save();
+    this.ctx.fillStyle = `rgba(12, 10, 14, ${effect.impacted ? 0.34 : 0.18 + fallProgress * 0.22})`;
+    this.ctx.beginPath();
+    this.ctx.ellipse(
+      x + TILE_SIZE * 0.5,
+      y + TILE_SIZE * 0.82,
+      TILE_SIZE * 0.38,
+      TILE_SIZE * 0.12,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    this.ctx.fill();
+
+    this.ctx.globalAlpha = effect.impacted ? 1 : Math.max(0.66, 0.78 + fallProgress * 0.22);
+    this.drawSuddenDeathClosedSlot(x, y - dropOffset);
+    this.ctx.restore();
+
+    if (!effect.impacted) {
+      return;
+    }
+
+    const impactProgress = Math.min(1, Math.max(0, effect.elapsedMs - SUDDEN_DEATH_FALL_MS) / SUDDEN_DEATH_IMPACT_LINGER_MS);
+    const glowAlpha = Math.max(0, 0.28 * (1 - impactProgress));
+    if (glowAlpha <= 0) {
+      return;
+    }
+    this.ctx.fillStyle = `rgba(255, 196, 134, ${glowAlpha})`;
+    this.ctx.fillRect(x + 3, y + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+  }
+
+  private drawCrate(x: number, y: number): void {
+    if (this.assets.props.crate) {
+      this.ctx.fillStyle = "rgba(10, 6, 2, 0.28)";
+      this.ctx.fillRect(x + 2, y + TILE_SIZE - 4, TILE_SIZE - 4, 4);
+      this.ctx.drawImage(this.assets.props.crate, x, y, TILE_SIZE, TILE_SIZE);
+      return;
+    }
+    const theme = this.getArenaThemeDefinition();
+    const palette = theme.palette;
+    this.ctx.fillStyle = palette.crateShadow;
+    this.ctx.fillRect(x + 3, y + TILE_SIZE - 5, TILE_SIZE - 6, 4);
+    this.ctx.fillStyle = palette.crateOuter;
+    this.ctx.fillRect(x + 4, y + 5, TILE_SIZE - 8, TILE_SIZE - 10);
+    this.ctx.fillStyle = palette.crateInner;
+    this.ctx.fillRect(x + 7, y + 8, TILE_SIZE - 14, TILE_SIZE - 16);
+    this.ctx.fillStyle = palette.crateBand;
+    if (theme.motif.crateStyle === "trimmed") {
+      this.ctx.fillRect(x + 8, y + 8, TILE_SIZE - 16, 2);
+      this.ctx.fillRect(x + 8, y + TILE_SIZE - 10, TILE_SIZE - 16, 2);
+      this.ctx.fillRect(x + 8, y + 8, 2, TILE_SIZE - 16);
+      this.ctx.fillRect(x + TILE_SIZE - 10, y + 8, 2, TILE_SIZE - 16);
+    } else if (theme.motif.crateStyle === "expedition") {
+      this.ctx.fillRect(x + 15, y + 6, 3, TILE_SIZE - 12);
+      this.ctx.fillRect(x + 22, y + 6, 3, TILE_SIZE - 12);
+      this.ctx.fillRect(x + 6, y + 18, TILE_SIZE - 12, 3);
+    } else {
+      this.ctx.fillRect(x + 16, y + 6, 4, TILE_SIZE - 12);
+      this.ctx.fillRect(x + 6, y + 16, TILE_SIZE - 12, 4);
+    }
+    this.ctx.fillStyle = palette.crateMark;
+    if (theme.motif.crateStyle === "trimmed") {
+      this.ctx.fillRect(x + 11, y + 12, TILE_SIZE - 22, 2);
+      this.ctx.fillRect(x + 11, y + 20, TILE_SIZE - 22, 2);
+    } else if (theme.motif.crateStyle === "expedition") {
+      this.ctx.fillRect(x + 9, y + 11, TILE_SIZE - 18, 2);
+      this.ctx.fillRect(x + 13, y + 23, TILE_SIZE - 26, 2);
+    } else {
+      this.ctx.fillRect(x + 9, y + 10, TILE_SIZE - 18, 2);
+      this.ctx.fillRect(x + 10, y + 22, TILE_SIZE - 20, 2);
+    }
+  }
+
+  private drawCrateBreakAnimation(effect: CrateBreakAnimation): void {
+    const x = effect.tile.x * TILE_SIZE;
+    const y = effect.tile.y * TILE_SIZE;
+    const frames = this.assets.props.crateBreakFrames ?? [];
+    if (frames.length > 0) {
+      const frameMs = Math.max(1, Math.floor(CRATE_BREAK_DURATION_MS / frames.length));
+      const frame = pickAnimationFrame(frames, effect.elapsedMs, frameMs, "hold");
+      if (frame) {
+        this.ctx.save();
+        this.ctx.globalAlpha = Math.max(0.58, 1 - (effect.elapsedMs / CRATE_BREAK_DURATION_MS) * 0.3);
+        this.ctx.drawImage(frame, x, y, TILE_SIZE, TILE_SIZE);
+        this.ctx.restore();
+        return;
+      }
+    }
+
+    // Fallback dust pulse when no sprite sheet is available.
+    const progress = Math.min(1, effect.elapsedMs / CRATE_BREAK_DURATION_MS);
+    const radius = 4 + progress * 10;
+    this.ctx.fillStyle = `rgba(214, 168, 119, ${Math.max(0, 0.34 - progress * 0.24)})`;
+    this.ctx.beginPath();
+    this.ctx.arc(x + TILE_SIZE * 0.5, y + TILE_SIZE * 0.55, radius, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    const fragments = [
+      { offsetX: -8, offsetY: -4, driftX: -8, driftY: -7, size: 3 },
+      { offsetX: 7, offsetY: -5, driftX: 7, driftY: -9, size: 3 },
+      { offsetX: -5, offsetY: 5, driftX: -6, driftY: 5, size: 2 },
+      { offsetX: 6, offsetY: 4, driftX: 8, driftY: 6, size: 2 },
+    ];
+    this.ctx.fillStyle = `rgba(151, 99, 55, ${Math.max(0, 0.82 - progress * 0.7)})`;
+    for (const fragment of fragments) {
+      const fragmentX = Math.round(x + TILE_SIZE * 0.5 + fragment.offsetX + fragment.driftX * progress);
+      const fragmentY = Math.round(y + TILE_SIZE * 0.5 + fragment.offsetY + fragment.driftY * progress);
+      this.ctx.fillRect(fragmentX, fragmentY, fragment.size, fragment.size);
+    }
+  }
+
+  private drawPowerUp(powerUp: PowerUpState): void {
+    const x = powerUp.tile.x * TILE_SIZE;
+    const y = powerUp.tile.y * TILE_SIZE;
+    const definition = getPowerUpDefinition(powerUp.type);
+    const revealStartedAtMs = this.powerUpRevealStartedAtMs.get(powerUp);
+    const revealElapsedMs = revealStartedAtMs === undefined
+      ? POWER_UP_SPAWN_POP_MS
+      : Math.max(0, this.animationClockMs - revealStartedAtMs);
+    const revealProgress = Math.min(1, revealElapsedMs / POWER_UP_SPAWN_POP_MS);
+    const revealHaloProgress = Math.min(1, revealElapsedMs / POWER_UP_REVEAL_HALO_MS);
+    const revealPeakProgress = 0.58;
+    const popScale = revealProgress < revealPeakProgress
+      ? 0.72 + (0.36 * Math.sin((revealProgress / revealPeakProgress) * Math.PI * 0.5))
+      : 1 + (0.08 * Math.cos(
+        ((revealProgress - revealPeakProgress) / (1 - revealPeakProgress)) * Math.PI * 0.5,
+      ));
+
+    this.ctx.save();
+    if (revealStartedAtMs !== undefined && revealHaloProgress < 1) {
+      const haloFade = 1 - revealHaloProgress;
+      const centerX = x + TILE_SIZE * 0.5;
+      const centerY = y + TILE_SIZE * 0.5;
+      const haloRadius = POWER_UP_REVEAL_HALO_START_RADIUS
+        + (POWER_UP_REVEAL_HALO_END_RADIUS - POWER_UP_REVEAL_HALO_START_RADIUS) * revealHaloProgress;
+
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.72 * haloFade;
+      this.ctx.strokeStyle = definition.tint;
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, haloRadius, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 0.34 * haloFade;
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, Math.max(8, haloRadius - 5), 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+    if (popScale !== 1) {
+      this.ctx.translate(x + TILE_SIZE * 0.5, y + TILE_SIZE * 0.5);
+      this.ctx.scale(popScale, popScale);
+      this.ctx.translate(-(x + TILE_SIZE * 0.5), -(y + TILE_SIZE * 0.5));
+    }
+    const sprite = this.assets.powerUps[powerUp.type];
+    if (sprite) {
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(8, 10, 14, 0.66)";
+      this.ctx.beginPath();
+      this.ctx.arc(x + 16, y + 16, 13, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.strokeStyle = "rgba(255, 244, 214, 0.82)";
+      this.ctx.lineWidth = 1.5;
+      this.ctx.stroke();
+      this.ctx.drawImage(sprite, x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+      this.ctx.restore();
+      this.ctx.restore();
+      return;
+    }
+
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+    this.ctx.fillRect(x + 8, y + 8, 16, 16);
+    this.ctx.fillStyle = definition.tint;
+    this.ctx.fillRect(x + 10, y + 10, 12, 12);
+    this.ctx.fillStyle = "#120d06";
+    this.ctx.font = "700 10px Inter";
+    this.ctx.textAlign = "center";
+    this.ctx.fillText(definition.shortLabel, x + 16, y + 19);
+    this.ctx.restore();
+  }
+
+  private drawBomb(bomb: BombState): void {
+    const fuseProgress = 1 - Math.min(1, Math.max(0, bomb.fuseMs) / 3000);
+    const smoothUrgency = fuseProgress * fuseProgress * (3 - 2 * fuseProgress);
+    const pulseIntervalMs = 80 - smoothUrgency * 32;
+    const pulse = 0.6 + 0.4 * Math.sin((bomb.fuseMs / pulseIntervalMs) * Math.PI);
+    const armedScale = 1 + (pulse - 0.6) * 0.1;
+    const x = bomb.tile.x * TILE_SIZE;
+    const y = bomb.tile.y * TILE_SIZE;
+    const kickImpact = this.bombKickImpactFeedback.find((effect) => effect.bombId === bomb.id);
+    if (kickImpact) {
+      const progress = Math.min(1, kickImpact.elapsedMs / KICK_IMPACT_FEEDBACK_MS);
+      this.ctx.save();
+      this.ctx.strokeStyle = `rgba(255, 232, 138, ${0.9 * (1 - progress)})`;
+      this.ctx.lineWidth = 3 - progress * 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(
+        x + TILE_SIZE / 2,
+        y + TILE_SIZE / 2,
+        14 + progress * 8,
+        0,
+        Math.PI * 2,
+      );
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+    const isFinalFuse = bomb.fuseMs <= 450;
+    if (isFinalFuse) {
+      const urgency = 1 - Math.max(0, bomb.fuseMs) / 450;
+      const centerX = x + TILE_SIZE / 2;
+      const centerY = y + TILE_SIZE / 2;
+      const ringRadius = 13 + urgency * 4;
+      const orbitAngle = -Math.PI / 2 + urgency * Math.PI * 2;
+      this.ctx.save();
+      this.ctx.lineCap = "round";
+      this.ctx.lineWidth = 1.5 + urgency * 1.5;
+      for (let segment = 0; segment < 8; segment += 1) {
+        const segmentStart = orbitAngle + segment * (Math.PI / 4);
+        this.ctx.strokeStyle = segment % 2 === 0
+          ? `rgba(255, 72, 38, ${0.58 + urgency * 0.42})`
+          : `rgba(255, 198, 78, ${0.4 + urgency * 0.5})`;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, ringRadius, segmentStart, segmentStart + Math.PI / 7);
+        this.ctx.stroke();
+      }
+      const sparkX = centerX + Math.cos(orbitAngle) * ringRadius;
+      const sparkY = centerY + Math.sin(orbitAngle) * ringRadius;
+      this.ctx.fillStyle = `rgba(255, 244, 184, ${0.78 + urgency * 0.22})`;
+      this.ctx.shadowColor = "rgba(255, 82, 32, 0.92)";
+      this.ctx.shadowBlur = 4 + urgency * 5;
+      this.ctx.beginPath();
+      this.ctx.arc(sparkX, sparkY, 1.8 + urgency * 1.4, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.restore();
+    }
+    if (this.assets.props.bomb) {
+      this.ctx.save();
+      this.ctx.globalAlpha = Math.max(0.7, pulse);
+      this.ctx.translate(x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+      this.ctx.scale(armedScale, armedScale);
+      this.ctx.translate(-TILE_SIZE / 2, -TILE_SIZE / 2);
+      this.ctx.drawImage(this.assets.props.bomb, 0, 0, TILE_SIZE, TILE_SIZE);
+      this.ctx.restore();
+      return;
+    }
+    this.ctx.save();
+    this.ctx.translate(x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+    this.ctx.scale(armedScale, armedScale);
+    this.ctx.fillStyle = `rgba(255, 228, 160, ${Math.max(0.35, pulse)})`;
+    this.ctx.beginPath();
+    this.ctx.arc(0, -8, 4, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.fillStyle = "#241f1a";
+    this.ctx.beginPath();
+    this.ctx.arc(0, 2, 10, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.strokeStyle = "#f2dfba";
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  private drawFlame(flame: FlameState): void {
+    const x = flame.tile.x * TILE_SIZE;
+    const y = flame.tile.y * TILE_SIZE;
+    const alpha = Math.min(1, Math.max(0, flame.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
+    const dissipateScale = 0.9 + alpha * 0.1;
+    const centerX = x + TILE_SIZE * 0.5;
+    const centerY = y + TILE_SIZE * 0.5;
+    if (flame.style === "toxic") {
+      const auraPulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(
+        this.animationClockMs / 110 + flame.tile.x * 0.7 + flame.tile.y * 0.45,
+      ));
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha * (0.34 + auraPulse * 0.18);
+      this.ctx.fillStyle = "rgba(76, 255, 166, 0.34)";
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 15 + auraPulse * 3.5, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.globalAlpha = alpha * (0.56 + auraPulse * 0.22);
+      this.ctx.strokeStyle = "rgba(169, 255, 204, 0.9)";
+      this.ctx.lineWidth = 1 + auraPulse * 0.9;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 16.5 + auraPulse * 3, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+    if (this.assets.props.flame && (!flame.style || flame.style === "normal")) {
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.translate(centerX, centerY);
+      this.ctx.scale(dissipateScale, dissipateScale);
+      this.ctx.translate(-centerX, -centerY);
+      this.ctx.drawImage(this.assets.props.flame, x, y, TILE_SIZE, TILE_SIZE);
+      this.ctx.restore();
+      return;
+    }
+
+    const palette = flame.style === "toxic"
+      ? {
+        outer: `rgba(72, 214, 136, ${alpha})`,
+        inner: `rgba(192, 255, 177, ${alpha})`,
+      }
+      : {
+        outer: `rgba(255, 160, 74, ${alpha})`,
+        inner: `rgba(255, 244, 159, ${alpha})`,
+      };
+
+    this.ctx.save();
+    this.ctx.translate(centerX, centerY);
+    this.ctx.scale(dissipateScale, dissipateScale);
+    this.ctx.translate(-centerX, -centerY);
+    this.ctx.fillStyle = palette.outer;
+    this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+    this.ctx.fillStyle = palette.inner;
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + 16, y + 5);
+    this.ctx.lineTo(x + 26, y + 16);
+    this.ctx.lineTo(x + 16, y + 27);
+    this.ctx.lineTo(x + 6, y + 16);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.restore();
+  }
+
+  private drawMagicBeam(beam: MagicBeamState): void {
+    const originCenter = {
+      x: beam.origin.x * TILE_SIZE + TILE_SIZE * 0.5,
+      y: beam.origin.y * TILE_SIZE + TILE_SIZE * 0.5,
+    };
+    const lastTile = beam.tiles[beam.tiles.length - 1] ?? beam.origin;
+    const endCenter = {
+      x: lastTile.x * TILE_SIZE + TILE_SIZE * 0.5,
+      y: lastTile.y * TILE_SIZE + TILE_SIZE * 0.5,
+    };
+    const progress = Math.max(0, Math.min(1, beam.remainingMs / NICO_BEAM_DURATION_MS));
+    const glowAlpha = 0.24 + progress * 0.32;
+    const coreAlpha = 0.48 + progress * 0.44;
+    const gradient = this.ctx.createLinearGradient(originCenter.x, originCenter.y, endCenter.x, endCenter.y);
+    gradient.addColorStop(0, `rgba(214, 169, 255, ${glowAlpha})`);
+    gradient.addColorStop(0.2, `rgba(171, 82, 255, ${glowAlpha + 0.08})`);
+    gradient.addColorStop(0.7, `rgba(118, 44, 255, ${glowAlpha + 0.1})`);
+    gradient.addColorStop(1, `rgba(234, 185, 255, ${glowAlpha})`);
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.lineCap = "round";
+    this.ctx.lineJoin = "round";
+
+    this.ctx.strokeStyle = `rgba(153, 70, 255, ${glowAlpha * 0.25})`;
+    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX + TILE_SIZE * 0.7;
+    this.ctx.beginPath();
+    this.ctx.moveTo(originCenter.x, originCenter.y);
+    this.ctx.lineTo(endCenter.x, endCenter.y);
+    this.ctx.stroke();
+
+    this.ctx.strokeStyle = gradient;
+    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX;
+    this.ctx.beginPath();
+    this.ctx.moveTo(originCenter.x, originCenter.y);
+    this.ctx.lineTo(endCenter.x, endCenter.y);
+    this.ctx.stroke();
+
+    this.ctx.strokeStyle = `rgba(255, 241, 255, ${coreAlpha})`;
+    this.ctx.lineWidth = NICO_BEAM_CORE_WIDTH_PX;
+    this.ctx.beginPath();
+    this.ctx.moveTo(originCenter.x, originCenter.y);
+    this.ctx.lineTo(endCenter.x, endCenter.y);
+    this.ctx.stroke();
+
+    for (const tile of beam.tiles) {
+      const x = tile.x * TILE_SIZE;
+      const y = tile.y * TILE_SIZE;
+      this.ctx.fillStyle = `rgba(153, 58, 255, ${0.12 + progress * 0.14})`;
+      this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+      this.ctx.strokeStyle = `rgba(245, 219, 255, ${0.18 + progress * 0.2})`;
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9);
+    }
+
+    const orbRadius = TILE_SIZE * (0.18 + (1 - progress) * 0.08);
+    this.ctx.fillStyle = `rgba(245, 230, 255, ${0.5 + progress * 0.25})`;
+    this.ctx.beginPath();
+    this.ctx.arc(originCenter.x, originCenter.y, orbRadius, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.fillStyle = `rgba(128, 36, 255, ${0.26 + progress * 0.2})`;
+    this.ctx.beginPath();
+    this.ctx.arc(originCenter.x, originCenter.y, TILE_SIZE * 0.42, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+  }
+
+  private drawPlayerSkillPreview(player: PlayerState): void {
+    if (!player.active || !player.alive || player.skill.phase !== "channeling") {
+      return;
+    }
+    if (player.skill.id === "nico-arcane-beam") {
+      this.drawNicoBeamPreview(player);
+      return;
+    }
+    if (player.skill.id === "crocodilo-emerald-surge") {
+      this.drawCrocodiloSurgePreview(player);
+    }
+  }
+
+  private drawNicoBeamPreview(player: PlayerState): void {
+    const direction = player.skill.projectedLastMoveDirection ?? player.lastMoveDirection ?? player.direction;
+    const origin = this.getTileFromPosition(player.position);
+    const tiles = collectNicoBeamTiles(
+      origin,
+      direction,
+      this.arena.solid,
+      this.arena.config.grid,
+    );
+    if (tiles.length === 0) {
+      return;
+    }
+    const lastTile = tiles[tiles.length - 1];
+    const originCenter = {
+      x: origin.x * TILE_SIZE + TILE_SIZE * 0.5,
+      y: origin.y * TILE_SIZE + TILE_SIZE * 0.5,
+    };
+    const endCenter = {
+      x: lastTile.x * TILE_SIZE + TILE_SIZE * 0.5,
+      y: lastTile.y * TILE_SIZE + TILE_SIZE * 0.5,
+    };
+    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / NICO_SKILL_CHANNEL_MS));
+    const pulse = 0.55 + Math.sin(this.animationClockMs / 90) * 0.18;
+    const tileAlpha = 0.05 + chargeProgress * 0.1 + pulse * 0.03;
+    const lineAlpha = 0.12 + chargeProgress * 0.18;
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.setLineDash([6, 6]);
+    this.ctx.lineCap = "round";
+    this.ctx.lineJoin = "round";
+    this.ctx.strokeStyle = `rgba(197, 132, 255, ${lineAlpha})`;
+    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX * 0.66;
+    this.ctx.beginPath();
+    this.ctx.moveTo(originCenter.x, originCenter.y);
+    this.ctx.lineTo(endCenter.x, endCenter.y);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+
+    for (const tile of tiles) {
+      const x = tile.x * TILE_SIZE;
+      const y = tile.y * TILE_SIZE;
+      this.ctx.fillStyle = `rgba(145, 52, 255, ${tileAlpha})`;
+      this.ctx.fillRect(x + 5, y + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+      this.ctx.strokeStyle = `rgba(245, 226, 255, ${lineAlpha * 0.85})`;
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(x + 5.5, y + 5.5, TILE_SIZE - 11, TILE_SIZE - 11);
+    }
+
+    this.ctx.fillStyle = `rgba(245, 235, 255, ${0.18 + chargeProgress * 0.18})`;
+    this.ctx.beginPath();
+    this.ctx.arc(originCenter.x, originCenter.y, TILE_SIZE * (0.2 + chargeProgress * 0.08), 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+  }
+
+  private drawCrocodiloSurgePreview(player: PlayerState): void {
+    const origin = this.getTileFromPosition(player.position);
+    const tiles = computeCrocodiloSurgeTiles(origin, this.createSkillContext());
+    if (tiles.length === 0) {
+      return;
+    }
+    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / CROCODILO_SKILL_CHANNEL_MS));
+    const pulse = 0.52 + Math.sin(this.animationClockMs / 100) * 0.16;
+    const centerX = origin.x * TILE_SIZE + TILE_SIZE * 0.5;
+    const centerY = origin.y * TILE_SIZE + TILE_SIZE * 0.5;
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.strokeStyle = `rgba(176, 255, 122, ${0.18 + chargeProgress * 0.24})`;
+    this.ctx.lineWidth = 2;
+
+    for (const tile of tiles) {
+      const x = tile.x * TILE_SIZE;
+      const y = tile.y * TILE_SIZE;
+      const tileCenterX = x + TILE_SIZE * 0.5;
+      const tileCenterY = y + TILE_SIZE * 0.5;
+      this.ctx.fillStyle = `rgba(86, 214, 95, ${0.07 + chargeProgress * 0.1 + pulse * 0.03})`;
+      this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+      this.ctx.strokeStyle = `rgba(221, 255, 192, ${0.12 + chargeProgress * 0.18})`;
+      this.ctx.strokeRect(x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9);
+      this.ctx.beginPath();
+      this.ctx.moveTo(centerX, centerY);
+      this.ctx.lineTo(tileCenterX, tileCenterY);
+      this.ctx.stroke();
+    }
+
+    this.ctx.fillStyle = `rgba(122, 255, 107, ${0.12 + chargeProgress * 0.15})`;
+    this.ctx.beginPath();
+    this.ctx.arc(centerX, centerY, TILE_SIZE * (0.34 + chargeProgress * 0.08), 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.strokeStyle = `rgba(232, 255, 196, ${0.18 + chargeProgress * 0.16})`;
+    this.ctx.beginPath();
+    this.ctx.arc(centerX, centerY, TILE_SIZE * (0.42 + pulse * 0.03), 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  private isSpeedSparkTrailActive(player: PlayerState, moving: boolean): boolean {
+    if (!player.active || !player.alive || !moving) {
+      return false;
+    }
+    return player.speedLevel > 0
+      || (player.perfectStartBoostMs ?? 0) > 0
+      || (player.breakawayBoostMs ?? 0) > 0
+      || (player.pickupSprintMs ?? 0) > 0
+      || this.hasDangerAdrenalineStep(player);
+  }
+
+  private getSpeedSparkTrailAlpha(player: PlayerState): number {
+    const hasTimedBoost = (player.perfectStartBoostMs ?? 0) > 0
+      || (player.breakawayBoostMs ?? 0) > 0
+      || (player.pickupSprintMs ?? 0) > 0
+      || this.hasDangerAdrenalineStep(player);
+    const baseAlpha = hasTimedBoost ? SPEED_SPARK_TRAIL_ACTIVE_ALPHA : SPEED_SPARK_TRAIL_PASSIVE_ALPHA;
+    return Math.max(0.32, Math.min(0.86, baseAlpha + Math.sin(this.animationClockMs / 90) * 0.06));
+  }
+
+  private drawSpeedSparkTrail(
+    player: PlayerState,
+    x: number,
+    y: number,
+    renderDirection: Direction,
+  ): void {
+    const sprite = this.assets.effects?.speedSparkTrail;
+    if (!sprite) {
+      return;
+    }
+
+    const direction = player.lastMoveDirection ?? renderDirection;
+    const delta = directionDelta[direction];
+    const angle: Record<Direction, number> = {
+      right: 0,
+      down: Math.PI / 2,
+      left: Math.PI,
+      up: -Math.PI / 2,
+    };
+    const trailWidth = TILE_SIZE * 1.36;
+    const trailHeight = TILE_SIZE * 0.94;
+    const centerX = x + TILE_SIZE * 0.5 - delta.x * TILE_SIZE * 0.24;
+    const centerY = y + TILE_SIZE * 0.58 - delta.y * TILE_SIZE * 0.24;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = this.getSpeedSparkTrailAlpha(player);
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.translate(centerX, centerY);
+    this.ctx.rotate(angle[direction]);
+    this.ctx.drawImage(sprite, -trailWidth * 0.74, -trailHeight * 0.5, trailWidth, trailHeight);
+    this.ctx.restore();
+  }
+
+  private drawPlayer(player: PlayerState): void {
+    const existingDeathState = this.playerDeathAnimations[player.id];
+    if (!player.active && !existingDeathState) {
+      return;
+    }
+    const deathState = this.ensurePlayerDeathAnimationState(player);
+    if (!player.active && player.alive) {
+      return;
+    }
+    const position = this.getPlayerPixelPosition(player);
+    const palette = PLAYER_COLORS[player.id];
+    const x = position.x;
+    const y = position.y;
+    const renderDirection = deathState?.direction ?? player.direction;
+    const alpha = player.alive ? 1 : (deathState ? 1 : 0.35);
+    const activeCharacter = this.getActiveCharacterEntry(player.id);
+    const baseSprites = this.getPlayerSprites(player.id);
+    this.drawRoundWinnerHalo(player, x, y);
+    const idleFrames = baseSprites.idle?.[renderDirection] ?? [];
+    const walkFrames = baseSprites.walk?.[renderDirection] ?? [];
+    const runFrames = baseSprites.run?.[renderDirection] ?? [];
+    const attackFrames = baseSprites.attack?.[renderDirection] ?? [];
+    const castFrames = this.getAnimationFramesForDirection(baseSprites.cast, renderDirection);
+    const deathFrames = this.getAnimationFramesForDirection(baseSprites.death, renderDirection);
+    const prefersRunMovement = activeCharacter.animations?.walk === false && activeCharacter.animations?.run !== false;
+    const movementFrames = prefersRunMovement
+      ? (runFrames.length > 0 ? runFrames : walkFrames)
+      : (walkFrames.length > 0 ? walkFrames : runFrames);
+    const moving = Math.abs(player.velocity.x) > 0.02 || Math.abs(player.velocity.y) > 0.02;
+    const deathElapsedMs = deathState
+      ? Math.max(0, this.animationClockMs - deathState.startedAtMs)
+      : 0;
+    const deathSprite = !player.alive
+      ? pickAnimationFrame(deathFrames, deathElapsedMs, DEATH_FRAME_MS, "hold")
+      : null;
+    const skillAnimation = this.getActiveSkillAnimationFrames(
+      player,
+      renderDirection,
+      castFrames,
+      runFrames,
+      attackFrames,
+    );
+    const castSprite = skillAnimation
+      ? pickAnimationFrame(
+          skillAnimation.frames,
+          player.skill.castElapsedMs,
+          skillAnimation.frameMs,
+          skillAnimation.playback,
+        )
+      : null;
+    const movementSprite = moving
+      ? pickAnimationFrame(movementFrames, this.animationClockMs, WALK_FRAME_MS, "loop")
+      : pickAnimationFrame(idleFrames, this.animationClockMs, WALK_FRAME_MS, "loop");
+    let sprite = deathSprite ?? castSprite ?? movementSprite ?? spriteForDirection(baseSprites, renderDirection);
+    if (!sprite || !this.getSpriteTrimBounds(sprite)) {
+      sprite = this.getRenderableSprite(baseSprites, renderDirection);
+    }
+
+    if (this.isSpeedSparkTrailActive(player, moving)) {
+      this.drawSpeedSparkTrail(player, x, y, renderDirection);
+    }
+
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
+    this.ctx.fillStyle = "rgba(10, 8, 7, 0.32)";
+    this.ctx.beginPath();
+    this.ctx.ellipse(x + TILE_SIZE * 0.5, y + TILE_SIZE - 2, TILE_SIZE * 0.4, TILE_SIZE * 0.18, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+
+    if (sprite) {
+      const fullWidth = sprite.naturalWidth || sprite.width || 1;
+      const fullHeight = sprite.naturalHeight || sprite.height || 1;
+      const trimmedBounds = this.getSpriteTrimBounds(sprite);
+      const srcX = trimmedBounds?.x ?? 0;
+      const srcY = trimmedBounds?.y ?? 0;
+      const srcWidth = trimmedBounds?.width ?? fullWidth;
+      const srcHeight = trimmedBounds?.height ?? fullHeight;
+      const spriteHeight = TILE_SIZE * PLAYER_SPRITE_HEIGHT_SCALE;
+      const maxSpriteWidth = TILE_SIZE * PLAYER_SPRITE_MAX_WIDTH_SCALE;
+      const spriteWidth = Math.min(maxSpriteWidth, spriteHeight * (srcWidth / srcHeight));
+      const spriteX = x + TILE_SIZE * 0.5 - spriteWidth * 0.5;
+      const spriteY = y + TILE_SIZE - spriteHeight + 1;
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.drawImage(
+        sprite,
+        srcX,
+        srcY,
+        srcWidth,
+        srcHeight,
+        spriteX,
+        spriteY,
+        spriteWidth,
+        spriteHeight,
+      );
+      this.ctx.restore();
+      return;
+    }
+
+    this.ctx.fillStyle = "#15120f";
+    this.ctx.fillRect(x + 6, y + 3, TILE_SIZE - 12, TILE_SIZE - 4);
+    this.ctx.fillStyle = player.alive ? palette.primary : "#8f8372";
+    this.ctx.globalAlpha = alpha;
+    this.ctx.fillRect(x + 7, y + 4, TILE_SIZE - 14, TILE_SIZE - 6);
+    this.ctx.fillStyle = player.alive ? palette.secondary : "#5e554b";
+    this.ctx.fillRect(x + 8, y + 8, TILE_SIZE - 16, TILE_SIZE - 13);
+    this.ctx.fillStyle = "#f4ead8";
+
+    if (renderDirection === "up") {
+      this.ctx.fillRect(x + 12, y + 10, 4, 4);
+      this.ctx.fillRect(x + 16, y + 10, 4, 4);
+    } else if (renderDirection === "down") {
+      this.ctx.fillRect(x + 12, y + 16, 4, 4);
+      this.ctx.fillRect(x + 16, y + 16, 4, 4);
+    } else if (renderDirection === "left") {
+      this.ctx.fillRect(x + 10, y + 14, 4, 4);
+      this.ctx.fillRect(x + 10, y + 18, 4, 4);
+    } else {
+      this.ctx.fillRect(x + 18, y + 14, 4, 4);
+      this.ctx.fillRect(x + 18, y + 18, 4, 4);
+    }
+
+    this.ctx.globalAlpha = 1;
+  }
+
+  private drawRoundWinnerHalo(player: PlayerState, x: number, y: number): void {
+    if (this.roundOutcome?.winner !== player.id) {
+      return;
+    }
+    this.ctx.fillStyle = CANVAS_UI_GOLD;
+    this.ctx.fillRect(x + 4, y - 3, TILE_SIZE - 8, 3);
+    this.ctx.fillRect(x + 1, y, 3, TILE_SIZE - 8);
+    this.ctx.fillRect(x + TILE_SIZE - 4, y, 3, TILE_SIZE - 8);
+    this.ctx.fillStyle = CANVAS_UI_GOLD_BRIGHT;
+    this.ctx.fillRect(x + 7, y - 6, TILE_SIZE - 14, 3);
+    this.ctx.fillRect(x + 4, y + TILE_SIZE - 8, TILE_SIZE - 8, 3);
+  }
+
+  private getActiveSkillAnimationFrames(
+    player: PlayerState,
+    renderDirection: Direction,
+    castFrames: HTMLImageElement[],
+    runFrames: HTMLImageElement[],
+    attackFrames: HTMLImageElement[],
+  ): { frames: HTMLImageElement[]; frameMs: number; playback: "loop" | "hold" } | null {
+    if (player.skill.id === "nico-arcane-beam") {
+      const exactCastFrames = this.getAnimationFramesForDirection(
+        this.getPlayerSprites(player.id).cast,
+        renderDirection,
+      );
+      const walkFrames = this.getAnimationFramesForDirection(
+        this.getPlayerSprites(player.id).walk,
+        renderDirection,
+      );
+      const idleFrames = this.getAnimationFramesForDirection(
+        this.getPlayerSprites(player.id).idle,
+        renderDirection,
+      );
+      const fallbackFrames = walkFrames.length > 0
+        ? walkFrames
+        : (idleFrames.length > 0 ? idleFrames : runFrames);
+      if (player.skill.phase === "channeling") {
+        const frames = exactCastFrames.length >= 3
+          ? exactCastFrames.slice(0, exactCastFrames.length - 1)
+          : (exactCastFrames.length > 0 ? exactCastFrames : fallbackFrames);
+        if (frames.length === 0) {
+          return null;
+        }
+        return {
+          frames,
+          frameMs: Math.max(SKILL_FRAME_MS, Math.floor(NICO_SKILL_CHANNEL_MS / Math.max(1, frames.length))),
+          playback: "hold",
+        };
+      }
+      if (player.skill.phase === "releasing") {
+        const frames = exactCastFrames.length >= 2
+          ? exactCastFrames.slice(Math.max(0, exactCastFrames.length - 2))
+          : (exactCastFrames.length > 0 ? exactCastFrames : fallbackFrames);
+        if (frames.length === 0) {
+          return null;
+        }
+        return {
+          frames,
+          frameMs: Math.max(60, Math.floor(NICO_SKILL_RELEASE_MS / Math.max(1, frames.length))),
+          playback: "hold",
+        };
+      }
+      return null;
+    }
+    if (player.skill.id === "crocodilo-emerald-surge") {
+      const exactCastFrames = this.getAnimationFramesForDirection(
+        this.getPlayerSprites(player.id).cast,
+        renderDirection,
+      );
+      const idleFrames = this.getAnimationFramesForDirection(
+        this.getPlayerSprites(player.id).idle,
+        renderDirection,
+      );
+      const fallbackFrames = exactCastFrames.length > 0
+        ? exactCastFrames
+        : (attackFrames.length > 0
+          ? attackFrames
+          : (runFrames.length > 0 ? runFrames : idleFrames));
+      if (player.skill.phase === "channeling") {
+        const frames = exactCastFrames.length >= 3
+          ? exactCastFrames.slice(0, exactCastFrames.length - 1)
+          : fallbackFrames;
+        if (frames.length === 0) {
+          return null;
+        }
+        return {
+          frames,
+          frameMs: Math.max(SKILL_FRAME_MS, Math.floor(CROCODILO_SKILL_CHANNEL_MS / Math.max(1, frames.length))),
+          playback: "hold",
+        };
+      }
+      if (player.skill.phase === "releasing") {
+        const frames = exactCastFrames.length >= 2
+          ? exactCastFrames.slice(Math.max(0, exactCastFrames.length - 2))
+          : fallbackFrames;
+        if (frames.length === 0) {
+          return null;
+        }
+        return {
+          frames,
+          frameMs: Math.max(60, Math.floor(CROCODILO_SKILL_RELEASE_MS / Math.max(1, frames.length))),
+          playback: "hold",
+        };
+      }
+      return null;
+    }
+    if (player.skill.phase !== "channeling") {
+      return null;
+    }
+    if (player.skill.id === "ranni-ice-blink" && castFrames.length > 0) {
+      return {
+        frames: castFrames,
+        frameMs: SKILL_FRAME_MS,
+        playback: "hold",
+      };
+    }
+    if (player.skill.id === "killer-bee-wing-dash") {
+      const exactCastFrames = this.getPlayerSprites(player.id).cast?.[renderDirection] ?? [];
+      const frames = exactCastFrames.length > 0
+        ? exactCastFrames
+        : (runFrames.length > 0 ? runFrames : attackFrames);
+      if (frames.length === 0) {
+        return null;
+      }
+      return {
+        frames,
+        frameMs: KILLER_BEE_DASH_FRAME_MS,
+        playback: "loop",
+      };
+    }
+    return null;
+  }
+
+  private ensurePlayerDeathAnimationState(player: PlayerState): PlayerDeathAnimationState | null {
+    if (player.alive) {
+      this.playerDeathAnimations[player.id] = null;
+      return null;
+    }
+    const existing = this.playerDeathAnimations[player.id];
+    if (existing) {
+      return existing;
+    }
+    const created: PlayerDeathAnimationState = {
+      startedAtMs: this.animationClockMs,
+      direction: player.lastMoveDirection ?? player.direction,
+    };
+    this.playerDeathAnimations[player.id] = created;
+    return created;
+  }
+
+  private getSpriteTrimBounds(
+    sprite: HTMLImageElement,
+  ): SpriteTrimBounds | null {
+    return this.spriteTrimCache.getBounds(sprite);
+  }
+
+  private getAnimationFramesForDirection(
+    cycle: Record<Direction, HTMLImageElement[]> | undefined,
+    preferredDirection: Direction,
+  ): HTMLImageElement[] {
+    if (!cycle) {
+      return [];
+    }
+    const preferred = cycle[preferredDirection] ?? [];
+    if (preferred.length > 0) {
+      return preferred;
+    }
+    const fallbackOrder: Direction[] = [
+      "down",
+      "right",
+      "left",
+      "up",
+    ];
+    for (const direction of fallbackOrder) {
+      if (direction === preferredDirection) {
+        continue;
+      }
+      const frames = cycle[direction] ?? [];
+      if (frames.length > 0) {
+        return frames;
+      }
+    }
+    return [];
+  }
+
+  private getRenderableSprite(
+    sprites: DirectionalSprites,
+    preferredDirection: Direction,
+  ): HTMLImageElement | null {
+    const directionOrder: Direction[] = [
+      preferredDirection,
+      "right",
+      "left",
+      "down",
+      "up",
+    ];
+    const seen = new Set<Direction>();
+    for (const direction of directionOrder) {
+      if (seen.has(direction)) {
+        continue;
+      }
+      seen.add(direction);
+      const sprite = spriteForDirection(sprites, direction);
+      if (!sprite) {
+        continue;
+      }
+      if (this.getSpriteTrimBounds(sprite)) {
+        return sprite;
+      }
+    }
+    return null;
+  }
+
+  private renderMatchOverlay(): void {
+    const overlay = this.getCenterOverlayState();
+    if (overlay) {
+      this.drawCenterOverlay(overlay.title, overlay.subtitle, overlay.footer, overlay.victoryEmblem, overlay.stalemateEmblem);
+    }
+  }
+
+  private syncRoundStartCue(
+    previousMode: Mode,
+    previousRoundNumber: number,
+    previousRoundOutcome: RoundOutcome | null,
+    nextMode: Mode,
+    nextRoundNumber: number,
+    nextRoundOutcome: RoundOutcome | null,
+  ): void {
+    if (nextMode !== "match" || nextRoundOutcome) {
+      this.roundStartCueMs = 0;
+      return;
+    }
+    if (previousMode !== "match" || previousRoundNumber !== nextRoundNumber || previousRoundOutcome) {
+      this.roundStartCueMs = ROUND_START_CUE_MS;
+    }
+  }
+
+  private updateRoundStartCue(deltaMs: number): void {
+    if (this.roundStartCueMs <= 0 || this.paused || this.roundOutcome) {
+      return;
+    }
+    this.roundStartCueMs = Math.max(0, this.roundStartCueMs - deltaMs);
+  }
+
+  private drawHudText(text: string, x: number, y: number, fillColor: string, outlineColor: string): void {
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = outlineColor;
+    this.ctx.strokeText(text, x, y);
+    this.ctx.fillStyle = fillColor;
+    this.ctx.fillText(text, x, y);
+  }
+
+  private getSuddenDeathHudState(): { label: string; progress: number; active: boolean } {
+    if (this.suddenDeathActive) {
+      return {
+        label: "SUDDEN DEATH",
+        progress: 1,
+        active: true,
+      };
+    }
+
+    const remainingMs = Math.max(0, this.roundTimeMs - SUDDEN_DEATH_START_MS);
+    const progress = SUDDEN_DEATH_ELAPSED_MS > 0
+      ? 1 - (remainingMs / SUDDEN_DEATH_ELAPSED_MS)
+      : 1;
+
+    return {
+      label: `SD ${Math.ceil(remainingMs / 1000)}s`,
+      progress: Math.max(0, Math.min(1, progress)),
+      active: false,
+    };
+  }
+
+  private drawSuddenDeathMeter(x: number, y: number, width: number, progress: number, active: boolean): void {
+    const meterWidth = Math.max(24, Math.round(width));
+    const meterHeight = active ? 6 : 5;
+    const clampedProgress = Math.max(0, Math.min(1, progress));
+    const fillWidth = Math.max(2, Math.round((meterWidth - 2) * clampedProgress));
+    const pulse = active
+      ? 0.55 + (Math.sin((this.roundTimeMs + this.suddenDeathTickMs) / 120) + 1) * 0.225
+      : 0.28 + clampedProgress * 0.42;
+
+    this.ctx.save();
+    this.ctx.fillStyle = active
+      ? `rgba(255, 95, 87, ${0.1 + pulse * 0.12})`
+      : `rgba(0, 229, 160, ${0.05 + clampedProgress * 0.08})`;
+    this.ctx.fillRect(x - 1, y - 1, meterWidth + 2, meterHeight + 2);
+
+    const baseGradient = this.ctx.createLinearGradient(x, y, x, y + meterHeight);
+    if (active) {
+      baseGradient.addColorStop(0, "rgba(44, 12, 16, 0.96)");
+      baseGradient.addColorStop(1, "rgba(16, 6, 8, 0.96)");
+    } else {
+      baseGradient.addColorStop(0, "rgba(15, 12, 10, 0.94)");
+      baseGradient.addColorStop(1, "rgba(7, 6, 9, 0.94)");
+    }
+    this.ctx.fillStyle = baseGradient;
+    this.ctx.fillRect(x, y, meterWidth, meterHeight);
+
+    this.ctx.globalAlpha = active ? 0.28 + pulse * 0.2 : 0.18 + clampedProgress * 0.12;
+    this.ctx.fillStyle = active ? "rgba(255, 210, 204, 0.34)" : "rgba(174, 255, 233, 0.26)";
+    for (let offset = 2; offset < meterWidth - 2; offset += 6) {
+      this.ctx.fillRect(x + offset, y + 1, 2, meterHeight - 2);
+    }
+    this.ctx.globalAlpha = 1;
+
+    const fillGradient = this.ctx.createLinearGradient(x, y, x + fillWidth, y);
+    if (active) {
+      fillGradient.addColorStop(0, "rgba(255, 208, 203, 0.98)");
+      fillGradient.addColorStop(0.58, "rgba(255, 95, 87, 0.98)");
+      fillGradient.addColorStop(1, "rgba(189, 31, 55, 0.98)");
+    } else {
+      fillGradient.addColorStop(0, "rgba(95, 255, 200, 0.96)");
+      fillGradient.addColorStop(0.6, "rgba(0, 229, 160, 0.96)");
+      fillGradient.addColorStop(1, "rgba(0, 161, 122, 0.96)");
+    }
+    this.ctx.fillStyle = fillGradient;
+    this.ctx.fillRect(x + 1, y + 1, fillWidth, meterHeight - 2);
+
+    if (fillWidth > 2) {
+      this.ctx.fillStyle = active ? "rgba(255, 255, 255, 0.26)" : "rgba(255, 255, 255, 0.22)";
+      this.ctx.fillRect(x + fillWidth - 1, y + 1, 1, meterHeight - 2);
+    }
+
+    this.ctx.strokeStyle = active ? `rgba(255, 95, 87, ${0.6 + pulse * 0.2})` : "rgba(0, 229, 160, 0.58)";
+    this.ctx.strokeRect(x + 0.5, y + 0.5, meterWidth - 1, meterHeight - 1);
+    this.ctx.restore();
+  }
+
+  private renderMatchResult(): void {
+    const overlay = this.getCenterOverlayState();
+    if (overlay) {
+      this.drawCenterOverlay(overlay.title, overlay.subtitle, overlay.footer, overlay.victoryEmblem, overlay.stalemateEmblem);
+    }
+  }
+
+  private getCenterOverlayState(): CenterOverlayState | null {
+    const copy = SITE_COPY[this.language].canvas;
+    if (this.mode === "match" && this.paused) {
+      return {
+        title: copy.pausedTitle,
+        subtitle: copy.pausedSubtitle,
+        footer: copy.roundStartSubtitle,
+        victoryEmblem: false,
+        stalemateEmblem: false,
+      };
+    }
+
+    if (this.mode === "match" && this.roundOutcome) {
+      const title = this.roundOutcome.reason === "elimination" && this.roundOutcome.winner
+        ? copy.roundWinner(this.players[this.roundOutcome.winner].name)
+        : this.roundOutcome.reason === "double-ko"
+          ? copy.doubleKoTitle
+          : copy.timeoutTitle;
+      const subtitle = this.roundOutcome.reason === "elimination"
+        ? copy.arenaRebooting
+        : this.roundOutcome.reason === "double-ko"
+          ? copy.doubleKo
+          : copy.noPoints;
+      const seconds = this.getRoundedCountdownSeconds(this.roundOutcome.countdownMs);
+      const nextAction = this.onlineRoomMode !== "endless" && this.hasMatchWinnerScore()
+        ? copy.matchResultCue(seconds)
+        : copy.nextRoundCue(seconds);
+      return {
+        title,
+        subtitle,
+        footer: `${copy.scoreSummary(this.formatActiveScore())} | ${nextAction}`,
+        victoryEmblem: this.roundOutcome.winner !== null,
+        stalemateEmblem: this.roundOutcome.winner === null,
+      };
+    }
+
+    if (this.mode === "match" && this.roundStartCueMs > 0) {
+      return {
+        title: copy.roundStartTitle(this.roundNumber),
+        subtitle: copy.roundStartSubtitle,
+        footer: copy.scoreSummary(this.formatActiveScore()),
+        victoryEmblem: false,
+        stalemateEmblem: false,
+      };
+    }
+
+    if (this.mode === "match-result") {
+      const scoreSummary = copy.scoreSummary(this.formatActiveScore());
+      return {
+        title: this.matchWinner ? copy.matchWinner(this.players[this.matchWinner].name) : copy.matchComplete,
+        subtitle: this.onlineSession ? copy.rematchSummary : copy.localResultActions,
+        footer: scoreSummary,
+        victoryEmblem: this.matchWinner !== null,
+        stalemateEmblem: this.matchWinner === null,
+      };
+    }
+
+    return null;
+  }
+
+  private drawCenterOverlay(
+    title: string,
+    subtitle: string,
+    footer: string | null = null,
+    showVictoryEmblem = false,
+    showStalemateEmblem = false,
+  ): void {
+    const victoryEmblem = showVictoryEmblem ? this.assets.ui?.victoryEmblem : null;
+    const stalemateEmblem = showStalemateEmblem ? this.assets.ui?.stalemateEmblem : null;
+    const overlayEmblem = victoryEmblem ?? stalemateEmblem;
+    const textCenterX = overlayEmblem ? CANVAS_WIDTH / 2 + 48 : CANVAS_WIDTH / 2;
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+    this.ctx.fillRect(40, 164, CANVAS_WIDTH - 80, 120);
+    this.ctx.strokeStyle = CANVAS_UI_BORDER_STRONG;
+    this.ctx.strokeRect(40, 164, CANVAS_WIDTH - 80, 120);
+    this.drawCenterOverlayTelemetryFrame(showVictoryEmblem, showStalemateEmblem);
+    if (victoryEmblem) {
+      this.ctx.drawImage(victoryEmblem, 67, 176, 55, 78);
+    } else if (stalemateEmblem) {
+      this.ctx.drawImage(stalemateEmblem, 67, 176, 55, 78);
+    }
+    this.ctx.textAlign = "center";
+    this.ctx.fillStyle = CANVAS_UI_TEXT;
+    this.ctx.font = "700 22px Playfair Display";
+    this.ctx.fillText(title, textCenterX, 214);
+    this.ctx.fillStyle = CANVAS_UI_MUTED;
+    this.ctx.font = "600 13px Inter";
+    this.ctx.fillText(subtitle, textCenterX, 248);
+    if (footer) {
+      this.ctx.fillStyle = CANVAS_UI_GOLD;
+      this.ctx.font = "700 10px Inter";
+      this.ctx.fillText(footer, textCenterX, 270);
+    }
+  }
+
+  private drawCenterOverlayTelemetryFrame(showVictoryEmblem: boolean, showStalemateEmblem: boolean): void {
+    const accent = showVictoryEmblem
+      ? CANVAS_UI_SUCCESS
+      : showStalemateEmblem
+        ? CANVAS_UI_DANGER
+        : CANVAS_UI_GOLD;
+    const railX = 56;
+    const railWidth = CANVAS_WIDTH - 112;
+    const segmentCount = 8;
+    const segmentGap = 4;
+    const segmentWidth = Math.floor((railWidth - (segmentCount - 1) * segmentGap) / segmentCount);
+
+    this.ctx.save();
+    this.ctx.fillStyle = accent;
+    this.ctx.globalAlpha = showVictoryEmblem || showStalemateEmblem ? 0.9 : 0.45;
+    this.ctx.fillRect(48, 170, CANVAS_WIDTH - 96, 2);
+    this.ctx.fillRect(48, 276, CANVAS_WIDTH - 96, 2);
+
+    this.ctx.globalAlpha = showVictoryEmblem ? 0.95 : showStalemateEmblem ? 0.62 : 0.26;
+    for (let index = 0; index < segmentCount; index += 1) {
+      const segmentX = railX + index * (segmentWidth + segmentGap);
+      this.ctx.fillRect(segmentX, 278, segmentWidth, 2);
+    }
+
+    this.ctx.globalAlpha = 0.76;
+    this.ctx.fillRect(40, 164, 12, 2);
+    this.ctx.fillRect(40, 164, 2, 12);
+    this.ctx.fillRect(CANVAS_WIDTH - 52, 164, 12, 2);
+    this.ctx.fillRect(CANVAS_WIDTH - 42, 164, 2, 12);
+    this.ctx.fillRect(40, 282, 12, 2);
+    this.ctx.fillRect(40, 272, 2, 12);
+    this.ctx.fillRect(CANVAS_WIDTH - 52, 282, 12, 2);
+    this.ctx.fillRect(CANVAS_WIDTH - 42, 272, 2, 12);
+    this.ctx.restore();
+  }
+
+  private renderGameToText(): string {
+    const visibleBreakables = Array.from(this.arena.breakable)
+      .slice(0, 24)
+      .map((key) => {
+        const [x, y] = key.split(",");
+        return { x: Number(x), y: Number(y) };
+      });
+
+    const dangerOverlayTiles = this.showDangerOverlay
+      ? this.getDangerOverlayTiles().slice(0, 48)
+      : [];
+    const previewPlayerId = this.getBombPreviewPlayerId();
+    const bombPreviewTiles = this.showBombPreview
+      ? this.getBombPreviewTiles(previewPlayerId).slice(0, 48)
+      : [];
+    const crateBreakEffects = this.crateBreakAnimations
+      .slice(0, 24)
+      .map((effect) => ({
+        tile: { ...effect.tile },
+        elapsedMs: Math.round(effect.elapsedMs),
+      }));
+    const screenShakeOffset = this.getScreenShakeOffset();
+    const suddenDeathHud = this.getSuddenDeathHudState();
+    const centerOverlay = this.getCenterOverlayState();
+    const copy = SITE_COPY[this.language].canvas;
+
+    const payload = {
+      mode: this.mode,
+      match: {
+        round: this.roundNumber,
+        score: this.score,
+        remainingMs: Math.round(this.roundTimeMs),
+        paused: this.paused,
+        autoPausedForHiddenTab: this.autoPausedForHiddenTab,
+        menuReady: this.menuReady,
+        matchResultChoice: this.matchResultChoice,
+        botEnabled: this.botEnabled,
+        localBotFill: this.localBotFill,
+        activePlayerIds: this.activePlayerIds,
+        characterMenuOpen: this.characterMenuOpen,
+        centerOverlay,
+        roundStartCue: {
+          active: this.roundStartCueMs > 0,
+          remainingMs: Math.round(this.roundStartCueMs),
+          title: copy.roundStartTitle(this.roundNumber),
+          subtitle: copy.roundStartSubtitle,
+        },
+        suddenDeath: {
+          active: this.suddenDeathActive,
+          startsAtMs: SUDDEN_DEATH_START_MS,
+          tickMs: Math.max(0, Math.round(this.suddenDeathTickMs)),
+          progress: this.suddenDeathPath.length > 0
+            ? Math.round((this.suddenDeathIndex / this.suddenDeathPath.length) * 1000) / 10
+            : 0,
+          warningLabel: suddenDeathHud.label,
+          warningProgress: Math.round(suddenDeathHud.progress * 1000) / 10,
+          closedTiles: Array.from(this.suddenDeathClosedTiles)
+            .slice(0, 48)
+            .map((key) => this.parseTileKey(key)),
+          closingTiles: this.suddenDeathClosureEffects.map((effect) => ({
+            tile: { ...effect.tile },
+            elapsedMs: Math.round(effect.elapsedMs),
+            impacted: effect.impacted,
+          })),
+        },
+        dangerOverlay: {
+          enabled: this.showDangerOverlay,
+          maxEtaMs: DANGER_OVERLAY_MAX_ETA_MS,
+          tiles: dangerOverlayTiles,
+        },
+        bombPreview: {
+          enabled: this.showBombPreview,
+          playerId: previewPlayerId,
+          flameRange: this.players[previewPlayerId].flameRange,
+          tiles: bombPreviewTiles,
+        },
+        automationSelectedPlayer: this.automationMode ? this.automationControlledPlayer : null,
+        roundOutcome: this.roundOutcome ? {
+          winner: this.roundOutcome.winner,
+          reason: this.roundOutcome.reason,
+          message: this.roundOutcome.message,
+        } : null,
+        returnBrief: this.getLocalSessionReturnBrief(),
+      },
+      arena: {
+        width: this.getArenaGridWidth(),
+        height: this.getArenaGridHeight(),
+        tileSize: TILE_SIZE,
+        origin: { x: this.getArenaOffsetX(), y: this.getArenaOffsetY() },
+        coordinates: "origin top-left, x to right, y to bottom",
+      },
+      activePlayerIds: [...this.activePlayerIds],
+      players: this.activePlayerIds.map((id) => {
+        const player = this.players[id];
+        const tile = this.getTileFromPosition(player.position);
+        const pixel = this.getPlayerPixelPosition(player);
+        const recentPowerUpPickup = this.getLatestPowerUpPickupNotice(id);
+        return {
+          id: player.id,
+          name: player.name,
+          tile,
+          pixel,
+          velocity: {
+            x: Math.round(player.velocity.x * 100) / 100,
+            y: Math.round(player.velocity.y * 100) / 100,
+          },
+          direction: player.direction,
+          botControlled: this.isBotControlled(id),
+          character: {
+            id: this.getActiveCharacterEntry(id).id,
+            name: this.getActiveCharacterEntry(id).name,
+            selectedIndex: this.selectedCharacterIndex[id],
+            pendingIndex: this.pendingCharacterIndex[id],
+            locked: this.characterLocked[id],
+            menuOpen: this.characterMenuOpen[id],
+          },
+          alive: player.alive,
+          hudStatus: this.getPlayerHudStatus(id),
+          bombsAvailable: player.maxBombs - player.activeBombs,
+          bombCapacity: player.maxBombs,
+          flameRange: player.flameRange,
+          speedLevel: player.speedLevel,
+          remoteLevel: player.remoteLevel,
+          shieldCharges: player.shieldCharges,
+          bombPassLevel: player.bombPassLevel,
+          kickLevel: player.kickLevel,
+          shortFuseLevel: player.shortFuseLevel,
+          skillSlots: this.getHudSkillSlots(id).map((slot) => ({
+            type: slot.type,
+            acquired: slot.acquired,
+            level: slot.level,
+            value: slot.valueLabel,
+            key: slot.keyLabel,
+            recentlyCollected: slot.recentlyCollected,
+          })),
+          compactSkillSlots: this.getCompactHudSkillSlots(this.getHudSkillSlots(id)).map((slot) => ({
+            type: slot.type,
+            acquired: slot.acquired,
+            level: slot.level,
+            value: slot.valueLabel,
+            key: slot.keyLabel,
+            recentlyCollected: slot.recentlyCollected,
+          })),
+          recentPowerUpPickup: recentPowerUpPickup
+            ? {
+                type: recentPowerUpPickup.type,
+                value: recentPowerUpPickup.valueLabel,
+                chainGuard: recentPowerUpPickup.chainGuard,
+                remainingMs: Math.round(recentPowerUpPickup.remainingMs),
+              }
+            : null,
+          pickupChain: {
+            previousType: this.pickupChains[id].previousType,
+            remainingMs: Math.round(this.pickupChains[id].remainingMs),
+          },
+          flameGuardMs: Math.round(player.flameGuardMs),
+          breakawayBoostMs: Math.round(player.breakawayBoostMs ?? 0),
+          pickupSprintMs: Math.round(player.pickupSprintMs ?? 0),
+          spawnProtectionMs: Math.round(player.spawnProtectionMs),
+          skill: {
+            id: player.skill.id,
+            phase: player.skill.phase,
+            channelRemainingMs: Math.round(player.skill.channelRemainingMs),
+            cooldownRemainingMs: Math.round(player.skill.cooldownRemainingMs),
+          },
+        };
+      }),
+      bombs: this.bombs.map((bomb) => ({
+        ownerId: bomb.ownerId,
+        tile: bomb.tile,
+        flameRange: bomb.flameRange,
+        fuseMs: Math.max(0, Math.round(bomb.fuseMs)),
+      })),
+      flames: this.flames.map((flame) => ({
+        tile: flame.tile,
+        remainingMs: Math.round(flame.remainingMs),
+      })),
+      magicBeams: this.magicBeams.map((beam) => ({
+        ownerId: beam.ownerId,
+        origin: beam.origin,
+        direction: beam.direction,
+        remainingMs: Math.round(beam.remainingMs),
+        tiles: beam.tiles,
+      })),
+      blocks: {
+        remaining: this.arena.breakable.size,
+        visibleBreakables,
+        breakEffects: crateBreakEffects,
+      },
+      screenShake: {
+        remainingMs: Math.round(this.screenShakeMs),
+        amplitudePx: this.screenShakeAmplitudePx,
+        offset: {
+          x: Math.round(screenShakeOffset.x * 1000) / 1000,
+          y: Math.round(screenShakeOffset.y * 1000) / 1000,
+        },
+      },
+      powerups: this.arena.powerUps
+        .filter((powerUp) => powerUp.revealed && !powerUp.collected)
+        .map((powerUp) => ({
+          type: powerUp.type,
+          tile: powerUp.tile,
+          visible: powerUp.revealed,
+          collected: powerUp.collected,
+        })),
+    };
+
+    return JSON.stringify(payload);
+  }
+}

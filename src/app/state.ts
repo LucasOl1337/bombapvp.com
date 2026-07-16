@@ -9,7 +9,7 @@ import {
   type ProductCopy,
 } from "./catalog.ts";
 
-export type AppScreen = "launcher" | "character-selection" | "launch-ready" | "laboratory";
+export type AppScreen = "launcher" | "character-selection" | "game-launch" | "laboratory";
 
 export type AppSnapshot = Readonly<{
   brand: "Bomba PvP";
@@ -122,13 +122,13 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
     ) {
       return snapshot;
     }
-    const currentPath =
-      snapshot.activeExperience.id === "continuous-room" ? "/jogar/pronto" : "/treino/pronto";
-    return freezeSnapshot({ ...snapshot, screen: "launch-ready", currentPath });
+    const mode = snapshot.activeExperience.id === "continuous-room" ? "continuous" : "training";
+    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}`;
+    return freezeSnapshot({ ...snapshot, screen: "game-launch", currentPath });
   }
 
   if (intent.type === "back-to-selection") {
-    if (snapshot.screen !== "launch-ready" || !snapshot.activeExperience) return snapshot;
+    if (snapshot.screen !== "game-launch" || !snapshot.activeExperience) return snapshot;
     return freezeSnapshot({
       ...snapshot,
       screen: "character-selection",

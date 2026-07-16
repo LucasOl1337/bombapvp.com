@@ -22,6 +22,10 @@ const app = createBombApp({
   root,
   initialPath: window.location.pathname,
   onPathChange(path) {
+    if (path.startsWith("/arena/")) {
+      window.location.assign(path);
+      return;
+    }
     if (window.location.pathname !== path) window.history.pushState({}, "", path);
   },
 });
