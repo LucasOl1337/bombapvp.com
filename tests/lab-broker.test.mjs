@@ -53,6 +53,9 @@ describe("broker minimo do Laboratorio", () => {
     expect(upstreamPayloads[0].model).toBe("cx/gpt-5.6-sol-high");
     expect(upstreamPayloads[0].max_completion_tokens).toBe(120);
     expect(upstreamPayloads[0]).not.toHaveProperty("max_tokens");
+    expect(upstreamPayloads[0].messages[0].content).toContain(
+      "Act immediately. Do not analyze, explain or plan.",
+    );
     expect(JSON.stringify(upstreamPayloads[0])).not.toMatch(/reasoning|thinking|effort/i);
 
     const claudeDecision = await broker(new Request("http://broker/decision", {

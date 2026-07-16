@@ -19,6 +19,7 @@ const ALLOWED_ROUTES = new Set(PROFILES.map(({ route }) => route));
 const MAX_BODY_BYTES = 64 * 1024;
 const SYSTEM_PROMPT = [
   "You control one player in Bomba PvP.",
+  "Act immediately. Do not analyze, explain or plan.",
   "Return only a JSON object with direction, placeBomb, detonate and useSkill.",
   "direction must be up, down, left, right or null.",
   "Every request is a fresh complete tactical snapshot and immediately replaces your previous action.",
