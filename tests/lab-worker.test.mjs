@@ -3,10 +3,17 @@ import worker, { handleRequest } from "../worker/index.js";
 
 describe("proxy do Laboratorio", () => {
   it("encaminha somente rotas permitidas com o segredo interno", async () => {
-    const brokerFetch = vi.fn(async (request) => Response.json({
-      path: new URL(request.url).pathname,
-      secret: request.headers.get("x-bomba-lab-secret"),
-    }));
+    const brokerFetch = vi.fn(async (request) => {
+      const path = new URL(request.url).pathname;
+      return Response.json({
+        path,
+        secret: request.headers.get("x-bomba-lab-secret"),
+        ...(path === "/decision" ? {
+          latencyMs: 321,
+          usage: { inputTokens: 120, outputTokens: 8, totalTokens: 128 },
+        } : {}),
+      });
+    });
     const env = {
       ASSETS: { fetch: vi.fn(async () => new Response("asset")) },
       LAB_BROKER_URL: "https://broker.example",
@@ -22,7 +29,12 @@ describe("proxy do Laboratorio", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "cx/gpt-5.6-sol", observation: { playerId: 1 } }),
     }), env, brokerFetch);
-    await expect(decision.json()).resolves.toMatchObject({ path: "/decision", secret: "secret" });
+    await expect(decision.json()).resolves.toEqual({
+      path: "/decision",
+      secret: "secret",
+      latencyMs: 321,
+      usage: { inputTokens: 120, outputTokens: 8, totalTokens: 128 },
+    });
 
     const blocked = await handleRequest(new Request("https://bombapvp.com/api/lab/admin"), env, brokerFetch);
     expect(blocked.status).toBe(404);

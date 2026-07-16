@@ -102,6 +102,7 @@ describe("Laboratorio 9Router", () => {
 
   it("usa o catalogo confirmado e nunca envia configuracao de esforco", async () => {
     const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    let nowMs = 100;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       requests.push({ url, init });
@@ -111,17 +112,28 @@ describe("Laboratorio 9Router", () => {
           profiles: [{ id: "sol", label: "Sol", route: "cx/gpt-5.6-sol" }],
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
+      nowMs = 145;
       return new Response(JSON.stringify({
         ok: true,
         decision: { direction: "left", placeBomb: true, detonate: false, useSkill: false, durationMs: 400 },
+        latencyMs: 35,
+        usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     });
-    const client = createLabClient(fetchMock as typeof fetch);
+    const client = createLabClient(fetchMock as typeof fetch, () => nowMs);
 
     await expect(client.listProfiles()).resolves.toEqual([
       { id: "sol", label: "Sol", route: "cx/gpt-5.6-sol" },
     ]);
-    await client.decide({ model: "cx/gpt-5.6-sol", observation: buildLabObservation(snapshot(), 1) });
+    await expect(client.decide({
+      model: "cx/gpt-5.6-sol",
+      observation: buildLabObservation(snapshot(), 1),
+    })).resolves.toMatchObject({
+      decision: { direction: "left", durationMs: 400 },
+      roundTripMs: 45,
+      upstreamLatencyMs: 35,
+      usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
+    });
 
     const payload = JSON.parse(String(requests[1]?.init?.body));
     expect(payload.model).toBe("cx/gpt-5.6-sol");
@@ -130,6 +142,7 @@ describe("Laboratorio 9Router", () => {
 
   it("converte uma decisao do modelo em input autoritativo", async () => {
     const inputs: Array<{ playerId: PlayerId; input: OnlineInputState }> = [];
+    const events: unknown[] = [];
     const game = {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: (playerId: PlayerId, input: OnlineInputState) => inputs.push({ playerId, input }),
@@ -137,17 +150,22 @@ describe("Laboratorio 9Router", () => {
     const client = {
       listProfiles: vi.fn(),
       decide: vi.fn(async () => ({
-        direction: "down" as const,
-        placeBomb: true,
-        detonate: false,
-        useSkill: true,
-        durationMs: 400,
+        decision: {
+          direction: "down" as const,
+          placeBomb: true,
+          detonate: false,
+          useSkill: true,
+          durationMs: 400,
+        },
+        roundTripMs: 85,
+        upstreamLatencyMs: 70,
+        usage: { inputTokens: 100, outputTokens: 15, totalTokens: 115 },
       })),
     };
 
     const stop = startLabController(game, client, [
       { playerId: 1, model: "cx/gpt-5.6-sol" },
-    ]);
+    ], (event) => events.push(event));
     await vi.waitFor(() => expect(inputs.some(({ input }) => input.direction === "down")).toBe(true));
     stop();
 
@@ -159,5 +177,10 @@ describe("Laboratorio 9Router", () => {
       playerId: 1,
       input: { direction: "down", bombPressed: true, detonatePressed: false, skillPressed: true, skillHeld: false },
     });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "decision",
+      playerId: 1,
+      result: expect.objectContaining({ roundTripMs: 85, upstreamLatencyMs: 70 }),
+    }));
   });
 });

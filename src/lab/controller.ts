@@ -1,6 +1,6 @@
 import type { PlayerId } from "../original-game/Gameplay/types.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../original-game/NetCode/protocol.ts";
-import type { LabClient, LabDecision } from "./client.ts";
+import type { LabClient, LabDecision, LabDecisionResult } from "./client.ts";
 
 type LabGame = Pick<{
   exportOnlineSnapshot(): OnlineGameSnapshot;
@@ -13,6 +13,9 @@ export type LabControllerStatus = Readonly<{
   state: "waiting" | "thinking" | "acting" | "error" | "stopped";
   error?: string;
 }>;
+export type LabControllerEvent =
+  | Readonly<{ type: "status"; status: LabControllerStatus }>
+  | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>;
 
 const NEUTRAL_INPUT: OnlineInputState = Object.freeze({
   direction: null,
@@ -84,7 +87,7 @@ export function startLabController(
   game: LabGame,
   client: LabClient,
   competitors: readonly LabCompetitor[],
-  onStatus: (status: LabControllerStatus) => void = () => undefined,
+  onEvent: (event: LabControllerEvent) => void = () => undefined,
 ): () => void {
   const controller = new AbortController();
   const { signal } = controller;
@@ -100,35 +103,39 @@ export function startLabController(
         const player = snapshot.players[competitor.playerId];
         if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
           game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-          onStatus({ playerId: competitor.playerId, state: "waiting" });
+          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
           await delay(300, signal);
           continue;
         }
 
         try {
-          onStatus({ playerId: competitor.playerId, state: "thinking" });
-          const decision = await client.decide({
+          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "thinking" } });
+          const result = await client.decide({
             model: competitor.model,
             observation: buildLabObservation(snapshot, competitor.playerId),
           }, signal);
           if (signal.aborted) break;
-          game.setServerPlayerInput(competitor.playerId, toInput(decision));
-          onStatus({ playerId: competitor.playerId, state: "acting" });
-          await delay(decision.durationMs, signal);
+          game.setServerPlayerInput(competitor.playerId, toInput(result.decision));
+          onEvent({ type: "decision", playerId: competitor.playerId, result });
+          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "acting" } });
+          await delay(result.decision.durationMs, signal);
           game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
         } catch (error) {
           if (signal.aborted) break;
           game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-          onStatus({
-            playerId: competitor.playerId,
-            state: "error",
-            error: error instanceof Error ? error.message : "lab_decision_failed",
+          onEvent({
+            type: "status",
+            status: {
+              playerId: competitor.playerId,
+              state: "error",
+              error: error instanceof Error ? error.message : "lab_decision_failed",
+            },
           });
           await delay(1000, signal);
         }
       }
       game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-      onStatus({ playerId: competitor.playerId, state: "stopped" });
+      onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
     })();
   }
 

@@ -17,6 +17,7 @@ import {
   TARGET_WINS,
   TILE_SIZE,
 } from "../PersonalConfig/config";
+import { monotonicNow } from "../../shared/monotonic-time";
 import {
   spriteForDirection,
   type CharacterRosterEntry,
@@ -157,6 +158,12 @@ const DEMOLITION_COMBO_DROP_TYPES: readonly SkillPowerUpType[] = [
   "shield-up",
   "short-fuse-up",
 ];
+
+export type BotDecisionMeasurement = Readonly<{
+  playerId: PlayerId;
+  decision: BotDecision;
+  computeMs: number;
+}>;
 
 declare global {
   interface Window {
@@ -476,6 +483,7 @@ export class GameApp {
   private localBotFill = 0;
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botEnabled = false;
+  private botDecisionObserver: ((measurement: BotDecisionMeasurement) => void) | null = null;
   private botBombCooldownMs = 0;
   private botCommittedDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
   private botPendingReverseDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
@@ -691,6 +699,7 @@ export class GameApp {
     this.localBotFill = 0;
     this.botControlledPlayers = createBooleanPlayerRecord(false);
     this.botEnabled = false;
+    this.botDecisionObserver = null;
     this.menuReady = createBooleanPlayerRecord(false);
     this.matchResultChoice = createPlayerRecord(() => null);
     this.matchResultCooldownMs = 0;
@@ -725,6 +734,7 @@ export class GameApp {
     this.matchResultChoice = createPlayerRecord(() => null);
     this.matchResultCooldownMs = 0;
     this.localBotFill = 0;
+    this.botDecisionObserver = null;
     this.setBotPlayers(config.botPlayerIds ?? []);
     this.applyEndlessStats(null);
 
@@ -1217,6 +1227,7 @@ export class GameApp {
     this.matchWinner = null;
     this.endlessKills = createNumberPlayerRecord(0);
     this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.botDecisionObserver = null;
     this.applyOfflineBotFill(botFill, false);
     this.startMatch();
   }
@@ -1513,6 +1524,7 @@ export class GameApp {
       arena?: ArenaDefinition;
       roomMode?: LobbyMode;
       botPlayerIds?: PlayerId[];
+      botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
       playerLabels?: Record<PlayerId, string>;
     } = {},
@@ -1541,6 +1553,7 @@ export class GameApp {
     this.characterLocked = createBooleanPlayerRecord(true);
     this.characterMenuOpen = createBooleanPlayerRecord(false);
     this.localBotFill = 0;
+    this.botDecisionObserver = options.botDecisionObserver ?? null;
     this.setBotPlayers(options.botPlayerIds ?? []);
     this.applyEndlessStats(options.endlessStats);
     this.primeCharacterSprites();
@@ -2308,7 +2321,14 @@ export class GameApp {
   }
 
   private getBotDecision(player: PlayerState): BotDecision {
-    return botAI_getBotDecision(player, this.createBotContext(this.getSharedBotDangerMap()));
+    const startedAtMs = monotonicNow();
+    const decision = botAI_getBotDecision(player, this.createBotContext(this.getSharedBotDangerMap()));
+    this.botDecisionObserver?.({
+      playerId: player.id,
+      decision,
+      computeMs: Math.max(0, monotonicNow() - startedAtMs),
+    });
+    return decision;
   }
 
   private getSharedBotDangerMap(): Map<string, number> {

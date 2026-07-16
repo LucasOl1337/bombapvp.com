@@ -14,9 +14,12 @@ describe("broker minimo do Laboratorio", () => {
         ] });
       }
       upstreamPayloads.push(JSON.parse(String(init.body)));
-      return Response.json({ choices: [{ message: { content: JSON.stringify({
-        direction: "up", placeBomb: false, detonate: false, useSkill: false, durationMs: 500,
-      }) } }] });
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify({
+          direction: "up", placeBomb: false, detonate: false, useSkill: false, durationMs: 500,
+        }) } }],
+        usage: { prompt_tokens: 120, completion_tokens: 18, total_tokens: 138 },
+      });
     });
     const broker = createLabBroker({
       fetch: upstream,
@@ -38,6 +41,10 @@ describe("broker minimo do Laboratorio", () => {
       body: JSON.stringify({ model: "cx/gpt-5.6-sol-high", observation: { playerId: 1 } }),
     }));
     expect(decision.status).toBe(200);
+    await expect(decision.json()).resolves.toMatchObject({
+      latencyMs: expect.any(Number),
+      usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
+    });
     expect(upstreamPayloads[0].model).toBe("cx/gpt-5.6-sol-high");
     expect(JSON.stringify(upstreamPayloads[0])).not.toMatch(/reasoning|thinking|effort/i);
   });

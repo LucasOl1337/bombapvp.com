@@ -1,3 +1,5 @@
+import { monotonicNow } from "../shared/monotonic-time";
+
 export type LabModelProfile = Readonly<{
   id: string;
   label: string;
@@ -17,9 +19,22 @@ export type LabDecisionRequest = Readonly<{
   observation: unknown;
 }>;
 
+export type LabTokenUsage = Readonly<{
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}>;
+
+export type LabDecisionResult = Readonly<{
+  decision: LabDecision;
+  roundTripMs: number;
+  upstreamLatencyMs: number | null;
+  usage: LabTokenUsage | null;
+}>;
+
 export interface LabClient {
   listProfiles(signal?: AbortSignal): Promise<LabModelProfile[]>;
-  decide(request: LabDecisionRequest, signal?: AbortSignal): Promise<LabDecision>;
+  decide(request: LabDecisionRequest, signal?: AbortSignal): Promise<LabDecisionResult>;
 }
 
 function asProfile(value: unknown): LabModelProfile | null {
@@ -49,6 +64,21 @@ function asDecision(value: unknown): LabDecision | null {
   };
 }
 
+function asUsage(value: unknown): LabTokenUsage | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<LabTokenUsage>;
+  if (
+    typeof candidate.inputTokens !== "number"
+    || typeof candidate.outputTokens !== "number"
+    || typeof candidate.totalTokens !== "number"
+  ) return null;
+  return {
+    inputTokens: Math.max(0, candidate.inputTokens),
+    outputTokens: Math.max(0, candidate.outputTokens),
+    totalTokens: Math.max(0, candidate.totalTokens),
+  };
+}
+
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   const data = await response.json() as unknown;
   if (!data || typeof data !== "object") throw new Error("invalid_lab_response");
@@ -58,7 +88,10 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return data as Record<string, unknown>;
 }
 
-export function createLabClient(fetchImpl: typeof fetch = fetch): LabClient {
+export function createLabClient(
+  fetchImpl: typeof fetch = fetch,
+  now: () => number = monotonicNow,
+): LabClient {
   return {
     async listProfiles(signal) {
       const data = await readJson(await fetchImpl("/api/lab/models", signal ? { signal } : undefined));
@@ -67,6 +100,7 @@ export function createLabClient(fetchImpl: typeof fetch = fetch): LabClient {
     },
 
     async decide(request, signal) {
+      const startedAtMs = now();
       const data = await readJson(await fetchImpl("/api/lab/decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,7 +109,12 @@ export function createLabClient(fetchImpl: typeof fetch = fetch): LabClient {
       }));
       const decision = asDecision(data.decision);
       if (!decision) throw new Error("invalid_lab_decision");
-      return decision;
+      return {
+        decision,
+        roundTripMs: Math.max(0, now() - startedAtMs),
+        upstreamLatencyMs: typeof data.latencyMs === "number" ? Math.max(0, data.latencyMs) : null,
+        usage: asUsage(data.usage),
+      };
     },
   };
 }

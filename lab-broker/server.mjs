@@ -63,6 +63,19 @@ function normalizeDecision(value) {
   };
 }
 
+function normalizeUsage(value) {
+  if (!value || typeof value !== "object") return null;
+  const inputTokens = Number(value.prompt_tokens);
+  const outputTokens = Number(value.completion_tokens);
+  const totalTokens = Number(value.total_tokens);
+  if (![inputTokens, outputTokens, totalTokens].every(Number.isFinite)) return null;
+  return {
+    inputTokens: Math.max(0, inputTokens),
+    outputTokens: Math.max(0, outputTokens),
+    totalTokens: Math.max(0, totalTokens),
+  };
+}
+
 export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
   const normalizedBase = String(baseUrl || "").replace(/\/+$/, "");
 
@@ -123,7 +136,12 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
         if (!upstream.ok) return json(502, { ok: false, error: "9router_decision_unavailable" });
         const payload = await upstream.json();
         const decision = normalizeDecision(parseModelContent(payload?.choices?.[0]?.message?.content));
-        return json(200, { ok: true, decision, latencyMs: Date.now() - startedAt });
+        return json(200, {
+          ok: true,
+          decision,
+          latencyMs: Date.now() - startedAt,
+          usage: normalizeUsage(payload?.usage),
+        });
       } catch {
         return json(502, { ok: false, error: "9router_decision_unavailable" });
       }
