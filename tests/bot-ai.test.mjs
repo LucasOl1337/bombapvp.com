@@ -78,6 +78,58 @@ function corridorArena() {
   };
 }
 
+function twoBombEscapeArena() {
+  const open = new Set([
+    "7,1", "7,2", "7,3", "7,4",
+    "8,1", "9,1", "9,2",
+  ]);
+  const solid = new Set();
+  for (let y = 0; y < 9; y += 1) {
+    for (let x = 0; x < 11; x += 1) {
+      const key = `${x},${y}`;
+      if (!open.has(key)) solid.add(key);
+    }
+  }
+  return {
+    config: {
+      ...corridorArena().config,
+      id: "two-bomb-escape",
+      name: "Two-bomb escape",
+      grid: { width: 11, height: 9 },
+      tiles: { solid: [...solid], breakable: [] },
+    },
+    solid,
+    breakable: new Set(),
+    powerUps: [],
+  };
+}
+
+function botContext(players, arena, bombs) {
+  return {
+    players,
+    activePlayerIds: [1, 2],
+    bombs,
+    flames: [],
+    arena,
+    suddenDeathActive: false,
+    suddenDeathTickMs: 900,
+    suddenDeathIndex: 0,
+    suddenDeathPath: [],
+    suddenDeathClosureEffects: [],
+    botBombCooldownMs: 0,
+    botCommittedDirection: { 1: null, 2: null, 3: null, 4: null },
+    botPendingReverseDirection: { 1: null, 2: null, 3: null, 4: null },
+    botPendingReverseFrames: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    canOccupyPosition: () => true,
+    evaluateMovementOption: () => ({}),
+    canMovementOptionAdvance: () => true,
+    areOppositeDirections: () => false,
+    isPlayerOverlappingTile: (candidate, tile) => (
+      candidate.tile.x === tile.x && candidate.tile.y === tile.y
+    ),
+  };
+}
+
 describe("segurança de bombas do bot determinístico", () => {
   it("não planta quando a única fuga cruza uma explosão antes da chegada", () => {
     const players = {
@@ -118,5 +170,77 @@ describe("segurança de bombas do bot determinístico", () => {
     };
 
     expect(getBotDecision(players[1], context).placeBomb).toBe(false);
+  });
+
+  it("não foge da bomba nova em direção à zona de outra bomba própria", () => {
+    const players = {
+      1: player(1, { x: 1, y: 1 }),
+      2: {
+        ...player(2, { x: 7, y: 1 }),
+        maxBombs: 2,
+        activeBombs: 2,
+        bombPassLevel: 1,
+      },
+      3: player(3, { x: 1, y: 1 }, false),
+      4: player(4, { x: 1, y: 1 }, false),
+    };
+    const bombs = [
+      {
+        id: 10,
+        ownerId: 2,
+        tile: { x: 7, y: 3 },
+        fuseMs: 1_000,
+        ownerCanPass: false,
+        flameRange: 1,
+      },
+      {
+        id: 11,
+        ownerId: 2,
+        tile: { x: 7, y: 1 },
+        fuseMs: 2_000,
+        ownerCanPass: true,
+        flameRange: 1,
+      },
+    ];
+
+    const decision = getBotDecision(players[2], botContext(players, twoBombEscapeArena(), bombs));
+
+    expect(decision).toMatchObject({ direction: "right", placeBomb: false });
+  });
+
+  it("mantém uma rota segura pela zona de uma bomba própria bem mais tardia", () => {
+    const players = {
+      1: player(1, { x: 1, y: 1 }),
+      2: {
+        ...player(2, { x: 7, y: 1 }),
+        maxBombs: 2,
+        activeBombs: 2,
+        bombPassLevel: 1,
+      },
+      3: player(3, { x: 1, y: 1 }, false),
+      4: player(4, { x: 1, y: 1 }, false),
+    };
+    const bombs = [
+      {
+        id: 10,
+        ownerId: 2,
+        tile: { x: 7, y: 3 },
+        fuseMs: 5_000,
+        ownerCanPass: false,
+        flameRange: 1,
+      },
+      {
+        id: 11,
+        ownerId: 2,
+        tile: { x: 7, y: 1 },
+        fuseMs: 2_000,
+        ownerCanPass: true,
+        flameRange: 1,
+      },
+    ];
+
+    const decision = getBotDecision(players[2], botContext(players, twoBombEscapeArena(), bombs));
+
+    expect(decision).toMatchObject({ direction: "down", placeBomb: false });
   });
 });

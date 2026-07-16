@@ -165,11 +165,11 @@ export function getBotDecision(player: PlayerState, context: BotContext): BotDec
   const overlappingBomb = getOverlappingBomb(player, context);
 
   if (overlappingBomb) {
-    const overlappingBlast = getBombBlastKeys(overlappingBomb.tile, overlappingBomb.flameRange, context);
+    const escapeBlast = getEscapeBlastKeys(player, overlappingBomb, context);
     const committedEscape = findDirectionToNearestTile(
       player,
       (tile) => (
-        !overlappingBlast.has(tileKey(tile.x, tile.y))
+        !escapeBlast.has(tileKey(tile.x, tile.y))
         && countSafeNeighbors(player, tile, dangerMap, context) >= 1
       ),
       dangerMap,
@@ -177,7 +177,7 @@ export function getBotDecision(player: PlayerState, context: BotContext): BotDec
     );
     const fallbackEscape = findDirectionToNearestTile(
       player,
-      (tile) => !overlappingBlast.has(tileKey(tile.x, tile.y)),
+      (tile) => !escapeBlast.has(tileKey(tile.x, tile.y)),
       dangerMap,
       context,
     );
@@ -191,7 +191,7 @@ export function getBotDecision(player: PlayerState, context: BotContext): BotDec
 
   const threateningOwnedBomb = getThreateningOwnedBomb(player, playerTile, context);
   if (threateningOwnedBomb) {
-    const ownBlastKeys = getBombBlastKeys(threateningOwnedBomb.tile, threateningOwnedBomb.flameRange, context);
+    const ownBlastKeys = getOwnedBombBlastKeys(player, threateningOwnedBomb.fuseMs, context);
     const committedEscape = findDirectionToNearestTile(
       player,
       (tile) => (
@@ -491,6 +491,37 @@ function getThreateningOwnedBomb(player: PlayerState, playerTile: TileCoord, con
 function canBotPlaceBomb(player: PlayerState, context: BotContext): boolean {
   const playerTile = getTileFromPosition(player.position);
   return canBotPlaceBombAtTile(player, playerTile, true, context);
+}
+
+function getEscapeBlastKeys(
+  player: PlayerState,
+  overlappingBomb: BombState,
+  context: BotContext,
+): Set<string> {
+  const blastKeys = getOwnedBombBlastKeys(player, overlappingBomb.fuseMs, context);
+  for (const key of getBombBlastKeys(overlappingBomb.tile, overlappingBomb.flameRange, context)) {
+    blastKeys.add(key);
+  }
+  return blastKeys;
+}
+
+function getOwnedBombBlastKeys(
+  player: PlayerState,
+  threatFuseMs: number,
+  context: BotContext,
+): Set<string> {
+  const blastKeys = new Set<string>();
+  const scanRadius = Math.min(BOT_SCAN_MAX_RADIUS, BOT_SCAN_BASE_RADIUS + player.speedLevel);
+  const escapeHorizonMs = scanRadius * getMoveDuration(player);
+  for (const bomb of context.bombs) {
+    if (bomb.ownerId !== player.id || bomb.fuseMs > threatFuseMs + escapeHorizonMs) {
+      continue;
+    }
+    for (const key of getBombBlastKeys(bomb.tile, bomb.flameRange, context)) {
+      blastKeys.add(key);
+    }
+  }
+  return blastKeys;
 }
 
 /**

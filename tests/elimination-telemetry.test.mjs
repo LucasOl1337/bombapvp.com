@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
+import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
 import {
   CROCODILO_SURGE_DURATION_MS,
   fireCrocodiloEmeraldSurge,
@@ -42,18 +43,46 @@ function assets() {
   };
 }
 
-function game(playerTwoTile) {
-  const definition = arena(playerTwoTile);
+function game(playerTwoTile, botPlayerIds = [], definition = arena(playerTwoTile), options = {}) {
   const app = new GameApp({}, assets(), definition);
   app.startServerAuthoritativeMatch(
     [1, 2],
     { 1: 0, 2: 1, 3: 0, 4: 1 },
-    { roomMode: "endless", arena: definition },
+    { roomMode: "endless", arena: definition, botPlayerIds, ...options },
   );
   return app;
 }
 
 describe("telemetria autoritativa de eliminações", () => {
+  it("não acumula suicídios de V1 contra adversários ativos", () => {
+    const directions = ["right", "down", "left", "up"];
+    let bombPlacementDecisions = 0;
+    const app = game(undefined, [2], createDefaultArenaDefinition(), {
+      botDecisionObserver: (measurement) => {
+        if (measurement.playerId === 2 && measurement.decision.placeBomb) {
+          bombPlacementDecisions += 1;
+        }
+      },
+    });
+    let randomState = 2;
+    const random = () => {
+      randomState = (randomState * 1_664_525 + 1_013_904_223) >>> 0;
+      return randomState / 0x1_0000_0000;
+    };
+    for (let step = 0; step < 360; step += 1) {
+      app.setServerPlayerInput(1, {
+        direction: directions[Math.floor(random() * directions.length)],
+        bombPressed: random() < 0.12,
+        detonatePressed: false,
+        skillPressed: false,
+      });
+      app.advanceServerSimulation(250);
+    }
+
+    expect(bombPlacementDecisions).toBeGreaterThan(0);
+    expect(app.exportOnlineSnapshot().endlessStats?.selfDeaths?.[2]).toBe(0);
+  });
+
   it("classifica a morte causada pela própria bomba", () => {
     const app = game();
     app.advanceServerSimulation(1_300);
