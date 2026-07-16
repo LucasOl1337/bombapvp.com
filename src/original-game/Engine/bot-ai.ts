@@ -156,7 +156,7 @@ function getPriorityEnemy(
 /**
  * Main bot decision logic
  */
-export function getBotDecision(player: PlayerState, context: BotContext): BotDecision {
+function decideBot(player: PlayerState, context: BotContext, safetyOnly: boolean): BotDecision {
   const playerTile = getTileFromPosition(player.position);
   const dangerMap = resolveDangerMap(context);
   const enemy = getPriorityEnemy(player, context, dangerMap);
@@ -287,6 +287,10 @@ export function getBotDecision(player: PlayerState, context: BotContext): BotDec
     };
   }
 
+  if (safetyOnly) {
+    return { direction: null, placeBomb: false };
+  }
+
   const suddenDeathDirection = getSuddenDeathPressureDirection(player, dangerMap, context);
   if (suddenDeathDirection) {
     return { direction: suddenDeathDirection, placeBomb: false };
@@ -385,6 +389,14 @@ export function getBotDecision(player: PlayerState, context: BotContext): BotDec
   }
 
   return { direction: null, placeBomb: false };
+}
+
+export function getBotDecision(player: PlayerState, context: BotContext): BotDecision {
+  return decideBot(player, context, false);
+}
+
+export function getBotSafetyDecision(player: PlayerState, context: BotContext): BotDecision {
+  return decideBot(player, context, true);
 }
 
 function getSafeDeterministicKickDirection(
@@ -491,6 +503,10 @@ function getThreateningOwnedBomb(player: PlayerState, playerTile: TileCoord, con
 function canBotPlaceBomb(player: PlayerState, context: BotContext): boolean {
   const playerTile = getTileFromPosition(player.position);
   return canBotPlaceBombAtTile(player, playerTile, true, context);
+}
+
+export function canBotSafelyPlaceBomb(player: PlayerState, context: BotContext): boolean {
+  return canBotPlaceBombAtTile(player, getTileFromPosition(player.position), false, context);
 }
 
 function getEscapeBlastKeys(

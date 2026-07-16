@@ -19,4 +19,25 @@ describe("input autoritativo do laboratorio", () => {
       skillHeld: false,
     });
   });
+
+  it("substitui e cancela pulsos latched quando o reflexo de seguranca assume", () => {
+    const externalInputPlayers = { 1: false, 2: false, 3: false, 4: false };
+    const onlineInputs = {
+      1: { direction: "right", bombPressed: true, detonatePressed: true, skillPressed: true, skillHeld: true },
+    };
+
+    const game = { externalInputPlayers, onlineInputs };
+    GameApp.prototype.setServerPlayerInput.call(game, 1, {
+      direction: "up", bombPressed: true, detonatePressed: true, skillPressed: true, skillHeld: false,
+    });
+    expect(onlineInputs[1].bombPressed).toBe(true);
+
+    GameApp.prototype.replaceServerPlayerInput.call(game, 1, {
+      direction: "up", bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false,
+    });
+
+    expect(onlineInputs[1]).toEqual({
+      direction: "up", bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false,
+    });
+  });
 });

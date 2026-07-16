@@ -109,6 +109,14 @@ async function bootOriginalGame(): Promise<void> {
             telemetry.record({ type: "request", playerId: event.playerId });
             return;
           }
+          if (event.type === "motor") {
+            telemetry.record({
+              type: "motor",
+              playerId: event.playerId,
+              safetyOverride: event.safetyOverride,
+            });
+            return;
+          }
           telemetry.record({ type: "status", playerId: event.status.playerId, status: event.status.state });
           if (event.status.state === "error") telemetry.record({ type: "error", playerId: event.status.playerId });
         })

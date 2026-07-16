@@ -398,6 +398,7 @@ describe("Laboratorio 9Router", () => {
   it("aumenta de quatro para sete decisões em cinco segundos ao dobrar as lanes do Luna", async () => {
     vi.useFakeTimers();
     const measureAppliedDecisions = async (lunaDecisionLanes: number): Promise<number> => {
+      let appliedDecisions = 0;
       const game = {
         exportOnlineSnapshot: () => snapshot(),
         setServerPlayerInput: vi.fn(),
@@ -418,12 +419,14 @@ describe("Laboratorio 9Router", () => {
         game,
         client,
         [{ playerId: 1, model: "cx/gpt-5.6-luna" }],
-        () => undefined,
+        (event) => {
+          if (event.type === "decision") appliedDecisions += 1;
+        },
         { lunaDecisionLanes },
       );
       try {
         await vi.advanceTimersByTimeAsync(5_000);
-        return game.setServerPlayerInput.mock.calls.length;
+        return appliedDecisions;
       } finally {
         stop();
         await vi.advanceTimersByTimeAsync(0);
@@ -471,7 +474,7 @@ describe("Laboratorio 9Router", () => {
     resolveFirst(result("right"));
     await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(4));
 
-    expect(inputs).toHaveLength(1);
+    expect(inputs.some(({ direction }) => direction === "right")).toBe(false);
     expect(inputs.at(-1)?.direction).toBe("left");
     stop();
   });
@@ -504,7 +507,9 @@ describe("Laboratorio 9Router", () => {
     });
     await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(3));
 
-    expect(game.setServerPlayerInput).not.toHaveBeenCalled();
+    expect(game.setServerPlayerInput.mock.calls.some(([, input]) => (
+      input.direction === "right" || input.bombPressed
+    ))).toBe(false);
     stop();
   });
 
@@ -598,5 +603,164 @@ describe("Laboratorio 9Router", () => {
 
     expect(inputs.at(-1)?.direction).toBe("left");
     stop();
+  });
+
+  it("executa a intencao remota em pelo menos dez ciclos locais por segundo", async () => {
+    vi.useFakeTimers();
+    const motorEvents: Array<{ safetyOverride: boolean }> = [];
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockResolvedValueOnce({
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+          roundTripMs: 20,
+          upstreamLatencyMs: 15,
+          usage: null,
+        })
+        .mockReturnValue(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }], (event) => {
+      if (event.type === "motor") motorEvents.push({ safetyOverride: event.safetyOverride });
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(motorEvents.length).toBeGreaterThanOrEqual(20);
+      expect(game.setServerPlayerInput).toHaveBeenCalledTimes(motorEvents.length);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("consome bomba, detonacao e skill como pulsos unicos no motor local", async () => {
+    vi.useFakeTimers();
+    const inputs: OnlineInputState[] = [];
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockResolvedValueOnce({
+          decision: { direction: "right", placeBomb: true, detonate: true, useSkill: true },
+          roundTripMs: 20,
+          upstreamLatencyMs: 15,
+          usage: null,
+        })
+        .mockReturnValue(new Promise<never>(() => undefined)),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }]);
+    try {
+      await vi.advanceTimersByTimeAsync(250);
+      expect(inputs.filter((input) => input.bombPressed)).toHaveLength(1);
+      expect(inputs.filter((input) => input.detonatePressed)).toHaveLength(1);
+      expect(inputs.filter((input) => input.skillPressed)).toHaveLength(1);
+      expect(inputs.at(-1)).toMatchObject({
+        direction: "right", bombPressed: false, detonatePressed: false, skillPressed: false,
+      });
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("prioriza o reflexo de seguranca sem permitir que ele invente ataques", async () => {
+    vi.useFakeTimers();
+    const inputs: OnlineInputState[] = [];
+    const safetyInput: OnlineInputState = {
+      direction: "up", bombPressed: true, detonatePressed: true, skillPressed: true, skillHeld: true,
+    };
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+      replaceServerPlayerInput: vi.fn((_playerId: PlayerId, input: OnlineInputState) => inputs.push(input)),
+      clearServerPlayerInput: vi.fn(),
+      getServerSafetyInput: vi.fn(() => safetyInput),
+    };
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const events: Array<{ safetyOverride: boolean }> = [];
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }], (event) => {
+      if (event.type === "motor") events.push({ safetyOverride: event.safetyOverride });
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(inputs.at(-1)).toEqual({
+        direction: "up", bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false,
+      });
+      expect(events.at(-1)?.safetyOverride).toBe(true);
+      expect(game.replaceServerPlayerInput).toHaveBeenCalled();
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancela o latch sem contabilizar SAFE quando o reflexo devolve o mesmo input", async () => {
+    vi.useFakeTimers();
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+      replaceServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+      getServerSafetyInput: vi.fn((_playerId: PlayerId, intendedInput: OnlineInputState) => intendedInput),
+    };
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const events: boolean[] = [];
+    const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }], (event) => {
+      if (event.type === "motor") events.push(event.safetyOverride);
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(events).toEqual([false, false]);
+      expect(game.replaceServerPlayerInput).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("compartilha um unico snapshot do motor entre competidores no mesmo tick", async () => {
+    vi.useFakeTimers();
+    const exportOnlineSnapshot = vi.fn(() => snapshot());
+    const game = {
+      exportOnlineSnapshot,
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const stop = startLabController(game, client, [
+      { playerId: 1, model: "local/test" },
+      { playerId: 2, model: "local/test" },
+    ]);
+
+    try {
+      exportOnlineSnapshot.mockClear();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(exportOnlineSnapshot).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
   });
 });

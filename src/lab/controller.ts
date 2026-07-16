@@ -2,11 +2,13 @@ import type { PlayerId, PlayerState } from "../original-game/Gameplay/types.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../original-game/NetCode/protocol.ts";
 import type { LabClient, LabDecision, LabDecisionResult } from "./client.ts";
 
-type LabGame = Pick<{
+type LabGame = {
   exportOnlineSnapshot(): OnlineGameSnapshot;
   setServerPlayerInput(playerId: PlayerId, input: OnlineInputState): void;
+  replaceServerPlayerInput?(playerId: PlayerId, input: OnlineInputState): void;
   clearServerPlayerInput(playerId: PlayerId): void;
-}, "exportOnlineSnapshot" | "setServerPlayerInput" | "clearServerPlayerInput">;
+  getServerSafetyInput?(playerId: PlayerId, intendedInput: OnlineInputState): OnlineInputState | null;
+};
 
 export type LabCompetitor = Readonly<{ playerId: PlayerId; model: string }>;
 export type LabControllerStatus = Readonly<{
@@ -17,7 +19,8 @@ export type LabControllerStatus = Readonly<{
 export type LabControllerEvent =
   | Readonly<{ type: "status"; status: LabControllerStatus }>
   | Readonly<{ type: "request"; playerId: PlayerId }>
-  | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>;
+  | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>
+  | Readonly<{ type: "motor"; playerId: PlayerId; safetyOverride: boolean }>;
 export type LabControllerOptions = Readonly<{
   lunaDecisionLanes?: number;
 }>;
@@ -27,6 +30,7 @@ const ERROR_RETRY_MIN_MS = 100;
 const ERROR_RETRY_MAX_MS = 1_000;
 const LUNA_LIGHT_DECISION_LANES = 4;
 const LUNA_LIGHT_LANE_STAGGER_MS = 500;
+export const LAB_EXECUTION_MOTOR_INTERVAL_MS = 50;
 
 function decisionLaneCount(model: string, options: LabControllerOptions): number {
   if (model !== "cx/gpt-5.6-luna") return 1;
@@ -183,18 +187,37 @@ export function startLabController(
   const controller = new AbortController();
   const { signal } = controller;
   const cleanups = new Set<() => void>();
+  const motorHandlers = new Set<(snapshot: OnlineGameSnapshot) => void>();
 
   for (const competitor of competitors) {
     game.clearServerPlayerInput(competitor.playerId);
   }
 
+  const motorTimer = setInterval(() => {
+    if (signal.aborted || motorHandlers.size === 0) return;
+    const snapshot = game.exportOnlineSnapshot();
+    for (const handler of motorHandlers) handler(snapshot);
+  }, LAB_EXECUTION_MOTOR_INTERVAL_MS);
+
   for (const competitor of competitors) {
     let hasActiveInput = false;
     let stopped = false;
+    let latestDirection: OnlineInputState["direction"] = null;
+    let pendingBomb = false;
+    let pendingDetonate = false;
+    let pendingSkill = false;
+    let motorRoundNumber: number | null = null;
     let nextRequestSequence = 1;
     let lastAppliedRequestSequence = 0;
     let scheduledRoundNumber: number | null = null;
     let nextLaneStartAtMs = 0;
+
+    const resetIntent = (): void => {
+      latestDirection = null;
+      pendingBomb = false;
+      pendingDetonate = false;
+      pendingSkill = false;
+    };
 
     const clearInput = (force = false): void => {
       const shouldWrite = force || hasActiveInput;
@@ -202,14 +225,82 @@ export function startLabController(
       if (shouldWrite) game.clearServerPlayerInput(competitor.playerId);
     };
 
-    const applyDecision = (decision: LabDecision): void => {
+    const runMotorTick = (snapshot: OnlineGameSnapshot): void => {
+      if (signal.aborted || stopped) return;
+      const player = snapshot.players[competitor.playerId];
+      const active = snapshot.mode === "match"
+        && !snapshot.paused
+        && !snapshot.roundOutcome
+        && Boolean(player?.active && player.alive);
+      if (!active) {
+        motorRoundNumber = null;
+        resetIntent();
+        clearInput();
+        return;
+      }
+      if (motorRoundNumber !== snapshot.roundNumber) {
+        motorRoundNumber = snapshot.roundNumber;
+        resetIntent();
+      }
+
+      const intendedInput: OnlineInputState = {
+        direction: latestDirection,
+        bombPressed: pendingBomb,
+        detonatePressed: pendingDetonate,
+        skillPressed: pendingSkill,
+        skillHeld: false,
+      };
+      const safetyInput = game.getServerSafetyInput?.(competitor.playerId, intendedInput) ?? null;
+      const safetyOverride = safetyInput !== null && (
+        safetyInput.direction !== intendedInput.direction
+        || intendedInput.bombPressed
+        || intendedInput.detonatePressed
+        || intendedInput.skillPressed
+        || Boolean(intendedInput.skillHeld)
+      );
+      const appliedInput: OnlineInputState = safetyOverride
+        ? {
+            direction: safetyInput!.direction,
+            bombPressed: false,
+            detonatePressed: false,
+            skillPressed: false,
+            skillHeld: false,
+          }
+        : intendedInput;
+
+      pendingBomb = false;
+      pendingDetonate = false;
+      pendingSkill = false;
       hasActiveInput = true;
-      game.setServerPlayerInput(competitor.playerId, toInput(decision));
+      if (safetyInput !== null && game.replaceServerPlayerInput) {
+        game.replaceServerPlayerInput(competitor.playerId, appliedInput);
+      } else {
+        game.setServerPlayerInput(competitor.playerId, appliedInput);
+      }
+      onEvent({
+        type: "motor",
+        playerId: competitor.playerId,
+        safetyOverride,
+      });
     };
+
+    const applyDecision = (decision: LabDecision, roundNumber: number): void => {
+      const input = toInput(decision);
+      motorRoundNumber = roundNumber;
+      latestDirection = input.direction;
+      pendingBomb ||= input.bombPressed;
+      pendingDetonate ||= input.detonatePressed;
+      pendingSkill ||= input.skillPressed;
+      runMotorTick(game.exportOnlineSnapshot());
+    };
+
+    motorHandlers.add(runMotorTick);
 
     const finish = (): void => {
       if (stopped) return;
       stopped = true;
+      motorHandlers.delete(runMotorTick);
+      resetIntent();
       clearInput(true);
       onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
       cleanups.delete(finish);
@@ -271,7 +362,7 @@ export function startLabController(
           );
           if (canApply) {
             lastAppliedRequestSequence = requestSequence;
-            applyDecision(result.decision);
+            applyDecision(result.decision, currentSnapshot.roundNumber);
             onEvent({ type: "decision", playerId: competitor.playerId, result });
             onEvent({ type: "status", status: { playerId: competitor.playerId, state: "acting" } });
           }
@@ -308,6 +399,7 @@ export function startLabController(
 
   return () => {
     if (signal.aborted) return;
+    clearInterval(motorTimer);
     controller.abort();
     for (const cleanup of [...cleanups]) cleanup();
   };

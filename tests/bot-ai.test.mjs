@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getBotDecision } from "../src/original-game/Engine/bot-ai.ts";
+import {
+  canBotSafelyPlaceBomb,
+  getBotDecision,
+  getBotSafetyDecision,
+} from "../src/original-game/Engine/bot-ai.ts";
 import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
 
 function player(id, tile, active = true) {
@@ -131,6 +135,34 @@ function botContext(players, arena, bombs) {
 }
 
 describe("segurança de bombas do bot determinístico", () => {
+  it("o seletor de reflexo nunca transforma um estado seguro em ataque", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }),
+      2: player(2, { x: 2, y: 3 }),
+      3: player(3, { x: 5, y: 5 }, false),
+      4: player(4, { x: 5, y: 5 }, false),
+    };
+    const context = botContext(players, corridorArena(), []);
+
+    expect(getBotDecision(players[1], context).placeBomb).toBe(true);
+    expect(getBotSafetyDecision(players[1], context)).toEqual({ direction: null, placeBomb: false });
+  });
+
+  it("rejeita uma bomba quando nao existe nenhuma casa de fuga", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 5, y: 5 }, false),
+      4: player(4, { x: 5, y: 5 }, false),
+    };
+    const arena = corridorArena();
+    arena.solid.add("2,3");
+    arena.solid.add("2,4");
+    arena.config.tiles.solid = [...arena.solid];
+
+    expect(canBotSafelyPlaceBomb(players[1], botContext(players, arena, []))).toBe(false);
+  });
+
   it("não planta quando a única fuga cruza uma explosão antes da chegada", () => {
     const players = {
       1: player(1, { x: 2, y: 2 }),

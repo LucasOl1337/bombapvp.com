@@ -18,6 +18,7 @@ export type LabTelemetryEvent =
   | Readonly<{ type: "status"; playerId: PlayerId; status: LabTelemetryStatus }>
   | Readonly<{ type: "error"; playerId: PlayerId }>
   | Readonly<{ type: "request"; playerId: PlayerId }>
+  | Readonly<{ type: "motor"; playerId: PlayerId; safetyOverride: boolean }>
   | Readonly<{
       type: "decision";
       playerId: PlayerId;
@@ -46,6 +47,12 @@ export type LabTelemetryPlayerReport = Readonly<{
     count: number;
     perSecond: number;
     errors: number;
+  }>;
+  motor: Readonly<{
+    ticks: number;
+    perSecond: number;
+    safetyOverrides: number;
+    safetyOverridePct: number;
   }>;
   actions: Readonly<{
     latest: LabTelemetryAction | null;
@@ -94,6 +101,8 @@ type PlayerAccumulator = {
   competitor: Competitor;
   status: LabTelemetryStatus;
   decisions: number;
+  motorTicks: number;
+  safetyOverrides: number;
   errors: number;
   decisionMsTotal: number;
   decisionMsLast: number | null;
@@ -153,6 +162,8 @@ function createAccumulator(competitor: Competitor): PlayerAccumulator {
     competitor,
     status: competitor.kind === "v1" ? "acting" : "waiting",
     decisions: 0,
+    motorTicks: 0,
+    safetyOverrides: 0,
     errors: 0,
     decisionMsTotal: 0,
     decisionMsLast: null,
@@ -216,6 +227,11 @@ export function createLabTelemetry(
         player.lastDecisionRecordedAtMs = null;
         player.lastDecisionRoundTripMs = null;
       }
+      return;
+    }
+    if (event.type === "motor") {
+      player.motorTicks += 1;
+      if (event.safetyOverride) player.safetyOverrides += 1;
       return;
     }
 
@@ -298,6 +314,12 @@ export function createLabTelemetry(
             count: entry.decisions,
             perSecond: round(entry.decisions / elapsedSeconds),
             errors: entry.errors,
+          },
+          motor: {
+            ticks: entry.motorTicks,
+            perSecond: round(entry.motorTicks / elapsedSeconds),
+            safetyOverrides: entry.safetyOverrides,
+            safetyOverridePct: percentage(entry.safetyOverrides, entry.motorTicks),
           },
           actions: {
             latest: entry.lastAction ? { ...entry.lastAction } : null,

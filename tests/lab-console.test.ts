@@ -20,6 +20,7 @@ function player(playerId: 1 | 2, label: string): LabTelemetryPlayerReport {
       pollingUtilizationPct: 97,
     },
     decisions: { count: 20, perSecond: 2, errors: 0 },
+    motor: { ticks: 200, perSecond: 20, safetyOverrides: 25, safetyOverridePct: 12.5 },
     actions: {
       latest: { direction: "right", placeBomb: true, detonate: true, useSkill: false },
       latestAgeMs: 75,
@@ -89,6 +90,9 @@ describe("console do laboratorio", () => {
     fireEvent.click(getByRole(document.body, "button", { name: "Telemetria" }));
     expect([...document.querySelectorAll(".lab-console__tabs button.is-active")].map((node) => node.textContent)).toEqual(["Telemetria"]);
     expect(document.body.textContent).toContain("Loop de decisão");
+    expect(document.body.textContent).toContain("LLM/S");
+    expect(document.body.textContent).toContain("MOTOR/S");
+    expect(document.body.textContent).toContain("SAFE");
     fireEvent.click(actionsButton);
 
     const content = document.querySelector<HTMLElement>(".lab-console__content")!;

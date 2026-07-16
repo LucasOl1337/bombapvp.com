@@ -135,8 +135,21 @@ function renderOverview(document: Document, report: LabTelemetryReport, english:
         english ? "Self deaths / sudden-death deaths" : "Mortes próprias / mortes por sudden death",
       ),
       metric(document, "AVG", formatMetric(player.timing.averageMs, "ms"), english ? "Average decision time" : "Tempo médio de decisão"),
-      metric(document, "DEC/S", formatMetric(player.decisions.perSecond), english ? "Decisions per second" : "Decisões por segundo"),
+      metric(
+        document,
+        player.kind === "llm" ? "LLM/S" : "BOT/S",
+        formatMetric(player.decisions.perSecond),
+        english ? "Planner decisions per second" : "Decisões do planejador por segundo",
+      ),
     );
+    if (player.kind === "llm") {
+      metrics.append(metric(
+        document,
+        "MOTOR/S",
+        formatMetric(player.motor.perSecond),
+        english ? "Local execution cycles per second" : "Ciclos locais de execução por segundo",
+      ));
+    }
     card.append(top, action, metrics);
     content.append(card);
   });
@@ -183,11 +196,25 @@ function renderTelemetry(document: Document, report: LabTelemetryReport, english
       metric(document, "LAST", formatMetric(player.timing.lastMs, "ms"), english ? "Last decision time" : "Último tempo de decisão"),
       metric(document, "AVG", formatMetric(player.timing.averageMs, "ms"), english ? "Average decision time" : "Tempo médio de decisão"),
       metric(document, "P95", formatMetric(player.timing.p95Ms, "ms"), english ? "95th percentile" : "Percentil 95"),
-      metric(document, "DEC/S", formatMetric(player.decisions.perSecond), english ? "Decisions per second" : "Decisões por segundo"),
+      metric(
+        document,
+        player.kind === "llm" ? "LLM/S" : "BOT/S",
+        formatMetric(player.decisions.perSecond),
+        english ? "Planner decisions per second" : "Decisões do planejador por segundo",
+      ),
       metric(document, "ERR", String(player.decisions.errors), english ? "Decision errors" : "Erros de decisão"),
     );
     if (player.kind === "llm") {
       timing.append(
+        metric(document, "MOTOR/S", formatMetric(player.motor.perSecond), english ? "Local execution cycles per second" : "Ciclos locais de execução por segundo"),
+        metric(
+          document,
+          "SAFE",
+          formatMetric(player.motor.safetyOverridePct, "%"),
+          english
+            ? `${player.motor.safetyOverrides} local safety overrides`
+            : `${player.motor.safetyOverrides} correções locais de segurança`,
+        ),
         metric(document, "9R", formatMetric(player.timing.upstreamAverageMs, "ms"), "9Router"),
         metric(document, "NET", formatMetric(player.timing.transportAverageMs, "ms"), english ? "Browser and proxy overhead" : "Overhead do navegador e proxies"),
         metric(document, "GAP", formatMetric(player.timing.pollGapAverageMs, "ms"), english ? "Gap before the next request" : "Intervalo antes da próxima requisição"),

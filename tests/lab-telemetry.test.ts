@@ -129,6 +129,9 @@ describe("telemetria do laboratorio", () => {
     telemetry.record({ type: "status", playerId: 2, status: "waiting" });
     nowMs = 1_500;
     telemetry.record({ type: "request", playerId: 2 });
+    for (let tick = 0; tick < 40; tick += 1) {
+      telemetry.record({ type: "motor", playerId: 2, safetyOverride: tick < 10 });
+    }
     nowMs = 2_000;
 
     const report = telemetry.read(gameSnapshot());
@@ -153,6 +156,7 @@ describe("telemetria do laboratorio", () => {
         upstreamAverageMs: 115, transportAverageMs: 35, pollGapAverageMs: 5, pollingUtilizationPct: 95.2,
       },
       decisions: { count: 2, perSecond: 1, errors: 1 },
+      motor: { ticks: 40, perSecond: 20, safetyOverrides: 10, safetyOverridePct: 25 },
       actions: {
         latest: { direction: "left", placeBomb: true, detonate: true, useSkill: true },
         latestAgeMs: 1_695,

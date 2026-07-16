@@ -99,7 +99,9 @@ import {
 import type { BotContext, BotDecision } from "./bot-ai";
 import {
   buildBotDangerMap as botAI_buildDangerMap,
+  canBotSafelyPlaceBomb as botAI_canSafelyPlaceBomb,
   getBotDecision as botAI_getBotDecision,
+  getBotSafetyDecision as botAI_getSafetyDecision,
   getStableBotDirection as botAI_getStableBotDirection,
 } from "./bot-ai";
 import {
@@ -541,6 +543,8 @@ export class GameApp {
   private cachedDangerMap: Map<string, number> | null = null;
   private cachedBotDangerMap: Map<string, number> | null = null;
   private botDangerCacheActive = false;
+  private labSafetyDangerMapClockMs = -1;
+  private labSafetyDangerMap: Map<string, number> | null = null;
   private arenaStaticMistGradient: CanvasGradient | null = null;
 
   constructor(root: HTMLElement, assets: GameAssets, arenaDefinition: ArenaDefinition = createDefaultArenaDefinition()) {
@@ -1599,6 +1603,58 @@ export class GameApp {
     this.onlineInputs[playerId] = mergeLatchedOnlineInput(this.onlineInputs[playerId], input);
   }
 
+  public replaceServerPlayerInput(playerId: PlayerId, input: OnlineInputState): void {
+    this.externalInputPlayers[playerId] = true;
+    this.onlineInputs[playerId] = cloneOnlineInputState(input);
+  }
+
+  public getServerSafetyInput(playerId: PlayerId, intendedInput: OnlineInputState): OnlineInputState | null {
+    const player = this.players[playerId];
+    if (!player?.active || !player.alive || this.mode !== "match" || this.roundOutcome) {
+      return null;
+    }
+
+    const dangerMap = this.getLabSafetyDangerMap();
+    const botContext = this.createBotContext(dangerMap);
+    const currentTile = this.getTileFromPosition(player.position);
+    const currentKey = tileKey(currentTile.x, currentTile.y);
+    const moveDurationMs = this.getMoveDuration(player);
+    const currentDangerMs = dangerMap.get(currentKey);
+    const overlappingBomb = this.bombs.some((bomb) => (
+      bomb.tile.x === currentTile.x && bomb.tile.y === currentTile.y
+    ));
+    let intendedDangerMs: number | undefined;
+    if (intendedInput.direction) {
+      const delta = directionDelta[intendedInput.direction];
+      const intendedTile = this.normalizeTile({
+        x: currentTile.x + delta.x,
+        y: currentTile.y + delta.y,
+      });
+      intendedDangerMs = dangerMap.get(tileKey(intendedTile.x, intendedTile.y));
+    }
+
+    const currentTileThreatened = currentDangerMs !== undefined
+      && currentDangerMs <= moveDurationMs * 2 + 140;
+    const intendedTileThreatened = intendedDangerMs !== undefined
+      && intendedDangerMs <= moveDurationMs + 140;
+    const unsafeBombPulse = intendedInput.bombPressed
+      && !botAI_canSafelyPlaceBomb(player, botContext);
+    if (!overlappingBomb && !currentTileThreatened && !intendedTileThreatened && !unsafeBombPulse) {
+      return null;
+    }
+
+    const safetyDirection = overlappingBomb || currentTileThreatened
+      ? botAI_getSafetyDecision(player, botContext).direction
+      : intendedTileThreatened ? null : intendedInput.direction;
+    return {
+      direction: safetyDirection,
+      bombPressed: false,
+      detonatePressed: false,
+      skillPressed: false,
+      skillHeld: false,
+    };
+  }
+
   public clearServerPlayerInput(playerId: PlayerId): void {
     this.externalInputPlayers[playerId] = true;
     this.onlineInputs[playerId] = createNeutralOnlineInput();
@@ -2378,6 +2434,14 @@ export class GameApp {
       this.cachedBotDangerMap = botAI_buildDangerMap(this.createBotContext());
     }
     return this.cachedBotDangerMap;
+  }
+
+  private getLabSafetyDangerMap(): Map<string, number> {
+    if (this.labSafetyDangerMapClockMs !== this.animationClockMs || !this.labSafetyDangerMap) {
+      this.labSafetyDangerMapClockMs = this.animationClockMs;
+      this.labSafetyDangerMap = botAI_buildDangerMap(this.createBotContext());
+    }
+    return this.labSafetyDangerMap;
   }
 
   private getOldestOwnedBomb(playerId: PlayerId): BombState | null {
