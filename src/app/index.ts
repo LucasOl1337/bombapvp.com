@@ -28,16 +28,14 @@ export function createBombApp({
   const locale = localeForHostname(hostname);
   let snapshot = snapshotForPath(locale, initialPath);
   let disposed = false;
-  let disposeView = (): void => undefined;
   const listeners = new Set<(nextSnapshot: AppSnapshot) => void>();
   let app: BombApp;
 
   function publish(nextSnapshot: AppSnapshot): void {
     if (nextSnapshot === snapshot) return;
-    disposeView();
     const previousPath = snapshot.currentPath;
     snapshot = nextSnapshot;
-    disposeView = renderApp(root, snapshot, app.dispatch);
+    renderApp(root, snapshot, app.dispatch);
     if (snapshot.currentPath !== previousPath) onPathChange?.(snapshot.currentPath);
     for (const listener of listeners) listener(snapshot);
   }
@@ -58,12 +56,11 @@ export function createBombApp({
     dispose() {
       if (disposed) return;
       disposed = true;
-      disposeView();
       listeners.clear();
       root.replaceChildren();
     },
   };
 
-  disposeView = renderApp(root, snapshot, app.dispatch);
+  renderApp(root, snapshot, app.dispatch);
   return app;
 }
