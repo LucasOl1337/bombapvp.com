@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
 import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
 import { BOT_V2_CHARACTER_INDEX } from "../src/original-game/Engine/bot-v2.ts";
+import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
 
 function assets() {
   return {
@@ -25,8 +26,9 @@ function assets() {
 function playDuel(seed, evaluatedPlayerId, useV2) {
   const arena = { ...createDefaultArenaDefinition(), randomSeed: seed };
   const game = new GameApp({}, assets(), arena);
-  const actions = { decisions: 0, skillStarts: 0, skillHolds: 0, bombs: 0 };
+  const actions = { decisions: 0, skillRequests: 0, skillStarts: 0, skillHolds: 0, bombs: 0, skillEvents: [] };
   const skillIds = new Set();
+  let previousSkillPhase = "idle";
   game.startServerAuthoritativeMatch(
     [1, 2],
     { 1: BOT_V2_CHARACTER_INDEX, 2: BOT_V2_CHARACTER_INDEX, 3: 2, 4: 3 },
@@ -37,7 +39,17 @@ function playDuel(seed, evaluatedPlayerId, useV2) {
       botDecisionObserver: ({ playerId, decision }) => {
         if (playerId !== evaluatedPlayerId) return;
         actions.decisions += 1;
-        if (decision.useSkill) actions.skillStarts += 1;
+        if (decision.useSkill) {
+          actions.skillRequests += 1;
+          const state = game.exportOnlineSnapshot().players[evaluatedPlayerId];
+          actions.skillEvents.push({
+            decision: actions.decisions,
+            direction: decision.direction,
+            tile: state.tile,
+            position: state.position,
+            activeBombs: state.activeBombs,
+          });
+        }
         if (decision.skillHeld) actions.skillHolds += 1;
         if (decision.placeBomb) actions.bombs += 1;
       },
@@ -47,7 +59,10 @@ function playDuel(seed, evaluatedPlayerId, useV2) {
   for (let tick = 0; tick < 4_000; tick += 1) {
     game.advanceServerSimulation(50);
     const snapshot = game.exportOnlineSnapshot();
-    skillIds.add(snapshot.players[evaluatedPlayerId].skill.id);
+    const evaluatedSkill = snapshot.players[evaluatedPlayerId].skill;
+    skillIds.add(evaluatedSkill.id);
+    if (previousSkillPhase === "idle" && evaluatedSkill.phase === "channeling") actions.skillStarts += 1;
+    previousSkillPhase = evaluatedSkill.phase;
     if (snapshot.roundOutcome) {
       return {
         winner: snapshot.roundOutcome.winner,
@@ -79,9 +94,22 @@ describe("avaliação balanceada do bot V2", () => {
     const baseline = evaluate(false);
     const result = evaluate(true);
     console.log(JSON.stringify({ baseline, result }, null, 2));
+    const skillStarts = result.duels.reduce((total, duel) => total + duel.actions.skillStarts, 0);
+    const skillRequests = result.duels.reduce((total, duel) => total + duel.actions.skillRequests, 0);
+    const hasOffCenterDash = result.duels.some((duel) => duel.actions.skillEvents.some((event) => {
+      const lanePosition = event.direction === "left" || event.direction === "right"
+        ? event.position.y
+        : event.position.x;
+      const laneCenter = Math.floor(lanePosition / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+      return Math.abs(lanePosition - laneCenter) > 1;
+    }));
     expect(new Set(result.duels.flatMap((duel) => duel.skillIds))).toEqual(new Set(["killer-bee-wing-dash"]));
-    expect(result.selfDeaths).toBeLessThanOrEqual(baseline.selfDeaths);
+    expect(result.selfDeaths).toBe(0);
     expect(result.wins).toBeGreaterThan(baseline.wins);
+    expect(result.wins).toBeGreaterThanOrEqual(6);
+    expect(skillStarts).toBeGreaterThan(0);
+    expect(skillStarts).toBe(skillRequests);
+    expect(hasOffCenterDash).toBe(true);
   }, 30_000);
 
   it("descarta a variante V2 ao sair da sessão do laboratório", () => {

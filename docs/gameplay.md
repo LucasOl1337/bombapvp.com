@@ -3,8 +3,8 @@
 - `src/main.ts` monta o launcher. Ao receber `/arena/`, faca navegacao de documento completo para isolar o ciclo de vida do jogo.
 - `arena/index.html` carrega `src/original-game/main.ts`, que inicia `GameApp` e os assets originais.
 - Preserve o contrato `/arena/?mode=<modo>&character=<uuid>`. `training` inicia 1 bot em `classic`; `continuous` inicia 3 bots em `endless`.
-- `lab` recebe de `model1` a `model4` (no minimo dois slots contiguos), inicia todos na mesma `GameApp` autoritativa e aplica apenas decisoes LLM validadas por `src/lab/controller.ts`. Os valores reservados `bot-v1` e `bot-v2` rodam localmente; o V2 preserva a navegacao segura do V1 e forca a bomba de contato quando divide uma casa com o adversario. Salas podem misturar V1, V2 e LLMs.
-- O gate deterministico do V2 executa o `GameApp` headless na arena padrao, alterna V2 e V1 nos dois lados para cada seed e rejeita regressao de vitorias ou autoeliminacoes. Um teste focal tambem proibe a bomba de contato sem rota de fuga.
+- `lab` recebe de `model1` a `model4` (no minimo dois slots contiguos), inicia todos na mesma `GameApp` autoritativa e aplica apenas decisoes LLM validadas por `src/lab/controller.ts`. Os valores reservados `bot-v1` e `bot-v2` rodam localmente; o V2 preserva a navegacao segura do V1, forca a bomba de contato somente com fuga comprovada e usa o dash do Killer Bee em corredores retos sem perigo nos proximos 500 ms. Salas podem misturar V1, V2 e LLMs.
+- O gate deterministico do V2 executa o `GameApp` headless na arena padrao, alterna V2 e V1 nos dois lados para cada seed e exige melhoria estrita, ao menos seis vitorias em oito duelos, uso real da skill e zero autoeliminacoes em termos absolutos. Testes focais tambem cobrem bomba de contato e dash em corredores seguros e ameacados.
 - O catalogo inclui `GPT 5.6 Luna Leve` (`cx/gpt-5.6-luna`) para comparar baixa latencia com a rota Luna xhigh.
 - `training` e `continuous` continuam offline. O modo `lab` reutiliza apenas o input autoritativo de `NetCode/`; ele nao abre uma sessao multiplayer.
 - Mantenha assets em `public/Assets/` e respeite maiusculas e minusculas nos caminhos publicados.
