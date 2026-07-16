@@ -9,6 +9,7 @@ const PROFILES = Object.freeze([
   { id: "gpt-5-6-sol-high", label: "GPT 5.6 Sol High", route: "cx/gpt-5.6-sol-high" },
   { id: "gpt-5-6-sol-xhigh", label: "GPT 5.6 Sol xhigh", route: "cx/gpt-5.6-sol-xhigh" },
   { id: "gpt-5-6-sol-ultra", label: "GPT 5.6 Sol Ultra", route: "cx/gpt-5.6-sol-xhigh" },
+  { id: "gpt-5-6-luna", label: "GPT 5.6 Luna Leve", route: "cx/gpt-5.6-luna" },
   { id: "gpt-5-6-luna-xhigh", label: "GPT 5.6 Luna xhigh", route: "cx/gpt-5.6-luna-xhigh" },
   { id: "gpt-5-6-luna-ultra", label: "GPT 5.6 Luna Ultra", route: "cx/gpt-5.6-luna-xhigh" },
   { id: "gpt-5-5-xhigh", label: "GPT 5.5 xhigh", route: "cx/gpt-5.5-xhigh" },

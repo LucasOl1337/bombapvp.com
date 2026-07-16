@@ -32,8 +32,13 @@ describe("broker minimo do Laboratorio", () => {
     const models = await broker(new Request("http://broker/models", { headers }));
     const catalog = await models.json();
     expect(catalog.profiles.map((profile) => profile.route)).not.toContain("fora/da-whitelist");
-    expect(catalog.profiles).toHaveLength(10);
+    expect(catalog.profiles).toHaveLength(11);
     expect(catalog.profiles.map((profile) => profile.route)).toContain("cx/gpt-5.6-sol-xhigh");
+    expect(catalog.profiles).toContainEqual({
+      id: "gpt-5-6-luna",
+      label: "GPT 5.6 Luna Leve",
+      route: "cx/gpt-5.6-luna",
+    });
 
     const decision = await broker(new Request("http://broker/decision", {
       method: "POST",
