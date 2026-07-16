@@ -27,3 +27,14 @@ O 9Router reportou em experimentos separados mais tokens de conclusao do que o v
 ## Limites
 
 Este e um experimento operacional curto, nao um SLA. Latencia de modelo e provider varia com carga, cache e infraestrutura. Repetir a mesma matriz antes de tomar decisoes futuras de roteamento.
+
+## Cadencia das lanes do controlador
+
+O benchmark deterministico de `tests/lab.test.ts` usa RTT fixo de 2.000 ms e uma janela de 5.000 ms. Ele mede decisoes efetivamente aplicadas pela interface publica `startLabController`, nao apenas requisicoes iniciadas.
+
+| Controlador | Decisoes aplicadas em 5 s | Cadencia |
+| --- | ---: | ---: |
+| 2 lanes | 4 | 0,8 decisao/s |
+| 4 lanes escalonadas em 500 ms | 7 | 1,4 decisao/s |
+
+Na simulacao controlada, quatro lanes aumentaram a cadencia aplicada em 75%. O stagger e refeito no inicio de cada rodada, produzindo snapshots dos frames 0, 500, 1.000 e 1.500 em vez de quatro copias do mesmo estado. Depois disso, cada lane reinicia imediatamente ao receber uma resposta; nao existe espera intencional entre requisicoes.

@@ -18,14 +18,22 @@ export type LabControllerEvent =
   | Readonly<{ type: "status"; status: LabControllerStatus }>
   | Readonly<{ type: "request"; playerId: PlayerId }>
   | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>;
+export type LabControllerOptions = Readonly<{
+  lunaDecisionLanes?: number;
+}>;
 
 const INACTIVE_POLL_INTERVAL_MS = 50;
 const ERROR_RETRY_MIN_MS = 100;
 const ERROR_RETRY_MAX_MS = 1_000;
-const LUNA_LIGHT_DECISION_LANES = 2;
+const LUNA_LIGHT_DECISION_LANES = 4;
+const LUNA_LIGHT_LANE_STAGGER_MS = 500;
 
-function decisionLaneCount(model: string): number {
-  return model === "cx/gpt-5.6-luna" ? LUNA_LIGHT_DECISION_LANES : 1;
+function decisionLaneCount(model: string, options: LabControllerOptions): number {
+  if (model !== "cx/gpt-5.6-luna") return 1;
+  const configuredLanes = options.lunaDecisionLanes ?? LUNA_LIGHT_DECISION_LANES;
+  return Number.isFinite(configuredLanes)
+    ? Math.max(1, Math.floor(configuredLanes))
+    : LUNA_LIGHT_DECISION_LANES;
 }
 
 function canApplyDecision(
@@ -170,6 +178,7 @@ export function startLabController(
   client: LabClient,
   competitors: readonly LabCompetitor[],
   onEvent: (event: LabControllerEvent) => void = () => undefined,
+  options: LabControllerOptions = {},
 ): () => void {
   const controller = new AbortController();
   const { signal } = controller;
@@ -184,6 +193,8 @@ export function startLabController(
     let stopped = false;
     let nextRequestSequence = 1;
     let lastAppliedRequestSequence = 0;
+    let scheduledRoundNumber: number | null = null;
+    let nextLaneStartAtMs = 0;
 
     const clearInput = (force = false): void => {
       const shouldWrite = force || hasActiveInput;
@@ -207,14 +218,32 @@ export function startLabController(
 
     const runDecisionLane = async (): Promise<void> => {
       let consecutiveErrors = 0;
+      let stagedRoundNumber: number | null = null;
       while (!signal.aborted) {
         const snapshot = game.exportOnlineSnapshot();
         const player = snapshot.players[competitor.playerId];
         if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
+          stagedRoundNumber = null;
           clearInput();
           onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
           await delay(INACTIVE_POLL_INTERVAL_MS, signal);
           continue;
+        }
+
+        if (stagedRoundNumber !== snapshot.roundNumber) {
+          stagedRoundNumber = snapshot.roundNumber;
+          const now = Date.now();
+          if (scheduledRoundNumber !== snapshot.roundNumber) {
+            scheduledRoundNumber = snapshot.roundNumber;
+            nextLaneStartAtMs = now;
+          }
+          const scheduledStartAtMs = Math.max(now, nextLaneStartAtMs);
+          nextLaneStartAtMs = scheduledStartAtMs + LUNA_LIGHT_LANE_STAGGER_MS;
+          const staggerMs = scheduledStartAtMs - now;
+          if (staggerMs > 0) {
+            await delay(staggerMs, signal);
+            continue;
+          }
         }
 
         try {
@@ -270,7 +299,10 @@ export function startLabController(
     };
 
     void Promise.all(
-      Array.from({ length: decisionLaneCount(competitor.model) }, () => runDecisionLane()),
+      Array.from(
+        { length: decisionLaneCount(competitor.model, options) },
+        () => runDecisionLane(),
+      ),
     ).finally(finish);
   }
 

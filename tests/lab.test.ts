@@ -258,9 +258,15 @@ describe("Laboratorio 9Router", () => {
     stop();
   });
 
-  it("mantem duas leituras concorrentes para reduzir a latencia do Luna Leve", async () => {
+  it("escalona quatro leituras concorrentes do Luna para evitar snapshots duplicados", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
     const game = {
-      exportOnlineSnapshot: () => snapshot(),
+      exportOnlineSnapshot: () => ({
+        ...snapshot(),
+        frameId: Date.now() - startedAt,
+        serverTimeMs: Date.now() - startedAt,
+      }),
       setServerPlayerInput: vi.fn(),
       clearServerPlayerInput: vi.fn(),
     };
@@ -269,10 +275,167 @@ describe("Laboratorio 9Router", () => {
       listProfiles: vi.fn(),
       decide: vi.fn().mockReturnValue(pendingDecision),
     };
+    let stop: () => void = () => undefined;
 
-    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
-    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2), { timeout: 200 });
-    stop();
+    try {
+      stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+      expect(client.decide).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(client.decide).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(client.decide).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(client.decide).toHaveBeenCalledTimes(4);
+      expect(client.decide.mock.calls.map(([request]) => (
+        request.observation as { frameId: number }
+      ).frameId)).toEqual([0, 500, 1_000, 1_500]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("restaura o escalonamento das lanes quando uma nova rodada fica ativa", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    let active = false;
+    const game = {
+      exportOnlineSnapshot: () => ({
+        ...snapshot(),
+        mode: active ? "match" as const : "boot" as const,
+        frameId: Date.now() - startedAt,
+        serverTimeMs: Date.now() - startedAt,
+      }),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockReturnValue(pendingDecision),
+    };
+    let stop: () => void = () => undefined;
+
+    try {
+      stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(client.decide).not.toHaveBeenCalled();
+
+      active = true;
+      await vi.advanceTimersByTimeAsync(1_600);
+
+      expect(client.decide).toHaveBeenCalledTimes(4);
+      const requestedFrames = client.decide.mock.calls.map(([request]) => (
+        request.observation as { frameId: number }
+      ).frameId);
+      expect(new Set(requestedFrames).size).toBe(4);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("coordena o stagger quando requests da rodada anterior terminam em momentos diferentes", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    let roundNumber = 1;
+    const game = {
+      exportOnlineSnapshot: () => ({
+        ...snapshot(),
+        roundNumber,
+        frameId: Date.now() - startedAt,
+        serverTimeMs: Date.now() - startedAt,
+      }),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    type DecisionResult = Awaited<ReturnType<LabClient["decide"]>>;
+    const pendingResolvers: Array<(result: DecisionResult) => void> = [];
+    const decide = vi.fn((_request: Parameters<LabClient["decide"]>[0]) => new Promise<DecisionResult>((resolve) => {
+      pendingResolvers.push(resolve);
+    }));
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide,
+    };
+    const result: DecisionResult = {
+      decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+      roundTripMs: 2_000,
+      upstreamLatencyMs: 1_900,
+      usage: null,
+    };
+    let stop: () => void = () => undefined;
+
+    try {
+      stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(client.decide).toHaveBeenCalledTimes(4);
+      const previousRoundResolvers = pendingResolvers.slice(0, 4);
+
+      roundNumber = 2;
+      previousRoundResolvers[2]!(result);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(250);
+      previousRoundResolvers[0]!(result);
+      await vi.advanceTimersByTimeAsync(250);
+      previousRoundResolvers[3]!(result);
+      await vi.advanceTimersByTimeAsync(500);
+      previousRoundResolvers[1]!(result);
+      await vi.advanceTimersByTimeAsync(600);
+
+      const newRoundFrames = decide.mock.calls
+        .map(([request]) => request.observation as { round: number; frameId: number })
+        .filter((observation) => observation.round === 2)
+        .map((observation) => observation.frameId);
+      expect(newRoundFrames).toEqual([1_600, 2_100, 2_600, 3_100]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("aumenta de quatro para sete decisões em cinco segundos ao dobrar as lanes do Luna", async () => {
+    vi.useFakeTimers();
+    const measureAppliedDecisions = async (lunaDecisionLanes: number): Promise<number> => {
+      const game = {
+        exportOnlineSnapshot: () => snapshot(),
+        setServerPlayerInput: vi.fn(),
+        clearServerPlayerInput: vi.fn(),
+      };
+      const client: LabClient = {
+        listProfiles: vi.fn(),
+        decide: vi.fn(() => new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => {
+          setTimeout(() => resolve({
+            decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+            roundTripMs: 2_000,
+            upstreamLatencyMs: 1_900,
+            usage: null,
+          }), 2_000);
+        })),
+      };
+      const stop = startLabController(
+        game,
+        client,
+        [{ playerId: 1, model: "cx/gpt-5.6-luna" }],
+        () => undefined,
+        { lunaDecisionLanes },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(5_000);
+        return game.setServerPlayerInput.mock.calls.length;
+      } finally {
+        stop();
+        await vi.advanceTimersByTimeAsync(0);
+      }
+    };
+
+    try {
+      await expect(measureAppliedDecisions(2)).resolves.toBe(4);
+      await expect(measureAppliedDecisions(4)).resolves.toBe(7);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("descarta a resposta antiga quando duas leituras do Luna chegam fora de ordem", async () => {
