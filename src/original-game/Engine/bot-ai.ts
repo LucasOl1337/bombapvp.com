@@ -617,7 +617,12 @@ function canBotPlaceBombAtTile(
 
     for (const next of neighbors) {
       const nextKey = tileKey(next.x, next.y);
-      if (visited.has(nextKey) || !isTilePathableForBot(player, next, context)) {
+      const nextArrivalMs = (current.distance + 1) * escapeBudget.moveDurationMs;
+      if (
+        visited.has(nextKey)
+        || !isTilePathableForBot(player, next, context)
+        || !isTileSafeForArrival(dangerAfterBomb, next, nextArrivalMs)
+      ) {
         continue;
       }
       visited.add(nextKey);
