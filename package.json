@@ -12,6 +12,8 @@
     "check:cloudflare": "npm run build && wrangler deploy --dry-run",
     "deploy:cloudflare": "npm run build && wrangler deploy",
     "dev:cloudflare": "npm run build && wrangler dev",
+    "lab:broker": "powershell -ExecutionPolicy Bypass -File scripts/start-lab-broker.ps1",
+    "lab:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-lab-tunnel.ps1",
     "test": "vitest run --environment happy-dom",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.original-game.json",
     "check": "npm run typecheck && npm run test && npm run build"
@@ -23,5 +25,9 @@
     "vite": "7.3.6",
     "vitest": "3.2.7",
     "wrangler": "4.111.0"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/space-grotesk": "5.2.10"
   }
 }

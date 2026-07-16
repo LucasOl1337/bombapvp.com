@@ -27,6 +27,7 @@ export type AppIntent =
   | Readonly<{ type: "open-experience"; experienceId: ExperienceId }>
   | Readonly<{ type: "select-character"; characterId: CharacterId }>
   | Readonly<{ type: "confirm-character" }>
+  | Readonly<{ type: "start-lab-match"; models: readonly [string, string] }>
   | Readonly<{ type: "back-to-selection" }>
   | Readonly<{ type: "back-to-launcher" }>
   | Readonly<{ type: "navigate"; path: string }>;
@@ -125,6 +126,22 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
     const mode = snapshot.activeExperience.id === "continuous-room" ? "continuous" : "training";
     const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}`;
     return freezeSnapshot({ ...snapshot, screen: "game-launch", currentPath });
+  }
+
+  if (intent.type === "start-lab-match") {
+    if (snapshot.screen !== "laboratory") return snapshot;
+    const models = intent.models.map((model) => model.trim());
+    if (!models[0] || !models[1]) return snapshot;
+    const query = new URLSearchParams({
+      mode: "lab",
+      model1: models[0],
+      model2: models[1],
+    });
+    return freezeSnapshot({
+      ...snapshot,
+      screen: "game-launch",
+      currentPath: `/arena/?${query.toString()}`,
+    });
   }
 
   if (intent.type === "back-to-selection") {

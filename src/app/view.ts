@@ -1,6 +1,8 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
+import { createLabClient, type LabModelProfile } from "../lab/client.ts";
 
 type Dispatch = (intent: AppIntent) => void;
+type CharacterSnapshot = AppSnapshot["characters"][number];
 
 function element<K extends keyof HTMLElementTagNameMap>(
   document: Document,
@@ -33,12 +35,65 @@ function addArrow(document: Document, target: HTMLButtonElement): void {
   target.append(arrow);
 }
 
+function createCharacterImage(
+  document: Document,
+  character: CharacterSnapshot | null,
+  options: Readonly<{
+    decorative?: boolean;
+    width?: number;
+    height?: number;
+    className?: string;
+    draggable?: boolean;
+  }> = {},
+): HTMLImageElement {
+  const image = document.createElement("img");
+  image.src = character?.assetPath ?? "";
+  image.alt = options.decorative ? "" : (character?.name ?? "");
+  image.width = options.width ?? 160;
+  image.height = options.height ?? options.width ?? 160;
+  if (options.className) image.className = options.className;
+  if (options.draggable !== undefined) image.draggable = options.draggable;
+  return image;
+}
+
+function renderFighterStage(
+  document: Document,
+  character: CharacterSnapshot,
+  options: Readonly<{
+    compact?: boolean;
+    decorative?: boolean;
+    mirrored?: boolean;
+    delay?: number;
+  }> = {},
+): HTMLElement {
+  const stage = element(
+    document,
+    "span",
+    "fighter-stage fighter-stage--" + character.accent + (options.compact ? " fighter-stage--compact" : ""),
+  );
+  stage.style.setProperty("--float-delay", `${options.delay ?? 0}ms`);
+  if (options.decorative) stage.setAttribute("aria-hidden", "true");
+
+  const blueprint = element(document, "span", "fighter-stage__blueprint");
+  blueprint.setAttribute("aria-hidden", "true");
+  const image = createCharacterImage(document, character, {
+    decorative: options.decorative,
+    className: options.mirrored ? "is-mirrored" : undefined,
+    draggable: false,
+  });
+  const baseline = element(document, "span", "fighter-stage__baseline");
+  baseline.setAttribute("aria-hidden", "true");
+  stage.append(blueprint, image, baseline);
+  return stage;
+}
+
 function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const header = element(document, "header", "brand");
+  const productHeading = element(document, "h1", "sr-only", snapshot.brand);
   const home = button(
     document,
-    "B",
-    "brand__mark",
+    "",
+    "brand__home",
     { type: "back-to-launcher" },
     dispatch,
   );
@@ -46,25 +101,81 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
     "aria-label",
     snapshot.locale === "pt-BR" ? "Ir para o início" : "Go to start",
   );
-  const copy = element(document, "div", "brand__copy");
+  const mark = element(document, "span", "brand__mark", "B");
+  mark.setAttribute("aria-hidden", "true");
+  const copy = element(document, "span", "brand__copy");
   copy.append(
-    element(document, "p", "brand__eyebrow", "BROWSER BATTLE ARENA"),
-    element(document, "h1", "brand__name", snapshot.brand),
+    element(document, "span", "brand__eyebrow", "BROWSER BATTLE ARENA"),
+    element(document, "span", "brand__name", snapshot.brand),
   );
-  header.append(home, copy);
+  home.append(mark, copy);
+
+  const languages = element(document, "div", "brand__languages");
+  languages.setAttribute("role", "group");
+  languages.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Idioma" : "Language");
+  ([
+    { locale: "pt-BR", shortLabel: "PT", label: "Português", href: "https://bombapvp.com" },
+    { locale: "en", shortLabel: "EN", label: "English", href: "https://bombpvp.com" },
+  ] as const).forEach((language) => {
+    if (language.locale === snapshot.locale) {
+      const active = element(document, "span", "brand__language is-active", language.shortLabel);
+      active.setAttribute("aria-current", "page");
+      active.setAttribute("aria-label", language.label);
+      languages.append(active);
+      return;
+    }
+    const link = element(document, "a", "brand__language", language.shortLabel);
+    link.href = language.href;
+    link.hreflang = language.locale;
+    link.setAttribute("aria-label", language.label);
+    languages.append(link);
+  });
+
+  header.append(productHeading, home, languages);
   return header;
+}
+
+function renderRosterPanel(document: Document, snapshot: AppSnapshot): HTMLElement {
+  const panel = element(document, "aside", "roster-panel");
+  panel.setAttribute("aria-label", snapshot.copy.charactersLabel);
+  const fighters = element(document, "div", "roster-panel__fighters");
+
+  snapshot.characters.forEach((character, index) => {
+    const fighter = element(document, "div", "roster-panel__fighter");
+    fighter.append(
+      renderFighterStage(document, character, {
+        compact: true,
+        decorative: true,
+        delay: index * 450,
+      }),
+      element(document, "span", "roster-panel__name", character.name),
+    );
+    fighters.append(fighter);
+  });
+
+  const footer = element(document, "div", "roster-panel__footer");
+  const dots = element(document, "span", "roster-panel__dots");
+  dots.setAttribute("aria-hidden", "true");
+  snapshot.characters.forEach((character) => {
+    dots.append(element(document, "i", "roster-panel__dot roster-panel__dot--" + character.accent));
+  });
+  footer.append(element(document, "span", "roster-panel__label", snapshot.copy.charactersLabel), dots);
+  panel.append(fighters, footer);
+  return panel;
 }
 
 function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const region = element(document, "section", "experience-region");
   region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
 
+  const hero = element(document, "div", "launcher-hero");
   const intro = element(document, "header", "page-intro page-intro--launcher");
   intro.append(
     element(document, "p", "page-intro__kicker", snapshot.copy.launcherKicker),
     element(document, "h2", "page-intro__title", snapshot.copy.launcherTitle),
     element(document, "p", "page-intro__description", snapshot.copy.launcherIntroduction),
   );
+  hero.append(intro, renderRosterPanel(document, snapshot));
 
   const grid = element(document, "div", "experience-grid");
   snapshot.experiences.forEach((experience, index) => {
@@ -74,6 +185,7 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
       "experience-card experience-card--" + String(index + 1),
     );
     article.dataset.experience = experience.id;
+    article.style.setProperty("--reveal-delay", `${340 + index * 90}ms`);
     const number = element(
       document,
       "span",
@@ -81,24 +193,25 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
       String(index + 1).padStart(2, "0"),
     );
     number.setAttribute("aria-hidden", "true");
+    const meta = element(document, "div", "experience-card__meta");
+    meta.append(element(document, "p", "experience-card__journey", experience.journeyLabel), number);
     const copy = element(document, "div", "experience-card__copy");
     copy.append(
-      element(document, "p", "experience-card__journey", experience.journeyLabel),
       element(document, "h3", "experience-card__name", experience.name),
       element(document, "p", "experience-card__description", experience.description),
     );
     const action = button(
       document,
       experience.actionLabel,
-      "action action--primary",
+      "action action--card",
       { type: "open-experience", experienceId: experience.id },
       dispatch,
     );
     addArrow(document, action);
-    article.append(number, copy, action);
+    article.append(meta, copy, action);
     grid.append(article);
   });
-  region.append(intro, grid);
+  region.append(hero, grid);
   return region;
 }
 
@@ -149,11 +262,7 @@ function renderCharacterSelection(
 
     const portrait = element(document, "span", "character-card__portrait");
     portrait.setAttribute("aria-hidden", "true");
-    const image = document.createElement("img");
-    image.src = character.assetPath;
-    image.alt = "";
-    image.width = 160;
-    image.height = 160;
+    const image = createCharacterImage(document, character, { decorative: true });
     portrait.append(image);
 
     const copy = element(document, "span", "character-card__copy");
@@ -173,6 +282,20 @@ function renderCharacterSelection(
   });
 
   const confirmation = element(document, "div", "selection-confirmation");
+  const selectionSummary = element(document, "div", "selection-confirmation__summary");
+  if (snapshot.selectedCharacter) {
+    const avatar = element(
+      document,
+      "span",
+      "selection-confirmation__avatar selection-confirmation__avatar--" + snapshot.selectedCharacter.accent,
+    );
+    const image = createCharacterImage(document, snapshot.selectedCharacter, {
+      decorative: true,
+      width: 48,
+    });
+    avatar.append(image);
+    selectionSummary.append(avatar);
+  }
   const selectionCopy = element(document, "div", "selection-confirmation__copy");
   selectionCopy.append(
     element(
@@ -188,6 +311,7 @@ function renderCharacterSelection(
       snapshot.selectedCharacter?.name ?? "—",
     ),
   );
+  selectionSummary.append(selectionCopy);
   const confirm = button(
     document,
     snapshot.copy.continueLabel,
@@ -197,7 +321,7 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  confirmation.append(selectionCopy, confirm);
+  confirmation.append(selectionSummary, confirm);
 
   region.append(navigation, intro, characterGrid, confirmation);
   return region;
@@ -211,11 +335,7 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
     "div",
     "ready-state__portrait ready-state__portrait--" + (snapshot.selectedCharacter?.accent ?? "blue"),
   );
-  const image = document.createElement("img");
-  image.src = snapshot.selectedCharacter?.assetPath ?? "";
-  image.alt = snapshot.selectedCharacter?.name ?? "";
-  image.width = 160;
-  image.height = 160;
+  const image = createCharacterImage(document, snapshot.selectedCharacter);
   portrait.append(image);
 
   const copy = element(document, "div", "ready-state__copy");
@@ -269,32 +389,105 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
     element(document, "p", "page-intro__description", snapshot.copy.labIntroduction),
   );
 
-  const capabilities = element(document, "ul", "laboratory__capabilities");
-  [snapshot.copy.labObservation, snapshot.copy.labConfiguration].forEach((capability, index) => {
-    const item = element(document, "li", "laboratory__capability");
-    item.append(
-      element(document, "span", "laboratory__capability-number", "0" + String(index + 1)),
-      element(document, "span", "laboratory__capability-copy", capability),
-    );
-    capabilities.append(item);
-  });
-  const boundary = element(document, "aside", "laboratory__boundary");
-  boundary.append(
-    element(document, "span", "laboratory__boundary-mark", "ID"),
-    element(document, "p", "laboratory__boundary-copy", snapshot.copy.labBoundary),
+  const isPortuguese = snapshot.locale === "pt-BR";
+  const form = element(document, "form", "laboratory__form");
+  const modelOne = document.createElement("select");
+  const modelTwo = document.createElement("select");
+  const status = element(
+    document,
+    "p",
+    "laboratory__status",
+    isPortuguese ? "Consultando modelos disponíveis…" : "Checking available models…",
   );
-  layout.append(copy, capabilities, boundary);
-  region.append(navigation, layout);
+  const start = element(
+    document,
+    "button",
+    "action action--primary laboratory__start",
+    isPortuguese ? "Iniciar Bot vs Bot" : "Start Bot vs Bot",
+  );
+  start.type = "submit";
+  start.disabled = true;
+  modelOne.disabled = true;
+  modelTwo.disabled = true;
+  modelOne.setAttribute("aria-label", isPortuguese ? "Modelo do jogador 1" : "Player 1 model");
+  modelTwo.setAttribute("aria-label", isPortuguese ? "Modelo do jogador 2" : "Player 2 model");
+
+  const field = (label: string, select: HTMLSelectElement): HTMLElement => {
+    const wrapper = element(document, "label", "laboratory__field");
+    wrapper.append(element(document, "span", "laboratory__label", label), select);
+    return wrapper;
+  };
+  form.append(
+    field(isPortuguese ? "Jogador 1" : "Player 1", modelOne),
+    field(isPortuguese ? "Jogador 2" : "Player 2", modelTwo),
+    status,
+    element(
+      document,
+      "p",
+      "laboratory__note",
+      isPortuguese
+        ? "As credenciais ficam somente no backend. O navegador recebe apenas os modelos liberados."
+        : "Credentials stay on the backend. The browser receives only approved models.",
+    ),
+    start,
+  );
+
+  const populate = (profiles: LabModelProfile[]): void => {
+    for (const [index, select] of [modelOne, modelTwo].entries()) {
+      select.replaceChildren(...profiles.map((profile) => {
+        const option = document.createElement("option");
+        option.value = profile.route;
+        option.textContent = profile.label;
+        return option;
+      }));
+      select.selectedIndex = Math.min(index, profiles.length - 1);
+      select.disabled = false;
+    }
+    start.disabled = false;
+    status.textContent = isPortuguese
+      ? `${profiles.length} perfis autorizados do 9Router.`
+      : `${profiles.length} approved 9Router profiles.`;
+  };
+
+  void createLabClient().listProfiles().then((profiles) => {
+    if (profiles.length === 0) throw new Error("no_lab_profiles");
+    populate(profiles);
+  }).catch(() => {
+    status.textContent = isPortuguese
+      ? "O laboratório não conseguiu alcançar o 9Router."
+      : "The lab could not reach 9Router.";
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!modelOne.value || !modelTwo.value) return;
+    dispatch({ type: "start-lab-match", models: [modelOne.value, modelTwo.value] });
+  });
+
+  const arena = element(document, "div", "laboratory__arena");
+  arena.setAttribute("aria-hidden", "true");
+  const firstFighter = snapshot.characters[0];
+  const secondFighter = snapshot.characters.at(-1);
+  if (firstFighter && secondFighter) {
+    arena.append(
+      renderFighterStage(document, firstFighter, { decorative: true }),
+      element(document, "span", "laboratory__versus", "VS"),
+      renderFighterStage(document, secondFighter, {
+        decorative: true,
+        mirrored: true,
+        delay: 700,
+      }),
+    );
+  }
+
+  layout.append(copy, form);
+  region.append(navigation, layout, arena);
   return region;
 }
 
 function renderFooter(document: Document, snapshot: AppSnapshot): HTMLElement {
   const footer = element(document, "footer", "app-footer");
   footer.append(element(document, "p", "app-footer__product", snapshot.copy.footerLabel));
-  const language = element(document, "a", "app-footer__language", snapshot.copy.languageLabel);
-  language.href = snapshot.locale === "pt-BR" ? "https://bombpvp.com" : "https://bombapvp.com";
-  language.hreflang = snapshot.locale === "pt-BR" ? "en" : "pt-BR";
-  footer.append(language);
   return footer;
 }
 

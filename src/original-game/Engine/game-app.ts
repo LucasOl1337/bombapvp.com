@@ -107,11 +107,6 @@ import {
   SUDDEN_DEATH_TICK_MS,
   type ProjectedBomb,
 } from "./danger-map";
-import {
-  AutoImprovementBridge,
-  type LabActionAck,
-  type LabNavigationSnapshot,
-} from "./auto-improvement-bridge";
 import type { SkillContext } from "../ultimate/skill-system";
 import {
   createDefaultPlayerSkillState,
@@ -197,7 +192,6 @@ const LANE_LOCK_THRESHOLD = 3;
 const LANE_SETTLE_EPSILON = 0.35;
 const LANE_SNAP_FACTOR = 2.6;
 const ROUND_START_CUE_MS = 1_250;
-const LAB_INITIAL_PLAN_TIMEOUT_MS = 25_000;
 const CHARACTER_MENU_KEYS: Record<MenuPlayerId, string> = {
   1: "KeyG",
   2: "KeyK",
@@ -481,16 +475,8 @@ export class GameApp {
   private automationControlledPlayer: PlayerId = 2;
   private localBotFill = 0;
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
-  private liveBridgePlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
-  private labLastTelemetryPositions: Record<PlayerId, PixelCoord | null> = createPlayerRecord(() => null);
-  private labLastMovementAtMs: Record<PlayerId, number> = createNumberPlayerRecord(0);
   private botEnabled = false;
   private botBombCooldownMs = 0;
-  private aiBridgeTick = 0;
-  private labActionAcks = new Map<string, LabActionAck>();
-  private labInitialPlansReady = false;
-  private labInitialPlanWaitStartedAtMs = 0;
-  private labStartupAbortTriggered = false;
   private botCommittedDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
   private botPendingReverseDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
   private botPendingReverseFrames: Record<PlayerId, number> = createNumberPlayerRecord(0);
@@ -982,11 +968,6 @@ export class GameApp {
     this.autoPausedForHiddenTab = false;
     this.roundOutcome = null;
     this.botBombCooldownMs = 0;
-    this.labActionAcks.clear();
-    this.labInitialPlansReady = false;
-    this.labInitialPlanWaitStartedAtMs = 0;
-    this.labStartupAbortTriggered = false;
-    AutoImprovementBridge.invalidateDecisions(this.activePlayerIds, this.aiBridgeTick + 1);
     this.botCommittedDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseFrames = createNumberPlayerRecord(0);
@@ -1164,12 +1145,6 @@ export class GameApp {
     this.soundManager.setMuted(this.readStorageItem(storage, AUDIO_MUTED_STORAGE_KEY) === "true");
     void this.soundManager.loadSounds(SFX_MANIFEST);
     this.root.appendChild(this.canvas);
-    const liveLabSession = ([1, 2, 3, 4] as PlayerId[])
-      .some((playerId) => this.liveBridgePlayers[playerId]);
-    if (liveLabSession) {
-      AutoImprovementBridge.enable();
-      AutoImprovementBridge.mountSidePanels(this.root.ownerDocument?.body ?? document.body);
-    }
     this.syncCanvasDisplaySize();
     this.mode = "menu";
     this.registerWindowHooks();
@@ -1244,15 +1219,6 @@ export class GameApp {
     this.endlessRoundWins = createNumberPlayerRecord(0);
     this.applyOfflineBotFill(botFill, false);
     this.startMatch();
-  }
-
-  public setLiveBridgePlayers(playerIds: PlayerId[]): void {
-    const selected = new Set(playerIds);
-    this.liveBridgePlayers = createPlayerRecord((playerId) => selected.has(playerId));
-    this.labInitialPlansReady = false;
-    this.labInitialPlanWaitStartedAtMs = 0;
-    this.labStartupAbortTriggered = false;
-    AutoImprovementBridge.setControlledPlayerIds(playerIds);
   }
 
   public setOfflinePreferredCharacter(characterIndex: number): void {
@@ -1841,11 +1807,6 @@ export class GameApp {
       return;
     }
 
-    if (this.isAwaitingInitialModelPlan()) {
-      this.pushLabTelemetry();
-      return;
-    }
-
     this.updateRoundStartCue(deltaMs);
     this.roundTimeMs = Math.max(0, this.roundTimeMs - deltaMs);
     this.animationClockMs += deltaMs;
@@ -1870,78 +1831,6 @@ export class GameApp {
       this.cachedDangerMap = null;
     }
 
-    this.pushLabTelemetry();
-  }
-
-  private isAwaitingInitialModelPlan(): boolean {
-    if (!AutoImprovementBridge.isEnabled || this.labInitialPlansReady) {
-      return false;
-    }
-    const controlledPlayers = this.activePlayerIds.filter((playerId) => (
-      this.liveBridgePlayers[playerId] && this.players[playerId].alive
-    ));
-    if (!controlledPlayers.length) {
-      this.labInitialPlanWaitStartedAtMs = 0;
-      return false;
-    }
-    const missingPlayers = controlledPlayers.filter((playerId) => (
-      !AutoImprovementBridge.hasFreshDecision(playerId)
-    ));
-    this.labInitialPlansReady = missingPlayers.length === 0;
-    if (this.labInitialPlansReady) {
-      this.labInitialPlanWaitStartedAtMs = 0;
-      return false;
-    }
-    const now = Date.now();
-    if (!this.labInitialPlanWaitStartedAtMs) {
-      this.labInitialPlanWaitStartedAtMs = now;
-    } else if (
-      now - this.labInitialPlanWaitStartedAtMs >= LAB_INITIAL_PLAN_TIMEOUT_MS
-      && !this.labStartupAbortTriggered
-    ) {
-      this.abortUnavailableLabSession(missingPlayers);
-    }
-    return !this.labInitialPlansReady;
-  }
-
-  private abortUnavailableLabSession(missingPlayers: PlayerId[]): void {
-    this.labStartupAbortTriggered = true;
-    const players = missingPlayers.map((playerId) => `P${playerId}`).join(", ");
-    const message = `O 9router não entregou um plano válido para ${players} em 25 segundos. A sessão foi interrompida; tente novamente.`;
-    if (this.headless || typeof window === "undefined") {
-      this.paused = true;
-      return;
-    }
-    window.setTimeout(() => {
-      window.alert(message);
-      window.location.assign("/lab");
-    }, 0);
-  }
-
-  private pushLabTelemetry(): void {
-    if (!AutoImprovementBridge.isEnabled) {
-      return;
-    }
-    this.aiBridgeTick++;
-    AutoImprovementBridge.pushTelemetry({
-      tick: this.aiBridgeTick,
-      phase: this.mode,
-      roundNumber: this.roundNumber,
-      players: Object.values(this.players),
-      bombs: this.bombs,
-      flames: this.flames,
-      powerUps: this.arena.powerUps,
-      matchScore: this.score,
-      suddenDeath: {
-        active: this.suddenDeathActive,
-        index: this.suddenDeathIndex,
-      },
-      navigation: this.getLabNavigationSnapshot(),
-      actionAcks: [...this.labActionAcks.values()].map((ack) => ({
-        ...ack,
-        alive: this.players[Number(ack.playerId) as PlayerId]?.alive ?? false,
-      })),
-    });
   }
 
   private updateMatchResult(deltaMs: number): void {
@@ -2065,11 +1954,6 @@ export class GameApp {
         }
       }
     }
-    for (const playerId of this.activePlayerIds) {
-      if (this.liveBridgePlayers[playerId]) {
-        this.botControlledPlayers[playerId] = true;
-      }
-    }
     this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
     const nextReady = createBooleanPlayerRecord(false);
     nextReady[1] = preserveP1Ready ? this.menuReady[1] : false;
@@ -2121,11 +2005,6 @@ export class GameApp {
     this.paused = false;
     this.autoPausedForHiddenTab = false;
     this.botBombCooldownMs = 0;
-    this.labActionAcks.clear();
-    this.labInitialPlansReady = false;
-    this.labInitialPlanWaitStartedAtMs = 0;
-    this.labStartupAbortTriggered = false;
-    AutoImprovementBridge.invalidateDecisions(this.activePlayerIds, this.aiBridgeTick + 1);
     this.botCommittedDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseFrames = createNumberPlayerRecord(0);
@@ -2338,20 +2217,9 @@ export class GameApp {
         const skillHeld = botDecision?.skillHeld ?? this.isSkillHeld(id);
 
         const desiredDirection = botDecision?.direction ?? this.getMovementDirection(id);
-        const liveBridgeControlled = AutoImprovementBridge.isEnabled && this.isLiveBridgeControlled(id);
-        const direction = liveBridgeControlled
-          ? desiredDirection
-          : this.isBotControlled(id)
-            ? this.getStableBotDirection(player, desiredDirection, deltaMs)
-            : desiredDirection;
-        const actionRequestId = liveBridgeControlled ? botDecision?.requestId : undefined;
-        const positionBefore = actionRequestId ? { ...player.position } : null;
-        const tileBefore = actionRequestId ? { ...player.tile } : null;
-        const skillPhaseBefore = player.skill.phase;
-        const detonationBomb = actionRequestId && wantsDetonate
-          ? this.getOldestOwnedBomb(player.id)
-          : null;
-        const detonationFuseBefore = detonationBomb?.fuseMs ?? 0;
+        const direction = this.isBotControlled(id)
+          ? this.getStableBotDirection(player, desiredDirection, deltaMs)
+          : desiredDirection;
         const placedBomb = this.simulatePlayerInputStep(
           player,
           {
@@ -2363,33 +2231,6 @@ export class GameApp {
           },
           deltaMs,
         );
-        if (actionRequestId && positionBefore && tileBefore) {
-          this.recordLabActionAck({
-            requestId: actionRequestId,
-            microActionIndex: botDecision?.microActionIndex ?? 0,
-            playerId: String(id),
-            direction,
-            tileBefore,
-            tileAfter: { ...player.tile },
-            movementDelta: {
-              x: player.position.x - positionBefore.x,
-              y: player.position.y - positionBefore.y,
-            },
-            positionChanged: player.position.x !== positionBefore.x || player.position.y !== positionBefore.y,
-            tileChanged: player.tile.x !== tileBefore.x || player.tile.y !== tileBefore.y,
-            bombAttempted: Boolean(botDecision?.placeBomb),
-            bombPlaced: placedBomb,
-            detonateAttempted: Boolean(botDecision?.detonate),
-            detonated: Boolean(detonationBomb && detonationFuseBefore > 0 && detonationBomb.fuseMs <= 0),
-            skillAction: botDecision?.skillAction ?? "none",
-            skillPressed: modelSkillPressed,
-            skillHeld: Boolean(botDecision?.skillHeld),
-            skillPhaseBefore,
-            skillPhaseAfter: player.skill.phase,
-            alive: player.alive,
-            updatedAtTick: this.aiBridgeTick + 1,
-          });
-        }
         if (this.isBotControlled(id) && direction && player.skill.phase !== "channeling") {
           this.rememberBotDirection(id, player.direction);
         }
@@ -2447,10 +2288,6 @@ export class GameApp {
     return Boolean(this.botControlledPlayers?.[id]) && this.activePlayerIds.includes(id);
   }
 
-  private isLiveBridgeControlled(id: PlayerId): boolean {
-    return Boolean(this.liveBridgePlayers?.[id]) && this.activePlayerIds.includes(id);
-  }
-
   private shouldUseNativeControls(): boolean {
     if (this.onlineSession) {
       return false;
@@ -2471,47 +2308,7 @@ export class GameApp {
   }
 
   private getBotDecision(player: PlayerState): BotDecision {
-    if (AutoImprovementBridge.isEnabled && this.isLiveBridgeControlled(player.id)) {
-      // Per-player AI explicitly disabled → stand completely idle (no built-in AI)
-      if (!AutoImprovementBridge.isPlayerEnabled(player.id)) {
-        return { direction: null, placeBomb: false, detonate: false, useSkill: false, skillHeld: false };
-      }
-      const aiDecision = AutoImprovementBridge.getDecision(player.id);
-      if (aiDecision) return AutoImprovementBridge.toBotDecision(aiDecision);
-      // Strict / Codex-only mode → stand idle rather than falling back to built-in AI
-      if (AutoImprovementBridge.isStrictMode) {
-        return { direction: null, placeBomb: false, detonate: false };
-      }
-    }
     return botAI_getBotDecision(player, this.createBotContext(this.getSharedBotDangerMap()));
-  }
-
-  private recordLabActionAck(frame: LabActionAck): void {
-    const key = `${frame.playerId}:${frame.requestId}:${frame.microActionIndex}`;
-    const previous = this.labActionAcks.get(key);
-    this.labActionAcks.set(key, previous
-      ? {
-          ...frame,
-          movementDelta: {
-            x: previous.movementDelta.x + frame.movementDelta.x,
-            y: previous.movementDelta.y + frame.movementDelta.y,
-          },
-          positionChanged: previous.positionChanged || frame.positionChanged,
-          tileChanged: previous.tileChanged || frame.tileChanged,
-          bombAttempted: previous.bombAttempted || frame.bombAttempted,
-          bombPlaced: previous.bombPlaced || frame.bombPlaced,
-          detonateAttempted: previous.detonateAttempted || frame.detonateAttempted,
-          detonated: previous.detonated || frame.detonated,
-          skillPressed: previous.skillPressed || frame.skillPressed,
-          skillHeld: frame.skillHeld,
-          skillPhaseBefore: previous.skillPhaseBefore,
-          tileBefore: previous.tileBefore,
-          tileAfter: frame.tileAfter,
-        }
-      : frame);
-    while (this.labActionAcks.size > 64) {
-      this.labActionAcks.delete(this.labActionAcks.keys().next().value as string);
-    }
   }
 
   private getSharedBotDangerMap(): Map<string, number> {
@@ -2932,75 +2729,6 @@ export class GameApp {
     }
 
     return false;
-  }
-
-  private getLabNavigationSnapshot(): Record<string, LabNavigationSnapshot> {
-    const now = Date.now();
-    const result: Record<string, LabNavigationSnapshot> = {};
-
-    for (const playerId of this.activePlayerIds) {
-      if (!this.liveBridgePlayers[playerId]) continue;
-      const player = this.players[playerId];
-      const previous = this.labLastTelemetryPositions[playerId];
-      const delta = previous
-        ? { x: player.position.x - previous.x, y: player.position.y - previous.y }
-        : { x: 0, y: 0 };
-      const moved = Math.hypot(delta.x, delta.y) >= 0.75;
-      if (moved || !this.labLastMovementAtMs[playerId]) {
-        this.labLastMovementAtMs[playerId] = now;
-      }
-      this.labLastTelemetryPositions[playerId] = { ...player.position };
-
-      const walkableDirections: Direction[] = [];
-      const blockedDirections: Direction[] = [];
-      for (const direction of ["up", "down", "left", "right"] as const) {
-        const step = directionDelta[direction];
-        const blocked = this.isTileBlockedForPlayer(
-          player,
-          player.tile.x + step.x,
-          player.tile.y + step.y,
-        );
-        (blocked ? blockedDirections : walkableDirections).push(direction);
-      }
-
-      const dangerMap = this.cachedDangerMap ?? this.getDangerMap();
-      const localTiles: LabNavigationSnapshot["localTiles"] = [];
-      for (let offsetY = -3; offsetY <= 3; offsetY += 1) {
-        for (let offsetX = -3; offsetX <= 3; offsetX += 1) {
-          const tile = this.normalizeTile({ x: player.tile.x + offsetX, y: player.tile.y + offsetY });
-          const key = tileKey(tile.x, tile.y);
-          let kind: LabNavigationSnapshot["localTiles"][number]["kind"] = "open";
-          if (this.arena.solid.has(key)) kind = "solid";
-          else if (this.arena.breakable.has(key)) kind = "breakable";
-          else if (this.flames.some((flame) => tileKey(flame.tile.x, flame.tile.y) === key)) kind = "flame";
-          else if (this.bombs.some((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key)) kind = "bomb";
-          else if (this.arena.powerUps.some((powerUp) => tileKey(powerUp.tile.x, powerUp.tile.y) === key)) kind = "powerup";
-          else if (tile.x === player.tile.x && tile.y === player.tile.y) kind = "self";
-          else if (this.activePlayerIds.some((otherId) => {
-            if (otherId === playerId || !this.players[otherId].alive) return false;
-            const otherTile = this.players[otherId].tile;
-            return otherTile.x === tile.x && otherTile.y === tile.y;
-          })) kind = "enemy";
-          localTiles.push({
-            x: tile.x,
-            y: tile.y,
-            kind,
-            dangerEtaMs: dangerMap.get(key) ?? null,
-          });
-        }
-      }
-
-      result[String(playerId)] = {
-        tile: { ...player.tile },
-        walkableDirections,
-        blockedDirections,
-        stalledForMs: player.alive ? Math.max(0, now - this.labLastMovementAtMs[playerId]) : 0,
-        lastMovementDelta: delta,
-        localTiles,
-      };
-    }
-
-    return result;
   }
 
   private getTileCenter(tile: TileCoord): PixelCoord {

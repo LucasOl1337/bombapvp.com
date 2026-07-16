@@ -47,9 +47,6 @@ export type ProductCopy = Readonly<{
   labKicker: string;
   labTitle: string;
   labIntroduction: string;
-  labBoundary: string;
-  labObservation: string;
-  labConfiguration: string;
   footerLabel: string;
   languageLabel: string;
 }>;
@@ -164,10 +161,7 @@ const PT_COPY: ProductCopy = Object.freeze({
   readyMessage: "Seu personagem e destino estão definidos. A entrada na arena será liberada quando esta experiência estiver pronta.",
   labKicker: "OBSERVAÇÃO COMPETITIVA",
   labTitle: "Laboratório Bot vs Bot",
-  labIntroduction: "Um espaço separado para configurar competidores e acompanhar partidas sem controlar um personagem.",
-  labBoundary: "Contas serão exigidas para salvar e administrar competidores.",
-  labObservation: "Acompanhe disputas como espectador.",
-  labConfiguration: "Prepare configurações antes da partida.",
+  labIntroduction: "Escolha dois modelos do 9Router e observe os dois controlarem a gameplay original.",
   footerLabel: "UM PRODUTO · TRÊS EXPERIÊNCIAS",
   languageLabel: "English",
 });
@@ -193,10 +187,7 @@ const EN_COPY: ProductCopy = Object.freeze({
   readyMessage: "Your character and destination are set. Arena entry will open when this experience is ready.",
   labKicker: "COMPETITIVE OBSERVATION",
   labTitle: "Bot vs Bot Lab",
-  labIntroduction: "A separate space to configure competitors and watch matches without controlling a character.",
-  labBoundary: "Accounts will be required to save and manage competitors.",
-  labObservation: "Watch matches as a spectator.",
-  labConfiguration: "Prepare configurations before a match.",
+  labIntroduction: "Choose two 9Router models and watch them control the original gameplay.",
   footerLabel: "ONE PRODUCT · THREE EXPERIENCES",
   languageLabel: "Português",
 });

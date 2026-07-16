@@ -1,10 +1,14 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "bombapvp-com",
+  "main": "worker/index.js",
   "account_id": "f838f7d26348a09f88fb38ea03272857",
   "compatibility_date": "2026-07-16",
   "workers_dev": true,
   "preview_urls": true,
+  "vars": {
+    "LAB_BROKER_URL": "https://lab-broker.bombapvp.com"
+  },
   "routes": [
     {
       "pattern": "bombapvp.com",
@@ -17,10 +21,22 @@
   ],
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/lab/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "single-page-application"
   },
   "observability": {
     "enabled": true
-  }
+  },
+  "ratelimits": [
+    {
+      "name": "LAB_DECISION_RATE_LIMITER",
+      "namespace_id": "26071601",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ]
 }

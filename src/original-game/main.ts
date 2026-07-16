@@ -1,6 +1,8 @@
 import "./original-game.css";
 import { loadGameAssets } from "./Engine/assets";
 import { GameApp } from "./Engine/game-app";
+import { createLabClient } from "../lab/client";
+import { startLabController, type LabControllerStatus } from "../lab/controller";
 
 const rootElement = document.querySelector<HTMLElement>("#app");
 
@@ -20,7 +22,9 @@ async function bootOriginalGame(): Promise<void> {
   const selectedCharacterIndex = Math.max(0, CHARACTER_IDS.indexOf(
     selectedCharacterId as (typeof CHARACTER_IDS)[number],
   ));
-  const mode = params.get("mode") === "continuous" ? "continuous" : "training";
+  const mode = params.get("mode") === "continuous"
+    ? "continuous"
+    : params.get("mode") === "lab" ? "lab" : "training";
   const hostname = window.location.hostname.replace(/^www\./, "");
 
   document.documentElement.lang = hostname === "bombpvp.com" ? "en" : "pt-BR";
@@ -32,6 +36,48 @@ async function bootOriginalGame(): Promise<void> {
   game.setLanguage(hostname === "bombpvp.com" ? "en" : "pt");
   game.setOfflinePreferredCharacter(selectedCharacterIndex);
   game.start();
+
+  if (mode === "lab") {
+    const modelOne = params.get("model1");
+    const modelTwo = params.get("model2");
+    if (!modelOne || !modelTwo) throw new Error("lab_models_missing");
+
+    game.startServerAuthoritativeMatch(
+      [1, 2],
+      { 1: 0, 2: 1, 3: 2, 4: 3 },
+      {
+        roomMode: "endless",
+        playerLabels: { 1: modelOne, 2: modelTwo, 3: "", 4: "" },
+      },
+    );
+
+    const statusPanel = document.createElement("aside");
+    statusPanel.className = "lab-live-status";
+    statusPanel.setAttribute("aria-live", "polite");
+    const states = new Map<number, LabControllerStatus["state"]>([[1, "waiting"], [2, "waiting"]]);
+    const renderStatus = (): void => {
+      const stateLabel = (state: LabControllerStatus["state"]): string => {
+        if (document.documentElement.lang === "en") return state;
+        return ({ waiting: "aguardando", thinking: "pensando", acting: "jogando", error: "erro", stopped: "parado" })[state];
+      };
+      statusPanel.textContent = `P1 · ${modelOne} · ${stateLabel(states.get(1) ?? "waiting")}  |  P2 · ${modelTwo} · ${stateLabel(states.get(2) ?? "waiting")}`;
+    };
+    renderStatus();
+    document.body.append(statusPanel);
+
+    const stop = startLabController(
+      game,
+      createLabClient(),
+      [{ playerId: 1, model: modelOne }, { playerId: 2, model: modelTwo }],
+      (status) => {
+        states.set(status.playerId, status.state);
+        renderStatus();
+      },
+    );
+    window.addEventListener("pagehide", stop, { once: true });
+    return;
+  }
+
   game.startOfflineBotMatch(mode === "training" ? 1 : 3, mode === "training" ? "classic" : "endless");
 }
 

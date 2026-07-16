@@ -74,3 +74,18 @@ body {
   border-color: #68ddff;
   outline: none;
 }
+
+.lab-live-status {
+  position: fixed;
+  z-index: 10;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  max-width: min(42rem, calc(100vw - 1.5rem));
+  border: 1px solid rgb(104 221 255 / 45%);
+  padding: 0.6rem 0.75rem;
+  color: #dce8f4;
+  background: rgb(5 7 11 / 86%);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}

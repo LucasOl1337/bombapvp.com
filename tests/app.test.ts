@@ -1,14 +1,25 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, within } from "@testing-library/dom";
 import { createBombApp, type BombApp } from "../src/app/index.ts";
 
 describe("Bomba PvP app", () => {
   let app: BombApp | undefined;
 
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      profiles: [
+        { id: "sol", label: "GPT 5.6 Sol", route: "cx/gpt-5.6-sol" },
+        { id: "fable", label: "Claude Fable 5", route: "cc/claude-fable-5" },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  });
+
   afterEach(() => {
     app?.dispose();
     app = undefined;
     document.body.replaceChildren();
+    vi.unstubAllGlobals();
   });
 
   function createRoot(): HTMLElement {
@@ -30,6 +41,11 @@ describe("Bomba PvP app", () => {
       "Treino contra bots",
       "Laboratório Bot vs Bot",
     ]);
+    expect(within(portugueseRoot).getByRole("heading", { name: "Bomba PvP", level: 1 })).toBeTruthy();
+    expect(
+      within(portugueseRoot).getByRole("complementary", { name: "Personagens" }),
+    ).toBeTruthy();
+    expect(within(portugueseRoot).getByRole("group", { name: "Idioma" })).toBeTruthy();
 
     app.dispose();
     const englishRoot = createRoot();
@@ -103,7 +119,7 @@ describe("Bomba PvP app", () => {
     expect(view.getByText("Nico · Treino contra bots")).toBeTruthy();
   });
 
-  it("trata o laboratório como produto próprio e declara sua fronteira de conta", () => {
+  it("inicia o laboratório com os dois modelos selecionados", async () => {
     const root = createRoot();
     app = createBombApp({ hostname: "bombapvp.com", root });
     const view = within(root);
@@ -115,7 +131,14 @@ describe("Bomba PvP app", () => {
       activeExperience: { id: "bot-vs-bot-lab" },
     });
     expect(view.getByRole("region", { name: "Laboratório Bot vs Bot" })).toBeTruthy();
-    expect(view.getByText("Contas serão exigidas para salvar e administrar competidores.")).toBeTruthy();
+
+    const start = await view.findByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(start.disabled).toBe(false));
+    fireEvent.click(start);
+    expect(app.getSnapshot()).toMatchObject({
+      screen: "game-launch",
+      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&model2=cc%2Fclaude-fable-5",
+    });
   });
 
   it("aceita navegação externa, publica mudanças e encerra sem efeitos posteriores", () => {

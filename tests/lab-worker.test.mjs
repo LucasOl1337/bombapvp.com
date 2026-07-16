@@ -1,0 +1,50 @@
+import { describe, expect, it, vi } from "vitest";
+import { handleRequest } from "../worker/index.js";
+
+describe("proxy do Laboratorio", () => {
+  it("encaminha somente rotas permitidas com o segredo interno", async () => {
+    const brokerFetch = vi.fn(async (request) => Response.json({
+      path: new URL(request.url).pathname,
+      secret: request.headers.get("x-bomba-lab-secret"),
+    }));
+    const env = {
+      ASSETS: { fetch: vi.fn(async () => new Response("asset")) },
+      LAB_BROKER_URL: "https://broker.example",
+      LAB_BROKER_SECRET: "secret",
+      LAB_DECISION_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    };
+
+    const response = await handleRequest(new Request("https://bombapvp.com/api/lab/models"), env, brokerFetch);
+    await expect(response.json()).resolves.toEqual({ path: "/models", secret: "secret" });
+
+    const decision = await handleRequest(new Request("https://bombapvp.com/api/lab/decision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "cx/gpt-5.6-sol", observation: { playerId: 1 } }),
+    }), env, brokerFetch);
+    await expect(decision.json()).resolves.toMatchObject({ path: "/decision", secret: "secret" });
+
+    const blocked = await handleRequest(new Request("https://bombapvp.com/api/lab/admin"), env, brokerFetch);
+    expect(blocked.status).toBe(404);
+    expect(brokerFetch).toHaveBeenCalledTimes(2);
+    expect(env.LAB_DECISION_RATE_LIMITER.limit).toHaveBeenCalledOnce();
+  });
+
+  it("bloqueia excesso de decisões antes de chamar o broker", async () => {
+    const brokerFetch = vi.fn();
+    const env = {
+      ASSETS: { fetch: vi.fn() },
+      LAB_BROKER_URL: "https://broker.example",
+      LAB_BROKER_SECRET: "secret",
+      LAB_DECISION_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) },
+    };
+    const response = await handleRequest(new Request("https://bombapvp.com/api/lab/decision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.1" },
+      body: "{}",
+    }), env, brokerFetch);
+
+    expect(response.status).toBe(429);
+    expect(brokerFetch).not.toHaveBeenCalled();
+  });
+});
