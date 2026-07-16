@@ -83,7 +83,14 @@ export interface MatchStartConfig {
 export interface OnlineEndlessStats {
   kills: MatchScore;
   roundWins: MatchScore;
+  deaths?: MatchScore;
+  selfDeaths?: MatchScore;
+  opponentDeaths?: MatchScore;
+  suddenDeathDeaths?: MatchScore;
+  environmentDeaths?: MatchScore;
 }
+
+export type OnlineDeathCause = "self" | "opponent" | "sudden-death" | "environment";
 
 export interface OnlineGameSnapshot {
   serverTimeMs: number;

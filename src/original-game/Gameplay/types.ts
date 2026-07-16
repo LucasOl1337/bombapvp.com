@@ -83,6 +83,7 @@ export interface FlameState {
   tile: TileCoord;
   remainingMs: number;
   style?: FlameStyle;
+  ownerId: PlayerId | null;
 }
 
 export interface MagicBeamState {

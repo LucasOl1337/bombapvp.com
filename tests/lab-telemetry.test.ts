@@ -64,11 +64,35 @@ function gameSnapshot(): OnlineGameSnapshot {
     endlessStats: {
       kills: { 1: 3, 2: 1, 3: 0, 4: 0 },
       roundWins: { 1: 1, 2: 0, 3: 0, 4: 0 },
+      deaths: { 1: 2, 2: 4, 3: 0, 4: 0 },
+      selfDeaths: { 1: 1, 2: 2, 3: 0, 4: 0 },
+      opponentDeaths: { 1: 1, 2: 1, 3: 0, 4: 0 },
+      suddenDeathDeaths: { 1: 0, 2: 1, 3: 0, 4: 0 },
+      environmentDeaths: { 1: 0, 2: 0, 3: 0, 4: 0 },
     },
   };
 }
 
 describe("telemetria do laboratorio", () => {
+  it("aceita snapshots anteriores aos contadores de morte", () => {
+    const snapshot = gameSnapshot();
+    snapshot.endlessStats = {
+      kills: { 1: 3, 2: 1, 3: 0, 4: 0 },
+      roundWins: { 1: 1, 2: 0, 3: 0, 4: 0 },
+    };
+    const telemetry = createLabTelemetry([
+      { playerId: 1, label: "V1", kind: "v1" },
+    ], () => 0);
+
+    expect(telemetry.read(snapshot).players[0]!.gameplay).toMatchObject({
+      deaths: 0,
+      selfDeaths: 0,
+      opponentDeaths: 0,
+      suddenDeathDeaths: 0,
+      environmentDeaths: 0,
+    });
+  });
+
   it("resume velocidade, comportamento, tokens e resultado de cada bot", () => {
     let nowMs = 0;
     const telemetry = createLabTelemetry([
@@ -115,7 +139,9 @@ describe("telemetria do laboratorio", () => {
       decisions: { count: 2, perSecond: 1, errors: 0 },
       actions: { changeRatePct: 100, movementPct: 50, bombIntentPct: 50 },
       gameplay: {
-        alive: true, kills: 3, roundWins: 1, bombsAvailable: 1, bombCapacity: 2,
+        alive: true, kills: 3, roundWins: 1, deaths: 2, selfDeaths: 1,
+        opponentDeaths: 1, suddenDeathDeaths: 0, environmentDeaths: 0,
+        bombsAvailable: 1, bombCapacity: 2,
         flameRange: 3, speedLevel: 1, remoteLevel: 0, bombPassLevel: 0, kickLevel: 0, shortFuseLevel: 0,
       },
     });
@@ -137,7 +163,8 @@ describe("telemetria do laboratorio", () => {
       },
       tokens: { inputTokens: 220, outputTokens: 30, totalTokens: 250 },
       gameplay: {
-        alive: false, kills: 1, bombsAvailable: 2, bombCapacity: 3, shieldCharges: 1,
+        alive: false, kills: 1, deaths: 4, selfDeaths: 2, opponentDeaths: 1,
+        suddenDeathDeaths: 1, environmentDeaths: 0, bombsAvailable: 2, bombCapacity: 3, shieldCharges: 1,
         remoteLevel: 1, bombPassLevel: 1, kickLevel: 1, shortFuseLevel: 1,
       },
     });

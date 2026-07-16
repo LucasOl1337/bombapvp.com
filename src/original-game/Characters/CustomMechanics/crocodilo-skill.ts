@@ -120,7 +120,7 @@ export function fireCrocodiloEmeraldSurge(player: PlayerState, context: SkillCon
   for (const tile of toxicTiles) {
     const key = tileKey(tile.x, tile.y);
     hitKeys.add(key);
-    context.addFlame(tile, CROCODILO_SURGE_DURATION_MS, "toxic");
+    context.addFlame(tile, CROCODILO_SURGE_DURATION_MS, "toxic", player.id);
     context.breakCrateAtKey(key);
     const bomb = context.bombs.find((item) => item.tile.x === tile.x && item.tile.y === tile.y);
     if (bomb) {

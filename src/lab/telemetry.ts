@@ -61,6 +61,11 @@ export type LabTelemetryPlayerReport = Readonly<{
     alive: boolean;
     kills: number;
     roundWins: number;
+    deaths: number;
+    selfDeaths: number;
+    opponentDeaths: number;
+    suddenDeathDeaths: number;
+    environmentDeaths: number;
     bombsAvailable: number;
     bombCapacity: number;
     flameRange: number;
@@ -262,6 +267,11 @@ export function createLabTelemetry(
         const player = snapshot.players[entry.competitor.playerId];
         const kills = snapshot.endlessStats?.kills[entry.competitor.playerId] ?? 0;
         const roundWins = snapshot.endlessStats?.roundWins[entry.competitor.playerId] ?? 0;
+        const deaths = snapshot.endlessStats?.deaths?.[entry.competitor.playerId] ?? 0;
+        const selfDeaths = snapshot.endlessStats?.selfDeaths?.[entry.competitor.playerId] ?? 0;
+        const opponentDeaths = snapshot.endlessStats?.opponentDeaths?.[entry.competitor.playerId] ?? 0;
+        const suddenDeathDeaths = snapshot.endlessStats?.suddenDeathDeaths?.[entry.competitor.playerId] ?? 0;
+        const environmentDeaths = snapshot.endlessStats?.environmentDeaths?.[entry.competitor.playerId] ?? 0;
         const averageDecisionMs = average(entry.decisionMsTotal, entry.decisions);
         const averagePollGapMs = average(entry.pollGapMsTotal, entry.pollGapSamples);
         return {
@@ -305,6 +315,11 @@ export function createLabTelemetry(
             alive: Boolean(player?.active && player.alive),
             kills,
             roundWins,
+            deaths,
+            selfDeaths,
+            opponentDeaths,
+            suddenDeathDeaths,
+            environmentDeaths,
             bombsAvailable: player?.active ? Math.max(0, player.maxBombs - player.activeBombs) : 0,
             bombCapacity: player?.active ? player.maxBombs : 0,
             flameRange: player?.active ? player.flameRange : 0,

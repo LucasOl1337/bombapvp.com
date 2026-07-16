@@ -99,6 +99,7 @@ export function buildLabObservation(snapshot: OnlineGameSnapshot, playerId: Play
     flames: snapshot.flames.map((flame) => ({
       tile: flame.tile,
       remainingMs: Math.round(flame.remainingMs),
+      ownerId: flame.ownerId ?? null,
     })),
     magicBeams: snapshot.magicBeams.map((beam) => ({
       ownerId: beam.ownerId,

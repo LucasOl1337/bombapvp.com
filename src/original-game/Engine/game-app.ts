@@ -83,6 +83,7 @@ import {
 import type {
   LobbyMode,
   MatchStartConfig,
+  OnlineDeathCause,
   OnlineEndlessStats,
   OnlineGameFrame,
   OnlineGameSnapshot,
@@ -289,6 +290,23 @@ function createNumberPlayerRecord(value: number): Record<PlayerId, number> {
   return createPlayerRecord(() => value);
 }
 
+type EndlessDeathStats = Readonly<{
+  total: MatchScore;
+  byCause: Record<OnlineDeathCause, MatchScore>;
+}>;
+
+function createEndlessDeathStats(stats?: OnlineEndlessStats | null): EndlessDeathStats {
+  return {
+    total: stats?.deaths ? { ...stats.deaths } : createNumberPlayerRecord(0),
+    byCause: {
+      self: stats?.selfDeaths ? { ...stats.selfDeaths } : createNumberPlayerRecord(0),
+      opponent: stats?.opponentDeaths ? { ...stats.opponentDeaths } : createNumberPlayerRecord(0),
+      "sudden-death": stats?.suddenDeathDeaths ? { ...stats.suddenDeathDeaths } : createNumberPlayerRecord(0),
+      environment: stats?.environmentDeaths ? { ...stats.environmentDeaths } : createNumberPlayerRecord(0),
+    },
+  };
+}
+
 function createDirectionPlayerRecord(value: Direction | null): Record<PlayerId, Direction | null> {
   return createPlayerRecord(() => value);
 }
@@ -472,6 +490,7 @@ export class GameApp {
   private onlineRoomMode: LobbyMode = "classic";
   private endlessKills: MatchScore = createNumberPlayerRecord(0);
   private endlessRoundWins: MatchScore = createNumberPlayerRecord(0);
+  private endlessDeathStats: EndlessDeathStats = createEndlessDeathStats();
   private readonly automationMode = typeof navigator !== "undefined" ? navigator.webdriver : false;
   /** AIRI embeds the game in a sandboxed iframe, which can receive blur/hidden
    * events even while the widget is visibly open. Its bridge advances the
@@ -688,7 +707,7 @@ export class GameApp {
       clonePlayerState: (player) => this.clonePlayerState(player),
       tryAbsorbInstantHit: (player, attackerId) => this.tryAbsorbInstantHit(player, attackerId),
       breakCrateAtKey: (key) => this.breakCrateAtKey(key),
-      addFlame: (tile, durationMs, style) => this.addFlame(tile, durationMs, style),
+      addFlame: (tile, durationMs, style, ownerId) => this.addFlame(tile, durationMs, style, undefined, ownerId),
       soundManager: { playOneShot: (name: string) => this.soundManager.playOneShot(name as any) },
     };
   }
@@ -714,6 +733,7 @@ export class GameApp {
     this.onlineRenderSamples = [];
     this.endlessKills = createNumberPlayerRecord(0);
     this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.endlessDeathStats = createEndlessDeathStats();
     this.syncPlayerLabels();
   }
 
@@ -973,6 +993,7 @@ export class GameApp {
     this.score = { 1: 0, 2: 0, 3: 0, 4: 0 };
     this.endlessKills = createNumberPlayerRecord(0);
     this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.endlessDeathStats = createEndlessDeathStats();
     this.onlineRoomMode = "classic";
     this.roundNumber = 1;
     this.matchWinner = null;
@@ -1229,6 +1250,7 @@ export class GameApp {
     this.matchWinner = null;
     this.endlessKills = createNumberPlayerRecord(0);
     this.endlessRoundWins = createNumberPlayerRecord(0);
+    this.endlessDeathStats = createEndlessDeathStats();
     this.botDecisionObserver = null;
     this.applyOfflineBotFill(botFill, false);
     this.startMatch();
@@ -1259,6 +1281,7 @@ export class GameApp {
   private applyEndlessStats(stats: OnlineEndlessStats | null | undefined): void {
     this.endlessKills = stats ? { ...stats.kills } : createNumberPlayerRecord(0);
     this.endlessRoundWins = stats ? { ...stats.roundWins } : createNumberPlayerRecord(0);
+    this.endlessDeathStats = createEndlessDeathStats(stats);
     if (this.onlineRoomMode === "endless") {
       this.score = { ...this.endlessRoundWins };
     }
@@ -1461,6 +1484,11 @@ export class GameApp {
         ? {
           kills: { ...this.endlessKills },
           roundWins: { ...this.endlessRoundWins },
+          deaths: { ...this.endlessDeathStats.total },
+          selfDeaths: { ...this.endlessDeathStats.byCause.self },
+          opponentDeaths: { ...this.endlessDeathStats.byCause.opponent },
+          suddenDeathDeaths: { ...this.endlessDeathStats.byCause["sudden-death"] },
+          environmentDeaths: { ...this.endlessDeathStats.byCause.environment },
         }
         : null,
     };
@@ -2912,7 +2940,7 @@ export class GameApp {
 
     flameTiles.forEach((key) => {
       const [xText, yText] = key.split(",");
-      this.addFlame({ x: Number(xText), y: Number(yText) }, FLAME_DURATION_MS, "normal", queue);
+      this.addFlame({ x: Number(xText), y: Number(yText) }, FLAME_DURATION_MS, "normal", queue, bomb.ownerId);
     });
     this.soundManager.playOneShot("flames");
     this.resolvePlayerDeathsAtTileKeys(flameTiles, bomb.ownerId);
@@ -3102,6 +3130,7 @@ export class GameApp {
     durationMs: number = FLAME_DURATION_MS,
     style: FlameState["style"] = "normal",
     queue?: number[],
+    ownerId: PlayerId | null = null,
   ): void {
     this.armBombAtTile(tile, queue);
     const existing = this.flames.find((flame) => flame.tile.x === tile.x && flame.tile.y === tile.y);
@@ -3110,9 +3139,10 @@ export class GameApp {
       existing.style = existing.style === "toxic" || style === "toxic"
         ? "toxic"
         : style;
+      if (existing.ownerId == null && ownerId !== null) existing.ownerId = ownerId;
       return;
     }
-    this.flames.push({ tile: { ...tile }, remainingMs: durationMs, style });
+    this.flames.push({ tile: { ...tile }, remainingMs: durationMs, style, ownerId: ownerId ?? null });
   }
 
   private updateSuddenDeath(deltaMs: number): void {
@@ -3187,7 +3217,7 @@ export class GameApp {
       if (this.isPlayerImmuneDuringSkillChannel(player)) {
         continue;
       }
-      this.killPlayer(player);
+      this.killPlayer(player, "sudden-death");
     }
   }
 
@@ -3205,7 +3235,15 @@ export class GameApp {
   }
 
   resolvePlayerDeathsFromFlames(): void {
-    this.resolvePlayerDeathsAtTileKeys(this.flames.map((flame) => tileKey(flame.tile.x, flame.tile.y)));
+    for (const id of this.activePlayerIds) {
+      const player = this.players[id];
+      if (!player.alive) continue;
+      player.tile = this.getTileFromPosition(player.position);
+      const flame = this.flames.find((entry) => (
+        entry.tile.x === player.tile.x && entry.tile.y === player.tile.y
+      ));
+      if (flame) this.tryAbsorbInstantHit(player, flame.ownerId ?? null);
+    }
   }
 
   private resolvePlayerDeathsAtTileKeys(keys: Iterable<string>, attackerId: PlayerId | null = null): void {
@@ -3245,13 +3283,22 @@ export class GameApp {
     if (this.onlineRoomMode === "endless" && attackerId && attackerId !== player.id) {
       this.endlessKills[attackerId] += 1;
     }
-    this.killPlayer(player);
+    const cause: OnlineDeathCause = attackerId === player.id
+      ? "self"
+      : attackerId
+        ? "opponent"
+        : "environment";
+    this.killPlayer(player, cause);
     return true;
   }
 
-  private killPlayer(player: PlayerState): void {
+  private killPlayer(player: PlayerState, cause: OnlineDeathCause | null = null): void {
     if (!player.alive) {
       return;
+    }
+    if (this.onlineRoomMode === "endless" && cause) {
+      this.endlessDeathStats.total[player.id] += 1;
+      this.endlessDeathStats.byCause[cause][player.id] += 1;
     }
     player.alive = false;
     player.velocity = { x: 0, y: 0 };

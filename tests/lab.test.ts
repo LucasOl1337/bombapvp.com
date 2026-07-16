@@ -161,7 +161,7 @@ describe("Laboratorio 9Router", () => {
     state.players[1].kickLevel = 1;
     state.players[1].spawnProtectionMs = 750;
     state.players[2].bombPassLevel = 1;
-    state.flames = [{ tile: { x: 2, y: 1 }, remainingMs: 300 }];
+    state.flames = [{ tile: { x: 2, y: 1 }, remainingMs: 300, ownerId: 2 }];
     state.magicBeams = [{
       ownerId: 2, origin: { x: 3, y: 3 }, direction: "left", tiles: [{ x: 2, y: 3 }], remainingMs: 200,
     }];
@@ -174,7 +174,7 @@ describe("Laboratorio 9Router", () => {
         skill: { id: null, phase: "idle" },
       },
       enemies: [{ id: 2, bombPassLevel: 1, direction: "left" }],
-      flames: [{ tile: { x: 2, y: 1 }, remainingMs: 300 }],
+      flames: [{ tile: { x: 2, y: 1 }, remainingMs: 300, ownerId: 2 }],
       magicBeams: [{ ownerId: 2, direction: "left", remainingMs: 200 }],
       arena: { wrapPortals: [] },
       suddenDeath: { active: false, closedTiles: [], closingTiles: [] },

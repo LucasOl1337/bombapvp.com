@@ -34,6 +34,11 @@ function player(playerId: 1 | 2, label: string): LabTelemetryPlayerReport {
       alive: true,
       kills: playerId === 1 ? 4 : 2,
       roundWins: playerId === 1 ? 2 : 1,
+      deaths: playerId === 1 ? 3 : 5,
+      selfDeaths: playerId === 1 ? 1 : 2,
+      opponentDeaths: playerId === 1 ? 1 : 2,
+      suddenDeathDeaths: 1,
+      environmentDeaths: 0,
       bombsAvailable: 1,
       bombCapacity: 2,
       flameRange: 3,
@@ -69,6 +74,8 @@ describe("console do laboratorio", () => {
     expect(document.body.textContent).toContain("Luna Leve");
     expect(document.body.textContent).toContain("V1");
     expect(document.body.textContent).toContain("2");
+    expect(document.body.textContent).toContain("SELF / SD");
+    expect(document.body.textContent).toContain("1 / 1");
 
     fireEvent.click(getByRole(document.body, "button", { name: "Dados" }));
     expect(document.body.dataset.labView).toBe("data");

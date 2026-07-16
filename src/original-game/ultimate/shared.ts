@@ -39,7 +39,7 @@ export interface SkillContext {
   clonePlayerState: (player: PlayerState) => PlayerState;
   tryAbsorbInstantHit: (player: PlayerState, attackerId?: PlayerId | null) => void;
   breakCrateAtKey: (key: string) => boolean;
-  addFlame: (tile: TileCoord, durationMs?: number, style?: FlameStyle) => void;
+  addFlame: (tile: TileCoord, durationMs: number, style: FlameStyle, ownerId: PlayerId | null) => void;
   soundManager: { playOneShot: (name: string) => void };
 }
 

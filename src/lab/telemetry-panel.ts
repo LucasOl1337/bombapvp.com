@@ -82,7 +82,7 @@ function renderScoreboard(document: Document, report: LabTelemetryReport, englis
     score.append(
       element(document, "strong", "", String(player.gameplay.roundWins)),
       element(document, "span", "", english ? "WINS" : "VITÓRIAS"),
-      element(document, "small", "", `${player.gameplay.kills} K`),
+      element(document, "small", "", `${player.gameplay.kills} K · ${player.gameplay.deaths} D`),
     );
     item.append(identity, score);
     players.append(item);
@@ -120,6 +120,20 @@ function renderOverview(document: Document, report: LabTelemetryReport, english:
     metrics.append(
       metric(document, english ? "Wins" : "Vitórias", String(player.gameplay.roundWins), english ? "Rounds won" : "Rounds vencidos"),
       metric(document, english ? "Kills" : "Abates", String(player.gameplay.kills), english ? "Total kills" : "Abates totais"),
+      metric(
+        document,
+        english ? "Deaths" : "Mortes",
+        String(player.gameplay.deaths),
+        english
+          ? `Opponent ${player.gameplay.opponentDeaths} · Self ${player.gameplay.selfDeaths} · Sudden death ${player.gameplay.suddenDeathDeaths} · Environment ${player.gameplay.environmentDeaths}`
+          : `Adversário ${player.gameplay.opponentDeaths} · Própria ${player.gameplay.selfDeaths} · Sudden death ${player.gameplay.suddenDeathDeaths} · Ambiente ${player.gameplay.environmentDeaths}`,
+      ),
+      metric(
+        document,
+        "SELF / SD",
+        `${player.gameplay.selfDeaths} / ${player.gameplay.suddenDeathDeaths}`,
+        english ? "Self deaths / sudden-death deaths" : "Mortes próprias / mortes por sudden death",
+      ),
       metric(document, "AVG", formatMetric(player.timing.averageMs, "ms"), english ? "Average decision time" : "Tempo médio de decisão"),
       metric(document, "DEC/S", formatMetric(player.decisions.perSecond), english ? "Decisions per second" : "Decisões por segundo"),
     );
