@@ -22,6 +22,27 @@ export type LabControllerEvent =
 const INACTIVE_POLL_INTERVAL_MS = 50;
 const ERROR_RETRY_MIN_MS = 100;
 const ERROR_RETRY_MAX_MS = 1_000;
+const LUNA_LIGHT_DECISION_LANES = 2;
+
+function decisionLaneCount(model: string): number {
+  return model === "cx/gpt-5.6-luna" ? LUNA_LIGHT_DECISION_LANES : 1;
+}
+
+function canApplyDecision(
+  requestSequence: number,
+  lastAppliedRequestSequence: number,
+  requestedRound: number,
+  currentSnapshot: OnlineGameSnapshot,
+  playerId: PlayerId,
+): boolean {
+  const currentPlayer = currentSnapshot.players[playerId];
+  return requestSequence > lastAppliedRequestSequence
+    && currentSnapshot.mode === "match"
+    && !currentSnapshot.paused
+    && !currentSnapshot.roundOutcome
+    && currentSnapshot.roundNumber === requestedRound
+    && Boolean(currentPlayer?.active && currentPlayer.alive);
+}
 
 function observePlayer(player: PlayerState) {
   return {
@@ -158,82 +179,98 @@ export function startLabController(
   }
 
   for (const competitor of competitors) {
-    void (async () => {
-      let hasActiveInput = false;
+    let hasActiveInput = false;
+    let stopped = false;
+    let nextRequestSequence = 1;
+    let lastAppliedRequestSequence = 0;
+
+    const clearInput = (force = false): void => {
+      const shouldWrite = force || hasActiveInput;
+      hasActiveInput = false;
+      if (shouldWrite) game.clearServerPlayerInput(competitor.playerId);
+    };
+
+    const applyDecision = (decision: LabDecision): void => {
+      hasActiveInput = true;
+      game.setServerPlayerInput(competitor.playerId, toInput(decision));
+    };
+
+    const finish = (): void => {
+      if (stopped) return;
+      stopped = true;
+      clearInput(true);
+      onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
+      cleanups.delete(finish);
+    };
+    cleanups.add(finish);
+
+    const runDecisionLane = async (): Promise<void> => {
       let consecutiveErrors = 0;
-      let stopped = false;
+      while (!signal.aborted) {
+        const snapshot = game.exportOnlineSnapshot();
+        const player = snapshot.players[competitor.playerId];
+        if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
+          clearInput();
+          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
+          await delay(INACTIVE_POLL_INTERVAL_MS, signal);
+          continue;
+        }
 
-      const clearInput = (force = false): void => {
-        const shouldWrite = force || hasActiveInput;
-        hasActiveInput = false;
-        if (shouldWrite) game.clearServerPlayerInput(competitor.playerId);
-      };
+        try {
+          onEvent({
+            type: "status",
+            status: { playerId: competitor.playerId, state: hasActiveInput ? "acting" : "thinking" },
+          });
+          onEvent({ type: "request", playerId: competitor.playerId });
+          const requestSequence = nextRequestSequence;
+          nextRequestSequence += 1;
+          const result = await abortable(client.decide({
+            model: competitor.model,
+            observation: buildLabObservation(snapshot, competitor.playerId),
+          }, signal), signal);
+          if (signal.aborted) break;
+          consecutiveErrors = 0;
 
-      const applyDecision = (decision: LabDecision): void => {
-        hasActiveInput = true;
-        game.setServerPlayerInput(competitor.playerId, toInput(decision));
-      };
-
-      const finish = (): void => {
-        if (stopped) return;
-        stopped = true;
-        clearInput(true);
-        onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
-        cleanups.delete(finish);
-      };
-      cleanups.add(finish);
-
-      try {
-        while (!signal.aborted) {
-          const snapshot = game.exportOnlineSnapshot();
-          const player = snapshot.players[competitor.playerId];
-          if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
-            clearInput();
-            onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
-            await delay(INACTIVE_POLL_INTERVAL_MS, signal);
-            continue;
-          }
-
-          try {
-            onEvent({
-              type: "status",
-              status: { playerId: competitor.playerId, state: hasActiveInput ? "acting" : "thinking" },
-            });
-            onEvent({ type: "request", playerId: competitor.playerId });
-            const result = await abortable(client.decide({
-              model: competitor.model,
-              observation: buildLabObservation(snapshot, competitor.playerId),
-            }, signal), signal);
-            if (signal.aborted) break;
-            consecutiveErrors = 0;
+          const currentSnapshot = game.exportOnlineSnapshot();
+          const canApply = canApplyDecision(
+            requestSequence,
+            lastAppliedRequestSequence,
+            snapshot.roundNumber,
+            currentSnapshot,
+            competitor.playerId,
+          );
+          if (canApply) {
+            lastAppliedRequestSequence = requestSequence;
             applyDecision(result.decision);
             onEvent({ type: "decision", playerId: competitor.playerId, result });
             onEvent({ type: "status", status: { playerId: competitor.playerId, state: "acting" } });
-            // A real network request always yields. Protect alternate clients that resolve
-            // synchronously from starving rendering and timers without slowing real polling.
-            if (result.roundTripMs <= 0) await delay(0, signal);
-          } catch (error) {
-            if (signal.aborted) break;
-            consecutiveErrors += 1;
-            onEvent({
-              type: "status",
-              status: {
-                playerId: competitor.playerId,
-                state: "error",
-                error: error instanceof Error ? error.message : "lab_decision_failed",
-              },
-            });
-            const retryMs = Math.min(
-              ERROR_RETRY_MAX_MS,
-              ERROR_RETRY_MIN_MS * (2 ** Math.max(0, consecutiveErrors - 1)),
-            );
-            await delay(retryMs, signal);
           }
+          // A real network request always yields. Protect alternate clients that resolve
+          // synchronously from starving rendering and timers without slowing real polling.
+          if (result.roundTripMs <= 0) await delay(0, signal);
+        } catch (error) {
+          if (signal.aborted) break;
+          consecutiveErrors += 1;
+          onEvent({
+            type: "status",
+            status: {
+              playerId: competitor.playerId,
+              state: "error",
+              error: error instanceof Error ? error.message : "lab_decision_failed",
+            },
+          });
+          const retryMs = Math.min(
+            ERROR_RETRY_MAX_MS,
+            ERROR_RETRY_MIN_MS * (2 ** Math.max(0, consecutiveErrors - 1)),
+          );
+          await delay(retryMs, signal);
         }
-      } finally {
-        finish();
       }
-    })();
+    };
+
+    void Promise.all(
+      Array.from({ length: decisionLaneCount(competitor.model) }, () => runDecisionLane()),
+    ).finally(finish);
   }
 
   return () => {

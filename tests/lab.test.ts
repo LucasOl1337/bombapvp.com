@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLabClient } from "../src/lab/client.ts";
+import type { LabClient } from "../src/lab/client.ts";
 import { buildLabObservation, startLabController } from "../src/lab/controller.ts";
 import {
   createLabMatchParams,
@@ -254,6 +255,93 @@ describe("Laboratorio 9Router", () => {
 
     const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-sol" }]);
     await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2), { timeout: 200 });
+    stop();
+  });
+
+  it("mantem duas leituras concorrentes para reduzir a latencia do Luna Leve", async () => {
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockReturnValue(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2), { timeout: 200 });
+    stop();
+  });
+
+  it("descarta a resposta antiga quando duas leituras do Luna chegam fora de ordem", async () => {
+    const inputs: OnlineInputState[] = [];
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+      clearServerPlayerInput: vi.fn(),
+    };
+    let resolveFirst!: (result: Awaited<ReturnType<LabClient["decide"]>>) => void;
+    let resolveSecond!: (result: Awaited<ReturnType<LabClient["decide"]>>) => void;
+    const first = new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => { resolveFirst = resolve; });
+    const second = new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => { resolveSecond = resolve; });
+    const pendingDecision = new Promise<never>(() => undefined);
+    const result = (direction: "left" | "right") => ({
+      decision: { direction, placeBomb: false, detonate: false, useSkill: false },
+      roundTripMs: 100,
+      upstreamLatencyMs: 90,
+      usage: null,
+    });
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second)
+        .mockReturnValue(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
+    resolveSecond(result("left"));
+    await vi.waitFor(() => expect(inputs.at(-1)?.direction).toBe("left"));
+    resolveFirst(result("right"));
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(4));
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs.at(-1)?.direction).toBe("left");
+    stop();
+  });
+
+  it("descarta uma decisao que terminou depois do inicio da rodada seguinte", async () => {
+    let roundNumber = 1;
+    const game = {
+      exportOnlineSnapshot: () => ({ ...snapshot(), roundNumber }),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    let resolveFirst!: (result: Awaited<ReturnType<LabClient["decide"]>>) => void;
+    const first = new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => { resolveFirst = resolve; });
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockReturnValueOnce(first)
+        .mockReturnValue(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
+    roundNumber = 2;
+    resolveFirst({
+      decision: { direction: "right", placeBomb: true, detonate: false, useSkill: false },
+      roundTripMs: 100,
+      upstreamLatencyMs: 90,
+      usage: null,
+    });
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(3));
+
+    expect(game.setServerPlayerInput).not.toHaveBeenCalled();
     stop();
   });
 
