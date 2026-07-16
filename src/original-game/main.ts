@@ -106,6 +106,10 @@ async function bootOriginalGame(): Promise<void> {
             });
             return;
           }
+          if (event.type === "request") {
+            telemetry.record({ type: "request", playerId: event.playerId });
+            return;
+          }
           telemetry.record({ type: "status", playerId: event.status.playerId, status: event.status.state });
           if (event.status.state === "error") telemetry.record({ type: "error", playerId: event.status.playerId });
         })

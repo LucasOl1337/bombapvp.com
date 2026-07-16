@@ -140,6 +140,34 @@ describe("Laboratorio 9Router", () => {
     expect(JSON.stringify(payload)).not.toMatch(/reasoning|thinking|effort/i);
   });
 
+  it("entrega a LLM um snapshot tatico completo e atualizavel por frame", () => {
+    const state = snapshot();
+    state.frameId = 42;
+    state.serverTimeMs = 1_234;
+    state.players[1].remoteLevel = 1;
+    state.players[1].kickLevel = 1;
+    state.players[1].spawnProtectionMs = 750;
+    state.players[2].bombPassLevel = 1;
+    state.flames = [{ tile: { x: 2, y: 1 }, remainingMs: 300 }];
+    state.magicBeams = [{
+      ownerId: 2, origin: { x: 3, y: 3 }, direction: "left", tiles: [{ x: 2, y: 3 }], remainingMs: 200,
+    }];
+
+    expect(buildLabObservation(state, 1)).toMatchObject({
+      frameId: 42,
+      serverTimeMs: 1_234,
+      self: {
+        bombCapacity: 1, remoteLevel: 1, kickLevel: 1, spawnProtectionMs: 750,
+        skill: { id: null, phase: "idle" },
+      },
+      enemies: [{ id: 2, bombPassLevel: 1, direction: "left" }],
+      flames: [{ tile: { x: 2, y: 1 }, remainingMs: 300 }],
+      magicBeams: [{ ownerId: 2, direction: "left", remainingMs: 200 }],
+      arena: { wrapPortals: [] },
+      suddenDeath: { active: false, closedTiles: [], closingTiles: [] },
+    });
+  });
+
   it("converte uma decisao do modelo em input autoritativo", async () => {
     const inputs: Array<{ playerId: PlayerId; input: OnlineInputState }> = [];
     const events: unknown[] = [];
@@ -147,9 +175,10 @@ describe("Laboratorio 9Router", () => {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: (playerId: PlayerId, input: OnlineInputState) => inputs.push({ playerId, input }),
     };
+    const pendingDecision = new Promise<never>(() => undefined);
     const client = {
       listProfiles: vi.fn(),
-      decide: vi.fn(async () => ({
+      decide: vi.fn().mockResolvedValueOnce({
         decision: {
           direction: "down" as const,
           placeBomb: true,
@@ -160,7 +189,7 @@ describe("Laboratorio 9Router", () => {
         roundTripMs: 85,
         upstreamLatencyMs: 70,
         usage: { inputTokens: 100, outputTokens: 15, totalTokens: 115 },
-      })),
+      }).mockReturnValueOnce(pendingDecision),
     };
 
     const stop = startLabController(game, client, [
@@ -182,5 +211,92 @@ describe("Laboratorio 9Router", () => {
       playerId: 1,
       result: expect.objectContaining({ roundTripMs: 85, upstreamLatencyMs: 70 }),
     }));
+    expect(inputs.at(-1)?.input).toEqual(expect.objectContaining({ direction: null, bombPressed: false }));
+    expect(events).toContainEqual({
+      type: "status",
+      status: { playerId: 1, state: "stopped" },
+    });
+  });
+
+  it("inicia a proxima leitura assim que recebe uma decisao, sem esperar a duracao da acao", async () => {
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockResolvedValueOnce({
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false, durationMs: 1_200 },
+          roundTripMs: 80,
+          upstreamLatencyMs: 70,
+          usage: null,
+        })
+        .mockReturnValueOnce(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-sol" }]);
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2), { timeout: 200 });
+    stop();
+  });
+
+  it("cede ao navegador somente para clientes locais com resposta sincronica", async () => {
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+    };
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn().mockResolvedValue({
+        decision: { direction: null, placeBomb: false, detonate: false, useSkill: false, durationMs: 250 },
+        roundTripMs: 0,
+        upstreamLatencyMs: 0,
+        usage: null,
+      }),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stop();
+
+    expect(client.decide.mock.calls.length).toBeGreaterThan(1);
+    expect(client.decide.mock.calls.length).toBeLessThan(100);
+  });
+
+  it("mantem a decisao mais nova quando a validade da anterior termina", async () => {
+    const inputs: OnlineInputState[] = [];
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockResolvedValueOnce({
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false, durationMs: 60 },
+          roundTripMs: 20,
+          upstreamLatencyMs: 15,
+          usage: null,
+        })
+        .mockImplementationOnce(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return {
+            decision: { direction: "left", placeBomb: false, detonate: false, useSkill: false, durationMs: 200 },
+            roundTripMs: 20,
+            upstreamLatencyMs: 15,
+            usage: null,
+          };
+        })
+        .mockReturnValueOnce(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-sol" }]);
+    await vi.waitFor(() => expect(inputs.some(({ direction }) => direction === "left")).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    expect(inputs.at(-1)?.direction).toBe("left");
+    stop();
   });
 });

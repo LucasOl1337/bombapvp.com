@@ -84,17 +84,27 @@ describe("telemetria do laboratorio", () => {
       type: "decision", playerId: 1, decisionMs: 3,
       action: { direction: null, placeBomb: false },
     });
+    telemetry.record({ type: "request", playerId: 2 });
+    nowMs = 100;
     telemetry.record({
       type: "decision", playerId: 2, decisionMs: 100, upstreamLatencyMs: 80,
       action: { direction: "left", placeBomb: false, durationMs: 400 },
       usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 },
     });
+    nowMs = 105;
+    telemetry.record({ type: "request", playerId: 2 });
+    nowMs = 305;
     telemetry.record({
       type: "decision", playerId: 2, decisionMs: 200, upstreamLatencyMs: 150,
       action: { direction: "left", placeBomb: true, useSkill: true, durationMs: 600 },
       usage: { inputTokens: 120, outputTokens: 20, totalTokens: 140 },
     });
     telemetry.record({ type: "error", playerId: 2 });
+    nowMs = 500;
+    telemetry.record({ type: "request", playerId: 2 });
+    telemetry.record({ type: "status", playerId: 2, status: "waiting" });
+    nowMs = 1_500;
+    telemetry.record({ type: "request", playerId: 2 });
     nowMs = 2_000;
 
     const report = telemetry.read(gameSnapshot());
@@ -111,10 +121,10 @@ describe("telemetria do laboratorio", () => {
     });
     expect(report.players[1]).toMatchObject({
       kind: "llm",
-      status: "error",
+      status: "waiting",
       timing: {
         kind: "round-trip", averageMs: 150, p95Ms: 200,
-        upstreamAverageMs: 115, transportAverageMs: 35,
+        upstreamAverageMs: 115, transportAverageMs: 35, pollGapAverageMs: 5, pollingUtilizationPct: 95.2,
       },
       decisions: { count: 2, perSecond: 1, errors: 1 },
       actions: { changeRatePct: 100, bombIntentPct: 50, skillIntentPct: 50, averageHoldMs: 500 },

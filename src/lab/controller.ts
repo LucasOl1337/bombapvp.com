@@ -1,4 +1,4 @@
-import type { PlayerId } from "../original-game/Gameplay/types.ts";
+import type { PlayerId, PlayerState } from "../original-game/Gameplay/types.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../original-game/NetCode/protocol.ts";
 import type { LabClient, LabDecision, LabDecisionResult } from "./client.ts";
 
@@ -15,6 +15,7 @@ export type LabControllerStatus = Readonly<{
 }>;
 export type LabControllerEvent =
   | Readonly<{ type: "status"; status: LabControllerStatus }>
+  | Readonly<{ type: "request"; playerId: PlayerId }>
   | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>;
 
 const NEUTRAL_INPUT: OnlineInputState = Object.freeze({
@@ -24,32 +25,73 @@ const NEUTRAL_INPUT: OnlineInputState = Object.freeze({
   skillPressed: false,
   skillHeld: false,
 });
+const INACTIVE_POLL_INTERVAL_MS = 50;
+const ERROR_RETRY_MIN_MS = 100;
+const ERROR_RETRY_MAX_MS = 1_000;
+
+function observePlayer(player: PlayerState) {
+  return {
+    id: player.id,
+    tile: player.tile,
+    position: player.position,
+    velocity: player.velocity,
+    direction: player.direction,
+    lastMoveDirection: player.lastMoveDirection,
+    alive: player.alive,
+    bombsAvailable: Math.max(0, player.maxBombs - player.activeBombs),
+    bombCapacity: player.maxBombs,
+    flameRange: player.flameRange,
+    speedLevel: player.speedLevel,
+    remoteLevel: player.remoteLevel,
+    shieldCharges: player.shieldCharges,
+    bombPassLevel: player.bombPassLevel,
+    kickLevel: player.kickLevel,
+    shortFuseLevel: player.shortFuseLevel,
+    flameGuardMs: player.flameGuardMs,
+    spawnProtectionMs: player.spawnProtectionMs,
+    skill: {
+      id: player.skill.id,
+      phase: player.skill.phase,
+      channelRemainingMs: player.skill.channelRemainingMs,
+      cooldownMs: player.skill.cooldownRemainingMs,
+      projectedPosition: player.skill.projectedPosition,
+    },
+  };
+}
 
 export function buildLabObservation(snapshot: OnlineGameSnapshot, playerId: PlayerId) {
   const self = snapshot.players[playerId];
   return {
     playerId,
+    frameId: snapshot.frameId,
+    serverTimeMs: snapshot.serverTimeMs,
     round: snapshot.roundNumber,
     elapsedMs: snapshot.roundTimeMs,
-    self: {
-      tile: self.tile,
-      direction: self.direction,
-      alive: self.alive,
-      bombsAvailable: Math.max(0, self.maxBombs - self.activeBombs),
-      flameRange: self.flameRange,
-      shieldCharges: self.shieldCharges,
-      skill: { phase: self.skill.phase, cooldownMs: self.skill.cooldownRemainingMs },
-    },
+    score: snapshot.score,
+    endlessStats: snapshot.endlessStats,
+    self: observePlayer(self),
     enemies: snapshot.activePlayerIds
       .filter((id) => id !== playerId)
-      .map((id) => ({ id, tile: snapshot.players[id].tile, alive: snapshot.players[id].alive })),
+      .map((id) => observePlayer(snapshot.players[id])),
     bombs: snapshot.bombs.map((bomb) => ({
+      id: bomb.id,
       ownerId: bomb.ownerId,
       tile: bomb.tile,
       fuseMs: Math.round(bomb.fuseMs),
       flameRange: bomb.flameRange,
+      ownerCanPass: bomb.ownerCanPass,
     })),
-    flames: snapshot.flames.map((flame) => flame.tile),
+    flames: snapshot.flames.map((flame) => ({
+      tile: flame.tile,
+      remainingMs: Math.round(flame.remainingMs),
+    })),
+    magicBeams: snapshot.magicBeams.map((beam) => ({
+      ownerId: beam.ownerId,
+      origin: beam.origin,
+      direction: beam.direction,
+      tiles: beam.tiles,
+      remainingMs: Math.round(beam.remainingMs),
+    })),
     powerUps: snapshot.powerUps
       .filter((powerUp) => powerUp.revealed && !powerUp.collected)
       .map((powerUp) => ({ type: powerUp.type, tile: powerUp.tile })),
@@ -57,6 +99,12 @@ export function buildLabObservation(snapshot: OnlineGameSnapshot, playerId: Play
       grid: snapshot.arena.grid,
       solid: snapshot.arena.tiles.solid,
       breakable: snapshot.breakableTiles,
+      wrapPortals: snapshot.arena.wrapPortals,
+    },
+    suddenDeath: {
+      active: snapshot.suddenDeathActive,
+      closedTiles: snapshot.suddenDeathClosedTiles,
+      closingTiles: snapshot.suddenDeathClosingTiles,
     },
   };
 }
@@ -83,6 +131,24 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error("lab_controller_stopped"));
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(new Error("lab_controller_stopped"));
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+
 export function startLabController(
   game: LabGame,
   client: LabClient,
@@ -91,6 +157,7 @@ export function startLabController(
 ): () => void {
   const controller = new AbortController();
   const { signal } = controller;
+  const cleanups = new Set<() => void>();
 
   for (const competitor of competitors) {
     game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
@@ -98,46 +165,101 @@ export function startLabController(
 
   for (const competitor of competitors) {
     void (async () => {
-      while (!signal.aborted) {
-        const snapshot = game.exportOnlineSnapshot();
-        const player = snapshot.players[competitor.playerId];
-        if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
-          game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
-          await delay(300, signal);
-          continue;
-        }
+      let inputVersion = 0;
+      let hasActiveInput = false;
+      let consecutiveErrors = 0;
+      let expiryTimer: ReturnType<typeof setTimeout> | null = null;
+      let stopped = false;
 
-        try {
-          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "thinking" } });
-          const result = await client.decide({
-            model: competitor.model,
-            observation: buildLabObservation(snapshot, competitor.playerId),
-          }, signal);
-          if (signal.aborted) break;
-          game.setServerPlayerInput(competitor.playerId, toInput(result.decision));
-          onEvent({ type: "decision", playerId: competitor.playerId, result });
-          onEvent({ type: "status", status: { playerId: competitor.playerId, state: "acting" } });
-          await delay(result.decision.durationMs, signal);
-          game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-        } catch (error) {
-          if (signal.aborted) break;
-          game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-          onEvent({
-            type: "status",
-            status: {
-              playerId: competitor.playerId,
-              state: "error",
-              error: error instanceof Error ? error.message : "lab_decision_failed",
-            },
-          });
-          await delay(1000, signal);
+      const clearInput = (force = false): void => {
+        if (expiryTimer !== null) {
+          clearTimeout(expiryTimer);
+          expiryTimer = null;
         }
+        inputVersion += 1;
+        const shouldWrite = force || hasActiveInput;
+        hasActiveInput = false;
+        if (shouldWrite) game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
+      };
+
+      const applyDecision = (decision: LabDecision): void => {
+        if (expiryTimer !== null) clearTimeout(expiryTimer);
+        inputVersion += 1;
+        const appliedVersion = inputVersion;
+        hasActiveInput = true;
+        game.setServerPlayerInput(competitor.playerId, toInput(decision));
+        expiryTimer = setTimeout(() => {
+          expiryTimer = null;
+          if (signal.aborted || appliedVersion !== inputVersion) return;
+          clearInput();
+        }, decision.durationMs);
+      };
+
+      const finish = (): void => {
+        if (stopped) return;
+        stopped = true;
+        clearInput(true);
+        onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
+        cleanups.delete(finish);
+      };
+      cleanups.add(finish);
+
+      try {
+        while (!signal.aborted) {
+          const snapshot = game.exportOnlineSnapshot();
+          const player = snapshot.players[competitor.playerId];
+          if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
+            clearInput();
+            onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
+            await delay(INACTIVE_POLL_INTERVAL_MS, signal);
+            continue;
+          }
+
+          try {
+            onEvent({
+              type: "status",
+              status: { playerId: competitor.playerId, state: hasActiveInput ? "acting" : "thinking" },
+            });
+            onEvent({ type: "request", playerId: competitor.playerId });
+            const result = await abortable(client.decide({
+              model: competitor.model,
+              observation: buildLabObservation(snapshot, competitor.playerId),
+            }, signal), signal);
+            if (signal.aborted) break;
+            consecutiveErrors = 0;
+            applyDecision(result.decision);
+            onEvent({ type: "decision", playerId: competitor.playerId, result });
+            onEvent({ type: "status", status: { playerId: competitor.playerId, state: "acting" } });
+            // A real network request always yields. Protect alternate clients that resolve
+            // synchronously from starving rendering and timers without slowing real polling.
+            if (result.roundTripMs <= 0) await delay(0, signal);
+          } catch (error) {
+            if (signal.aborted) break;
+            consecutiveErrors += 1;
+            onEvent({
+              type: "status",
+              status: {
+                playerId: competitor.playerId,
+                state: "error",
+                error: error instanceof Error ? error.message : "lab_decision_failed",
+              },
+            });
+            const retryMs = Math.min(
+              ERROR_RETRY_MAX_MS,
+              ERROR_RETRY_MIN_MS * (2 ** Math.max(0, consecutiveErrors - 1)),
+            );
+            await delay(retryMs, signal);
+          }
+        }
+      } finally {
+        finish();
       }
-      game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
-      onEvent({ type: "status", status: { playerId: competitor.playerId, state: "stopped" } });
     })();
   }
 
-  return () => controller.abort();
+  return () => {
+    if (signal.aborted) return;
+    controller.abort();
+    for (const cleanup of [...cleanups]) cleanup();
+  };
 }

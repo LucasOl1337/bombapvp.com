@@ -20,6 +20,7 @@ const SYSTEM_PROMPT = [
   "You control one player in Bomba PvP.",
   "Return only a JSON object with direction, placeBomb, detonate, useSkill and durationMs.",
   "direction must be up, down, left, right or null. durationMs must be 250-1200.",
+  "Every request is a fresh complete tactical snapshot and immediately replaces your previous action.",
   "Survive first, avoid bombs and flames, collect useful powerups, then attack.",
 ].join(" ");
 
@@ -127,7 +128,7 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
               { role: "system", content: SYSTEM_PROMPT },
               { role: "user", content: JSON.stringify(body.observation) },
             ],
-            max_tokens: 180,
+            max_tokens: 120,
             response_format: { type: "json_object" },
             stream: false,
           }),

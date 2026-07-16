@@ -17,6 +17,7 @@ export type LabTelemetryAction = Readonly<{
 export type LabTelemetryEvent =
   | Readonly<{ type: "status"; playerId: PlayerId; status: LabTelemetryStatus }>
   | Readonly<{ type: "error"; playerId: PlayerId }>
+  | Readonly<{ type: "request"; playerId: PlayerId }>
   | Readonly<{
       type: "decision";
       playerId: PlayerId;
@@ -38,6 +39,8 @@ export type LabTelemetryPlayerReport = Readonly<{
     p95Ms: number | null;
     upstreamAverageMs: number | null;
     transportAverageMs: number | null;
+    pollGapAverageMs: number | null;
+    pollingUtilizationPct: number | null;
   }>;
   decisions: Readonly<{
     count: number;
@@ -92,6 +95,11 @@ type PlayerAccumulator = {
   upstreamSamples: number;
   transportMsTotal: number;
   transportSamples: number;
+  pollGapMsTotal: number;
+  pollGapSamples: number;
+  pairedRoundTripMsTotal: number;
+  lastDecisionRecordedAtMs: number | null;
+  lastDecisionRoundTripMs: number | null;
   actionChanges: number;
   movementIntents: number;
   bombIntents: number;
@@ -140,6 +148,11 @@ function createAccumulator(competitor: Competitor): PlayerAccumulator {
     upstreamSamples: 0,
     transportMsTotal: 0,
     transportSamples: 0,
+    pollGapMsTotal: 0,
+    pollGapSamples: 0,
+    pairedRoundTripMsTotal: 0,
+    lastDecisionRecordedAtMs: null,
+    lastDecisionRoundTripMs: null,
     actionChanges: 0,
     movementIntents: 0,
     bombIntents: 0,
@@ -168,15 +181,33 @@ export function createLabTelemetry(
     if (!player) return;
     if (event.type === "status") {
       player.status = event.status;
+      if (event.status === "waiting" || event.status === "stopped") {
+        player.lastDecisionRecordedAtMs = null;
+        player.lastDecisionRoundTripMs = null;
+      }
       return;
     }
     if (event.type === "error") {
       player.errors += 1;
       player.status = "error";
+      player.lastDecisionRecordedAtMs = null;
+      player.lastDecisionRoundTripMs = null;
+      return;
+    }
+    if (event.type === "request") {
+      if (player.lastDecisionRecordedAtMs !== null && player.lastDecisionRoundTripMs !== null) {
+        player.pollGapMsTotal += Math.max(0, now() - player.lastDecisionRecordedAtMs);
+        player.pollGapSamples += 1;
+        player.pairedRoundTripMsTotal += player.lastDecisionRoundTripMs;
+        player.lastDecisionRecordedAtMs = null;
+        player.lastDecisionRoundTripMs = null;
+      }
       return;
     }
 
     const decisionMs = Math.max(0, event.decisionMs);
+    player.lastDecisionRecordedAtMs = now();
+    player.lastDecisionRoundTripMs = decisionMs;
     player.status = "acting";
     player.decisions += 1;
     player.decisionMsTotal += decisionMs;
@@ -223,6 +254,8 @@ export function createLabTelemetry(
         const player = snapshot.players[entry.competitor.playerId];
         const kills = snapshot.endlessStats?.kills[entry.competitor.playerId] ?? 0;
         const roundWins = snapshot.endlessStats?.roundWins[entry.competitor.playerId] ?? 0;
+        const averageDecisionMs = average(entry.decisionMsTotal, entry.decisions);
+        const averagePollGapMs = average(entry.pollGapMsTotal, entry.pollGapSamples);
         return {
           playerId: entry.competitor.playerId,
           label: entry.competitor.label,
@@ -231,10 +264,17 @@ export function createLabTelemetry(
           timing: {
             kind: entry.competitor.kind === "v1" ? "compute" : "round-trip",
             lastMs: entry.decisionMsLast === null ? null : round(entry.decisionMsLast),
-            averageMs: average(entry.decisionMsTotal, entry.decisions),
+            averageMs: averageDecisionMs,
             p95Ms: percentile95(entry.decisionMsSamples),
             upstreamAverageMs: average(entry.upstreamMsTotal, entry.upstreamSamples),
             transportAverageMs: average(entry.transportMsTotal, entry.transportSamples),
+            pollGapAverageMs: averagePollGapMs,
+            pollingUtilizationPct: entry.pollGapSamples === 0
+              ? null
+              : percentage(
+                entry.pairedRoundTripMsTotal,
+                entry.pairedRoundTripMsTotal + entry.pollGapMsTotal,
+              ),
           },
           decisions: {
             count: entry.decisions,

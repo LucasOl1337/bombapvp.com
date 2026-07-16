@@ -46,6 +46,7 @@ describe("broker minimo do Laboratorio", () => {
       usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
     });
     expect(upstreamPayloads[0].model).toBe("cx/gpt-5.6-sol-high");
+    expect(upstreamPayloads[0].max_tokens).toBe(120);
     expect(JSON.stringify(upstreamPayloads[0])).not.toMatch(/reasoning|thinking|effort/i);
   });
 
