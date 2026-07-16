@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLabClient } from "../src/lab/client.ts";
 import { buildLabObservation, startLabController } from "../src/lab/controller.ts";
+import {
+  createLabMatchParams,
+  LAB_V1_MODEL,
+  parseLabMatchCompetitors,
+} from "../src/lab/competitors.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../src/original-game/NetCode/protocol.ts";
 import type { PlayerId } from "../src/original-game/Gameplay/types.ts";
 
@@ -60,6 +65,41 @@ function snapshot(): OnlineGameSnapshot {
 }
 
 describe("Laboratorio 9Router", () => {
+  it("serializa somente salas válidas de dois a quatro competidores", () => {
+    expect(createLabMatchParams([" bot-v1 ", "cx/gpt-5.6-sol"])?.toString()).toBe(
+      "mode=lab&model1=bot-v1&model2=cx%2Fgpt-5.6-sol",
+    );
+    expect(createLabMatchParams([LAB_V1_MODEL])).toBeNull();
+    expect(createLabMatchParams([LAB_V1_MODEL, LAB_V1_MODEL, LAB_V1_MODEL, LAB_V1_MODEL, LAB_V1_MODEL]))
+      .toBeNull();
+  });
+
+  it("monta uma sala mista de até quatro competidores", () => {
+    const params = new URLSearchParams({
+      model1: LAB_V1_MODEL,
+      model2: "cx/gpt-5.6-sol",
+      model3: LAB_V1_MODEL,
+      model4: "cc/claude-fable-5",
+    });
+
+    expect(parseLabMatchCompetitors(params)).toEqual([
+      { playerId: 1, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
+      { playerId: 2, model: "cx/gpt-5.6-sol", kind: "llm", label: "cx/gpt-5.6-sol" },
+      { playerId: 3, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
+      { playerId: 4, model: "cc/claude-fable-5", kind: "llm", label: "cc/claude-fable-5" },
+    ]);
+  });
+
+  it("rejeita salas com menos de dois competidores ou slots vazios", () => {
+    expect(() => parseLabMatchCompetitors(new URLSearchParams({ model1: LAB_V1_MODEL })))
+      .toThrow("lab_competitors_missing");
+    expect(() => parseLabMatchCompetitors(new URLSearchParams({
+      model1: LAB_V1_MODEL,
+      model2: LAB_V1_MODEL,
+      model4: LAB_V1_MODEL,
+    }))).toThrow("lab_competitor_gap");
+  });
+
   it("usa o catalogo confirmado e nunca envia configuracao de esforco", async () => {
     const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

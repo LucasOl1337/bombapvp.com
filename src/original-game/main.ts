@@ -3,6 +3,8 @@ import { loadGameAssets } from "./Engine/assets";
 import { GameApp } from "./Engine/game-app";
 import { createLabClient } from "../lab/client";
 import { startLabController, type LabControllerStatus } from "../lab/controller";
+import { parseLabMatchCompetitors } from "../lab/competitors";
+import type { PlayerId } from "./Gameplay/types";
 
 const rootElement = document.querySelector<HTMLElement>("#app");
 
@@ -38,42 +40,53 @@ async function bootOriginalGame(): Promise<void> {
   game.start();
 
   if (mode === "lab") {
-    const modelOne = params.get("model1");
-    const modelTwo = params.get("model2");
-    if (!modelOne || !modelTwo) throw new Error("lab_models_missing");
+    const competitors = parseLabMatchCompetitors(params);
+    const activePlayerIds = competitors.map(({ playerId }) => playerId);
+    const botPlayerIds = competitors
+      .filter(({ kind }) => kind === "v1")
+      .map(({ playerId }) => playerId);
+    const playerLabels: Record<PlayerId, string> = { 1: "", 2: "", 3: "", 4: "" };
+    competitors.forEach(({ playerId, label }) => {
+      playerLabels[playerId] = label;
+    });
 
     game.startServerAuthoritativeMatch(
-      [1, 2],
+      activePlayerIds,
       { 1: 0, 2: 1, 3: 2, 4: 3 },
       {
         roomMode: "endless",
-        playerLabels: { 1: modelOne, 2: modelTwo, 3: "", 4: "" },
+        botPlayerIds,
+        playerLabels,
       },
     );
 
     const statusPanel = document.createElement("aside");
     statusPanel.className = "lab-live-status";
     statusPanel.setAttribute("aria-live", "polite");
-    const states = new Map<number, LabControllerStatus["state"]>([[1, "waiting"], [2, "waiting"]]);
+    const states = new Map<PlayerId, LabControllerStatus["state"]>(
+      competitors.map(({ playerId, kind }) => [playerId, kind === "v1" ? "acting" : "waiting"]),
+    );
     const renderStatus = (): void => {
       const stateLabel = (state: LabControllerStatus["state"]): string => {
         if (document.documentElement.lang === "en") return state;
         return ({ waiting: "aguardando", thinking: "pensando", acting: "jogando", error: "erro", stopped: "parado" })[state];
       };
-      statusPanel.textContent = `P1 · ${modelOne} · ${stateLabel(states.get(1) ?? "waiting")}  |  P2 · ${modelTwo} · ${stateLabel(states.get(2) ?? "waiting")}`;
+      statusPanel.textContent = competitors.map(({ playerId, label }) => (
+        `P${playerId} · ${label} · ${stateLabel(states.get(playerId) ?? "waiting")}`
+      )).join("  |  ");
     };
     renderStatus();
     document.body.append(statusPanel);
 
-    const stop = startLabController(
-      game,
-      createLabClient(),
-      [{ playerId: 1, model: modelOne }, { playerId: 2, model: modelTwo }],
-      (status) => {
-        states.set(status.playerId, status.state);
-        renderStatus();
-      },
-    );
+    const llmCompetitors = competitors
+      .filter(({ kind }) => kind === "llm")
+      .map(({ playerId, model }) => ({ playerId, model }));
+    const stop = llmCompetitors.length > 0
+      ? startLabController(game, createLabClient(), llmCompetitors, (status) => {
+          states.set(status.playerId, status.state);
+          renderStatus();
+        })
+      : () => undefined;
     window.addEventListener("pagehide", stop, { once: true });
     return;
   }

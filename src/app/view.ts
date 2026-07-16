@@ -1,5 +1,6 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
+import { LAB_MAX_COMPETITORS, LAB_MIN_COMPETITORS, LAB_V1_MODEL } from "../lab/competitors.ts";
 
 type Dispatch = (intent: AppIntent) => void;
 type CharacterSnapshot = AppSnapshot["characters"][number];
@@ -391,8 +392,26 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
 
   const isPortuguese = snapshot.locale === "pt-BR";
   const form = element(document, "form", "laboratory__form");
-  const modelOne = document.createElement("select");
-  const modelTwo = document.createElement("select");
+  const playerCount = document.createElement("select");
+  for (let count = LAB_MIN_COMPETITORS; count <= LAB_MAX_COMPETITORS; count += 1) {
+    const option = document.createElement("option");
+    option.value = String(count);
+    option.textContent = String(count);
+    playerCount.append(option);
+  }
+  playerCount.setAttribute(
+    "aria-label",
+    isPortuguese ? "Quantidade de jogadores" : "Number of players",
+  );
+  const modelSelects = Array.from({ length: LAB_MAX_COMPETITORS }, (_, index) => {
+    const select = document.createElement("select");
+    select.disabled = true;
+    select.setAttribute(
+      "aria-label",
+      isPortuguese ? `Modelo do jogador ${index + 1}` : `Player ${index + 1} model`,
+    );
+    return select;
+  });
   const status = element(
     document,
     "p",
@@ -407,61 +426,86 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
   );
   start.type = "submit";
   start.disabled = true;
-  modelOne.disabled = true;
-  modelTwo.disabled = true;
-  modelOne.setAttribute("aria-label", isPortuguese ? "Modelo do jogador 1" : "Player 1 model");
-  modelTwo.setAttribute("aria-label", isPortuguese ? "Modelo do jogador 2" : "Player 2 model");
-
   const field = (label: string, select: HTMLSelectElement): HTMLElement => {
     const wrapper = element(document, "label", "laboratory__field");
     wrapper.append(element(document, "span", "laboratory__label", label), select);
     return wrapper;
   };
+  const modelFields = modelSelects.map((select, index) => (
+    field(isPortuguese ? `Jogador ${index + 1}` : `Player ${index + 1}`, select)
+  ));
+  let optionsReady = false;
+  const updateVisibleSlots = (): void => {
+    const count = Number(playerCount.value);
+    modelFields.forEach((modelField, index) => {
+      const visible = index < count;
+      modelField.hidden = !visible;
+      modelSelects[index]!.disabled = !optionsReady || !visible;
+    });
+  };
+  playerCount.addEventListener("change", updateVisibleSlots);
+  updateVisibleSlots();
+
   form.append(
-    field(isPortuguese ? "Jogador 1" : "Player 1", modelOne),
-    field(isPortuguese ? "Jogador 2" : "Player 2", modelTwo),
+    field(isPortuguese ? "Jogadores na sala" : "Players in the room", playerCount),
+    ...modelFields,
     status,
     element(
       document,
       "p",
       "laboratory__note",
       isPortuguese
-        ? "As credenciais ficam somente no backend. O navegador recebe apenas os modelos liberados."
-        : "Credentials stay on the backend. The browser receives only approved models.",
+        ? "V1 roda localmente com a AI determinística atual. As credenciais das LLMs ficam somente no backend."
+        : "V1 runs locally with the current deterministic AI. LLM credentials stay on the backend.",
     ),
     start,
   );
 
   const populate = (profiles: LabModelProfile[]): void => {
-    for (const [index, select] of [modelOne, modelTwo].entries()) {
-      select.replaceChildren(...profiles.map((profile) => {
+    const llmProfiles = profiles.filter(({ route }) => route !== LAB_V1_MODEL);
+    const competitors = [
+      ...llmProfiles,
+      {
+        id: LAB_V1_MODEL,
+        label: isPortuguese ? "V1 · Bot determinístico" : "V1 · Deterministic bot",
+        route: LAB_V1_MODEL,
+      },
+    ];
+    for (const [index, select] of modelSelects.entries()) {
+      select.replaceChildren(...competitors.map((profile) => {
         const option = document.createElement("option");
         option.value = profile.route;
         option.textContent = profile.label;
         return option;
       }));
-      select.selectedIndex = Math.min(index, profiles.length - 1);
-      select.disabled = false;
+      select.selectedIndex = Math.min(index, competitors.length - 1);
     }
+    optionsReady = true;
+    updateVisibleSlots();
     start.disabled = false;
     status.textContent = isPortuguese
-      ? `${profiles.length} perfis autorizados do 9Router.`
-      : `${profiles.length} approved 9Router profiles.`;
+      ? `V1 local + ${llmProfiles.length} perfis autorizados do 9Router.`
+      : `Local V1 + ${llmProfiles.length} approved 9Router profiles.`;
   };
 
+  populate([]);
+  status.textContent = isPortuguese
+    ? "V1 disponível. Consultando modelos do 9Router…"
+    : "V1 is available. Checking 9Router models…";
+
   void createLabClient().listProfiles().then((profiles) => {
-    if (profiles.length === 0) throw new Error("no_lab_profiles");
     populate(profiles);
   }).catch(() => {
     status.textContent = isPortuguese
-      ? "O laboratório não conseguiu alcançar o 9Router."
-      : "The lab could not reach 9Router.";
+      ? "V1 disponível. O laboratório não conseguiu alcançar o 9Router."
+      : "V1 is available. The lab could not reach 9Router.";
   });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!modelOne.value || !modelTwo.value) return;
-    dispatch({ type: "start-lab-match", models: [modelOne.value, modelTwo.value] });
+    const models = modelSelects.slice(0, Number(playerCount.value)).map((select) => select.value);
+    if (models.some((model) => !model)) return;
+    dispatch({ type: "start-lab-match", models });
   });
 
   const arena = element(document, "div", "laboratory__arena");
