@@ -11,7 +11,14 @@ export type LabMatchCompetitor = Readonly<{
   label: string;
 }>;
 
-export function createLabMatchParams(models: readonly string[]): URLSearchParams | null {
+function normalizeLabel(label: string | null): string {
+  return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
+}
+
+export function createLabMatchParams(
+  models: readonly string[],
+  labels: readonly string[] = [],
+): URLSearchParams | null {
   const normalizedModels = models.map((model) => model.trim());
   if (
     normalizedModels.length < LAB_MIN_COMPETITORS
@@ -20,7 +27,11 @@ export function createLabMatchParams(models: readonly string[]): URLSearchParams
   ) return null;
 
   const params = new URLSearchParams({ mode: "lab" });
-  normalizedModels.forEach((model, index) => params.set(`model${index + 1}`, model));
+  normalizedModels.forEach((model, index) => {
+    params.set(`model${index + 1}`, model);
+    const label = normalizeLabel(labels[index] ?? null);
+    if (model !== LAB_V1_MODEL && label) params.set(`label${index + 1}`, label);
+  });
   return params;
 }
 
@@ -38,10 +49,13 @@ export function parseLabMatchCompetitors(params: URLSearchParams): readonly LabM
     throw new Error("lab_competitor_gap");
   }
 
-  return models.filter(Boolean).map((model, index) => ({
-    playerId: (index + 1) as PlayerId,
-    model,
-    kind: model === LAB_V1_MODEL ? "v1" : "llm",
-    label: model === LAB_V1_MODEL ? "V1" : model,
-  }));
+  return models.filter(Boolean).map((model, index) => {
+    const selectedLabel = normalizeLabel(params.get(`label${index + 1}`));
+    return {
+      playerId: (index + 1) as PlayerId,
+      model,
+      kind: model === LAB_V1_MODEL ? "v1" : "llm",
+      label: model === LAB_V1_MODEL ? "V1" : (selectedLabel || model),
+    };
+  });
 }

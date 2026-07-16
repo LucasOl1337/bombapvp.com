@@ -431,6 +431,8 @@ export class GameApp {
   private onlineLocalPlayerId: PlayerId = 1;
   private externalInputPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private customPlayerLabels: Record<PlayerId, string | null> = createPlayerRecord(() => null);
+  private showWorldPlayerLabels = false;
+  private hideNativeHud = false;
   private onlineInputs: Record<PlayerId, OnlineInputState> = createPlayerRecord(() => createNeutralOnlineInput());
   private onlineSnapshotCooldownMs = 0;
   private visualPlayerPositions: Record<PlayerId, PixelCoord> = createPlayerRecord(() => ({ x: 0, y: 0 }));
@@ -1527,6 +1529,8 @@ export class GameApp {
       botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
       playerLabels?: Record<PlayerId, string>;
+      showWorldPlayerLabels?: boolean;
+      hideNativeHud?: boolean;
     } = {},
   ): void {
     this.onlineSession = {
@@ -1550,6 +1554,8 @@ export class GameApp {
     this.selectedCharacterIndex = { ...characterSelections };
     this.pendingCharacterIndex = { ...characterSelections };
     this.customPlayerLabels = createPlayerRecord((playerId) => options.playerLabels?.[playerId] ?? null);
+    this.showWorldPlayerLabels = options.showWorldPlayerLabels ?? false;
+    this.hideNativeHud = options.hideNativeHud ?? false;
     this.characterLocked = createBooleanPlayerRecord(true);
     this.characterMenuOpen = createBooleanPlayerRecord(false);
     this.localBotFill = 0;
@@ -3741,6 +3747,7 @@ export class GameApp {
   }
 
   private renderCompactHud(): void {
+    if (this.hideNativeHud) return;
     const hudHeight = this.getHudRenderHeight();
     const leftPlayers = this.activePlayerIds.filter((playerId) => playerId === 1 || playerId === 3);
     const rightPlayers = this.activePlayerIds.filter((playerId) => playerId === 2 || playerId === 4);
@@ -3808,6 +3815,7 @@ export class GameApp {
   }
 
   private renderHud(): void {
+    if (this.hideNativeHud) return;
     if (this.isFullscreenMatchLayoutActive()) {
       this.renderCompactHud();
       return;
@@ -5354,6 +5362,7 @@ export class GameApp {
         spriteHeight,
       );
       this.ctx.restore();
+      this.drawWorldPlayerLabel(player, x, y, alpha);
       return;
     }
 
@@ -5381,6 +5390,31 @@ export class GameApp {
     }
 
     this.ctx.globalAlpha = 1;
+    this.drawWorldPlayerLabel(player, x, y, alpha);
+  }
+
+  private drawWorldPlayerLabel(player: PlayerState, x: number, y: number, alpha: number): void {
+    const configuredLabel = this.customPlayerLabels[player.id];
+    if (!this.showWorldPlayerLabels || !configuredLabel) {
+      return;
+    }
+    const label = `P${player.id} · ${this.shortenCharacterName(configuredLabel, 20)}`;
+    const palette = PLAYER_COLORS[player.id];
+    this.ctx.save();
+    this.ctx.globalAlpha = Math.max(0.45, alpha);
+    this.ctx.font = "700 6px Inter";
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "middle";
+    const width = Math.min(100, Math.ceil(this.ctx.measureText(label).width) + 12);
+    const centerX = x + TILE_SIZE * 0.5;
+    const top = y - 22;
+    this.ctx.fillStyle = "rgba(5, 8, 13, 0.86)";
+    this.ctx.fillRect(Math.round(centerX - width * 0.5), top, width, 12);
+    this.ctx.fillStyle = palette.primary;
+    this.ctx.fillRect(Math.round(centerX - width * 0.5), top, 2, 12);
+    this.ctx.fillStyle = "#f5f8fc";
+    this.ctx.fillText(label, centerX + 1, top + 6.5);
+    this.ctx.restore();
   }
 
   private drawRoundWinnerHalo(player: PlayerState, x: number, y: number): void {

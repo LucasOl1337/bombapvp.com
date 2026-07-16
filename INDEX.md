@@ -17,6 +17,7 @@
 | --- | --- |
 | `README.md` | SOMENTE ao chegar sem contexto do produto ou da stack. |
 | `docs/gameplay.md` | SOMENTE ao alterar launcher, selecao, arena, bots, personagens ou assets. |
+| `docs/design-system.md` | Ao criar ou refatorar qualquer interface, HUD, animacao ou componente visual. |
 | `docs/release.md` | SOMENTE ao alterar build, dominios ou publicacao. |
 | `DocsDev/` | SOMENTE para consulta historica pontual; nao use como fonte de verdade. |
 | `DocsDev/arquivados/` | NUNCA leia. |

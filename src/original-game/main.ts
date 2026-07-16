@@ -5,7 +5,7 @@ import { createLabClient } from "../lab/client";
 import { startLabController } from "../lab/controller";
 import { parseLabMatchCompetitors } from "../lab/competitors";
 import { createLabTelemetry, type LabTelemetryReport } from "../lab/telemetry";
-import { renderLabTelemetryPanel } from "../lab/telemetry-panel";
+import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
 
 declare global {
@@ -38,6 +38,11 @@ async function bootOriginalGame(): Promise<void> {
   const hostname = window.location.hostname.replace(/^www\./, "");
 
   document.documentElement.lang = hostname === "bombpvp.com" ? "en" : "pt-BR";
+  if (mode === "lab") {
+    document.body.classList.add("lab-mode");
+    root.classList.add("experience-match__stage");
+    root.dataset.fullscreen = "true";
+  }
   const assets = await loadGameAssets();
   root.replaceChildren();
   root.removeAttribute("aria-live");
@@ -66,6 +71,8 @@ async function bootOriginalGame(): Promise<void> {
         roomMode: "endless",
         botPlayerIds,
         playerLabels,
+        hideNativeHud: true,
+        showWorldPlayerLabels: true,
         botDecisionObserver: ({ playerId, decision, computeMs }) => telemetry.record({
           type: "decision",
           playerId,
@@ -75,18 +82,10 @@ async function bootOriginalGame(): Promise<void> {
       },
     );
 
-    const statusPanel = document.createElement("aside");
-    statusPanel.className = "lab-live-status";
-    statusPanel.setAttribute("aria-label", document.documentElement.lang === "en" ? "Live bot telemetry" : "Telemetria ao vivo dos bots");
-    document.body.append(statusPanel);
-
+    const labConsole = createLabConsole(document, document.documentElement.lang === "en");
     const readTelemetry = (): LabTelemetryReport => telemetry.read(game.exportOnlineSnapshot());
     window.get_lab_telemetry = readTelemetry;
-    const refreshPanel = (): void => renderLabTelemetryPanel(
-      statusPanel,
-      readTelemetry(),
-      document.documentElement.lang === "en",
-    );
+    const refreshPanel = (): void => labConsole.render(readTelemetry());
     refreshPanel();
     const refreshTimer = window.setInterval(refreshPanel, 500);
 
@@ -117,6 +116,7 @@ async function bootOriginalGame(): Promise<void> {
     window.addEventListener("pagehide", () => {
       stop();
       window.clearInterval(refreshTimer);
+      labConsole.dispose();
       delete window.get_lab_telemetry;
     }, { once: true });
     return;

@@ -28,7 +28,7 @@ export type AppIntent =
   | Readonly<{ type: "open-experience"; experienceId: ExperienceId }>
   | Readonly<{ type: "select-character"; characterId: CharacterId }>
   | Readonly<{ type: "confirm-character" }>
-  | Readonly<{ type: "start-lab-match"; models: readonly string[] }>
+  | Readonly<{ type: "start-lab-match"; models: readonly string[]; labels?: readonly string[] }>
   | Readonly<{ type: "back-to-selection" }>
   | Readonly<{ type: "back-to-launcher" }>
   | Readonly<{ type: "navigate"; path: string }>;
@@ -131,7 +131,7 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
 
   if (intent.type === "start-lab-match") {
     if (snapshot.screen !== "laboratory") return snapshot;
-    const query = createLabMatchParams(intent.models);
+    const query = createLabMatchParams(intent.models, intent.labels);
     if (!query) return snapshot;
     return freezeSnapshot({
       ...snapshot,

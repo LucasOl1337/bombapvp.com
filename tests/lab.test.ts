@@ -78,16 +78,28 @@ describe("Laboratorio 9Router", () => {
     const params = new URLSearchParams({
       model1: LAB_V1_MODEL,
       model2: "cx/gpt-5.6-sol",
+      label2: "GPT 5.6 Sol Ultra",
       model3: LAB_V1_MODEL,
       model4: "cc/claude-fable-5",
+      label4: "Claude Fable 5",
     });
 
     expect(parseLabMatchCompetitors(params)).toEqual([
       { playerId: 1, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
-      { playerId: 2, model: "cx/gpt-5.6-sol", kind: "llm", label: "cx/gpt-5.6-sol" },
+      { playerId: 2, model: "cx/gpt-5.6-sol", kind: "llm", label: "GPT 5.6 Sol Ultra" },
       { playerId: 3, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
-      { playerId: 4, model: "cc/claude-fable-5", kind: "llm", label: "cc/claude-fable-5" },
+      { playerId: 4, model: "cc/claude-fable-5", kind: "llm", label: "Claude Fable 5" },
     ]);
+  });
+
+  it("preserva o nome do perfil selecionado sem confundir aliases da mesma rota", () => {
+    const params = createLabMatchParams(
+      [LAB_V1_MODEL, "cx/gpt-5.6-luna-xhigh"],
+      ["V1", "GPT 5.6 Luna Ultra"],
+    );
+
+    expect(params?.get("label2")).toBe("GPT 5.6 Luna Ultra");
+    expect(parseLabMatchCompetitors(params!).at(1)?.label).toBe("GPT 5.6 Luna Ultra");
   });
 
   it("rejeita salas com menos de dois competidores ou slots vazios", () => {
@@ -292,10 +304,9 @@ describe("Laboratorio 9Router", () => {
     };
 
     const stop = startLabController(game, client, [{ playerId: 1, model: "local/test" }]);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.waitFor(() => expect(client.decide.mock.calls.length).toBeGreaterThan(1), { timeout: 200 });
     stop();
 
-    expect(client.decide.mock.calls.length).toBeGreaterThan(1);
     expect(client.decide.mock.calls.length).toBeLessThan(100);
   });
 

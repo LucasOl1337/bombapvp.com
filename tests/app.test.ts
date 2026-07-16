@@ -141,7 +141,7 @@ describe("Bomba PvP app", () => {
     fireEvent.click(start);
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&model2=cc%2Fclaude-fable-5",
+      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5",
     });
   });
 
@@ -161,7 +161,7 @@ describe("Bomba PvP app", () => {
 
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&model2=cc%2Fclaude-fable-5&model3=bot-v1&model4=bot-v1",
+      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5&model3=bot-v1&model4=bot-v1",
     });
   });
 

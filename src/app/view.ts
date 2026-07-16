@@ -476,6 +476,7 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
         const option = document.createElement("option");
         option.value = profile.route;
         option.textContent = profile.label;
+        option.dataset.labLabel = profile.route === LAB_V1_MODEL ? "V1" : profile.label;
         return option;
       }));
       select.selectedIndex = Math.min(index, competitors.length - 1);
@@ -503,9 +504,11 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const models = modelSelects.slice(0, Number(playerCount.value)).map((select) => select.value);
+    const selected = modelSelects.slice(0, Number(playerCount.value));
+    const models = selected.map((select) => select.value);
+    const labels = selected.map((select) => select.selectedOptions[0]?.dataset.labLabel ?? select.value);
     if (models.some((model) => !model)) return;
-    dispatch({ type: "start-lab-match", models });
+    dispatch({ type: "start-lab-match", models, labels });
   });
 
   const arena = element(document, "div", "laboratory__arena");

@@ -96,7 +96,7 @@ describe("telemetria do laboratorio", () => {
     nowMs = 305;
     telemetry.record({
       type: "decision", playerId: 2, decisionMs: 200, upstreamLatencyMs: 150,
-      action: { direction: "left", placeBomb: true, useSkill: true },
+      action: { direction: "left", placeBomb: true, detonate: true, useSkill: true },
       usage: { inputTokens: 120, outputTokens: 20, totalTokens: 140 },
     });
     telemetry.record({ type: "error", playerId: 2 });
@@ -127,7 +127,14 @@ describe("telemetria do laboratorio", () => {
         upstreamAverageMs: 115, transportAverageMs: 35, pollGapAverageMs: 5, pollingUtilizationPct: 95.2,
       },
       decisions: { count: 2, perSecond: 1, errors: 1 },
-      actions: { changeRatePct: 100, bombIntentPct: 50, skillIntentPct: 50 },
+      actions: {
+        latest: { direction: "left", placeBomb: true, detonate: true, useSkill: true },
+        latestAgeMs: 1_695,
+        changeRatePct: 100,
+        bombIntentPct: 50,
+        detonateIntentPct: 50,
+        skillIntentPct: 50,
+      },
       tokens: { inputTokens: 220, outputTokens: 30, totalTokens: 250 },
       gameplay: {
         alive: false, kills: 1, bombsAvailable: 2, bombCapacity: 3, shieldCharges: 1,

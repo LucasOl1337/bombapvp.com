@@ -10,6 +10,7 @@ export type LabTelemetryUsage = LabTokenUsage;
 export type LabTelemetryAction = Readonly<{
   direction: "up" | "down" | "left" | "right" | null;
   placeBomb: boolean;
+  detonate?: boolean;
   useSkill?: boolean;
 }>;
 
@@ -47,9 +48,12 @@ export type LabTelemetryPlayerReport = Readonly<{
     errors: number;
   }>;
   actions: Readonly<{
+    latest: LabTelemetryAction | null;
+    latestAgeMs: number | null;
     changeRatePct: number;
     movementPct: number;
     bombIntentPct: number;
+    detonateIntentPct: number;
     skillIntentPct: number;
   }>;
   tokens: LabTelemetryUsage;
@@ -101,8 +105,11 @@ type PlayerAccumulator = {
   actionChanges: number;
   movementIntents: number;
   bombIntents: number;
+  detonateIntents: number;
   skillIntents: number;
-  lastAction: string | null;
+  lastActionKey: string | null;
+  lastAction: LabTelemetryAction | null;
+  lastActionAtMs: number | null;
   usage: LabTelemetryUsage;
 };
 
@@ -128,7 +135,12 @@ function percentage(count: number, total: number): number {
 }
 
 function actionKey(action: LabTelemetryAction): string {
-  return [action.direction ?? "idle", action.placeBomb ? "bomb" : "-", action.useSkill ? "skill" : "-"].join(":");
+  return [
+    action.direction ?? "idle",
+    action.placeBomb ? "bomb" : "-",
+    action.detonate ? "detonate" : "-",
+    action.useSkill ? "skill" : "-",
+  ].join(":");
 }
 
 function createAccumulator(competitor: Competitor): PlayerAccumulator {
@@ -152,8 +164,11 @@ function createAccumulator(competitor: Competitor): PlayerAccumulator {
     actionChanges: 0,
     movementIntents: 0,
     bombIntents: 0,
+    detonateIntents: 0,
     skillIntents: 0,
+    lastActionKey: null,
     lastAction: null,
+    lastActionAtMs: null,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   };
 }
@@ -218,10 +233,13 @@ export function createLabTelemetry(
     }
 
     const nextAction = actionKey(event.action);
-    if (player.lastAction !== null && player.lastAction !== nextAction) player.actionChanges += 1;
-    player.lastAction = nextAction;
+    if (player.lastActionKey !== null && player.lastActionKey !== nextAction) player.actionChanges += 1;
+    player.lastActionKey = nextAction;
+    player.lastAction = { ...event.action };
+    player.lastActionAtMs = player.lastDecisionRecordedAtMs;
     if (event.action.direction !== null) player.movementIntents += 1;
     if (event.action.placeBomb) player.bombIntents += 1;
+    if (event.action.detonate) player.detonateIntents += 1;
     if (event.action.useSkill) player.skillIntents += 1;
 
     if (event.usage) {
@@ -272,9 +290,14 @@ export function createLabTelemetry(
             errors: entry.errors,
           },
           actions: {
+            latest: entry.lastAction ? { ...entry.lastAction } : null,
+            latestAgeMs: entry.lastActionAtMs === null
+              ? null
+              : round(Math.max(0, sampledAtMs - entry.lastActionAtMs)),
             changeRatePct: percentage(entry.actionChanges, Math.max(0, entry.decisions - 1)),
             movementPct: percentage(entry.movementIntents, entry.decisions),
             bombIntentPct: percentage(entry.bombIntents, entry.decisions),
+            detonateIntentPct: percentage(entry.detonateIntents, entry.decisions),
             skillIntentPct: percentage(entry.skillIntents, entry.decisions),
           },
           tokens: { ...entry.usage },
