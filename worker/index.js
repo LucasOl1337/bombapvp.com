@@ -8,7 +8,7 @@ function json(status, body) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export async function handleRequest(request, env, fetchImpl = fetch) {
+export async function handleRequest(request, env, fetchImpl = globalThis.fetch) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/lab/")) return env.ASSETS.fetch(request);
 
@@ -29,12 +29,17 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   const contentType = request.headers.get("Content-Type");
   if (contentType) headers.set("Content-Type", contentType);
   const body = request.method === "POST" ? await request.arrayBuffer() : undefined;
-  const response = await fetchImpl(new Request(target, {
-    method: request.method,
-    headers,
-    body,
-    redirect: "manual",
-  }));
+  let response;
+  try {
+    response = await fetchImpl(new Request(target, {
+      method: request.method,
+      headers,
+      body,
+      redirect: "manual",
+    }));
+  } catch {
+    return json(502, { ok: false, error: "lab_broker_unavailable" });
+  }
   const responseHeaders = new Headers({
     "Content-Type": response.headers.get("Content-Type") || "application/json",
     "Cache-Control": "no-store",
@@ -42,4 +47,8 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   return new Response(response.body, { status: response.status, headers: responseHeaders });
 }
 
-export default { fetch: handleRequest };
+export default {
+  fetch(request, env) {
+    return handleRequest(request, env);
+  },
+};

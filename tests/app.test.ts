@@ -80,6 +80,9 @@ describe("Bomba PvP app", () => {
       selectedCharacter: { name: "Ranni" },
     });
     expect(
+      root.querySelector(".app-shell")?.classList.contains("app-shell--screen-update"),
+    ).toBe(true);
+    expect(
       view.getByRole("button", { name: "Ranni, Selecionado" }).getAttribute("aria-pressed"),
     ).toBe("true");
 

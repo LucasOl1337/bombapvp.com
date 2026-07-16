@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleRequest } from "../worker/index.js";
+import worker, { handleRequest } from "../worker/index.js";
 
 describe("proxy do Laboratorio", () => {
   it("encaminha somente rotas permitidas com o segredo interno", async () => {
@@ -46,5 +46,25 @@ describe("proxy do Laboratorio", () => {
 
     expect(response.status).toBe(429);
     expect(brokerFetch).not.toHaveBeenCalled();
+  });
+
+  it("ignora o ExecutionContext injetado pelo runtime", async () => {
+    const brokerFetch = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", brokerFetch);
+    const env = {
+      ASSETS: { fetch: vi.fn() },
+      LAB_BROKER_URL: "https://broker.example",
+      LAB_BROKER_SECRET: "secret",
+    };
+
+    const response = await worker.fetch(
+      new Request("https://bombapvp.com/api/lab/health"),
+      env,
+      { waitUntil: vi.fn() },
+    );
+
+    expect(response.status).toBe(200);
+    expect(brokerFetch).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 });

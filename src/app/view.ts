@@ -77,8 +77,8 @@ function renderFighterStage(
   const blueprint = element(document, "span", "fighter-stage__blueprint");
   blueprint.setAttribute("aria-hidden", "true");
   const image = createCharacterImage(document, character, {
-    decorative: options.decorative,
-    className: options.mirrored ? "is-mirrored" : undefined,
+    decorative: options.decorative ?? false,
+    className: options.mirrored ? "is-mirrored" : "",
     draggable: false,
   });
   const baseline = element(document, "span", "fighter-stage__baseline");
@@ -493,7 +493,9 @@ function renderFooter(document: Document, snapshot: AppSnapshot): HTMLElement {
 
 export function renderApp(root: HTMLElement, snapshot: AppSnapshot, dispatch: Dispatch): void {
   const document = root.ownerDocument;
+  const previousScreen = (root.firstElementChild as HTMLElement | null)?.dataset.screen;
   const main = element(document, "main", "app-shell app-shell--" + snapshot.screen);
+  if (previousScreen === snapshot.screen) main.classList.add("app-shell--screen-update");
   main.lang = snapshot.locale;
   main.dataset.screen = snapshot.screen;
   const backdrop = element(document, "div", "app-shell__backdrop");

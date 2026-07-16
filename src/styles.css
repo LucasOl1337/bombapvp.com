@@ -751,6 +751,13 @@ a.brand__language:hover {
   animation-delay: 210ms;
 }
 
+.app-shell--screen-update .page-navigation,
+.app-shell--screen-update .selection .page-intro > *,
+.app-shell--screen-update .character-card,
+.app-shell--screen-update .selection-confirmation {
+  animation: none;
+}
+
 .character-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1200,12 +1207,12 @@ a.brand__language:hover {
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(1.35rem);
+    translate: 0 1.35rem;
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    translate: 0 0;
   }
 }
 
