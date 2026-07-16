@@ -11,7 +11,6 @@ export type LabTelemetryAction = Readonly<{
   direction: "up" | "down" | "left" | "right" | null;
   placeBomb: boolean;
   useSkill?: boolean;
-  durationMs?: number;
 }>;
 
 export type LabTelemetryEvent =
@@ -52,7 +51,6 @@ export type LabTelemetryPlayerReport = Readonly<{
     movementPct: number;
     bombIntentPct: number;
     skillIntentPct: number;
-    averageHoldMs: number | null;
   }>;
   tokens: LabTelemetryUsage;
   gameplay: Readonly<{
@@ -104,8 +102,6 @@ type PlayerAccumulator = {
   movementIntents: number;
   bombIntents: number;
   skillIntents: number;
-  holdMsTotal: number;
-  holdSamples: number;
   lastAction: string | null;
   usage: LabTelemetryUsage;
 };
@@ -157,8 +153,6 @@ function createAccumulator(competitor: Competitor): PlayerAccumulator {
     movementIntents: 0,
     bombIntents: 0,
     skillIntents: 0,
-    holdMsTotal: 0,
-    holdSamples: 0,
     lastAction: null,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   };
@@ -229,10 +223,6 @@ export function createLabTelemetry(
     if (event.action.direction !== null) player.movementIntents += 1;
     if (event.action.placeBomb) player.bombIntents += 1;
     if (event.action.useSkill) player.skillIntents += 1;
-    if (typeof event.action.durationMs === "number") {
-      player.holdMsTotal += Math.max(0, event.action.durationMs);
-      player.holdSamples += 1;
-    }
 
     if (event.usage) {
       player.usage = {
@@ -286,7 +276,6 @@ export function createLabTelemetry(
             movementPct: percentage(entry.movementIntents, entry.decisions),
             bombIntentPct: percentage(entry.bombIntents, entry.decisions),
             skillIntentPct: percentage(entry.skillIntents, entry.decisions),
-            averageHoldMs: average(entry.holdMsTotal, entry.holdSamples),
           },
           tokens: { ...entry.usage },
           gameplay: {

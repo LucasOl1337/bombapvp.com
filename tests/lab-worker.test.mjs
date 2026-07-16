@@ -18,7 +18,6 @@ describe("proxy do Laboratorio", () => {
       ASSETS: { fetch: vi.fn(async () => new Response("asset")) },
       LAB_BROKER_URL: "https://broker.example",
       LAB_BROKER_SECRET: "secret",
-      LAB_DECISION_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     };
 
     const response = await handleRequest(new Request("https://bombapvp.com/api/lab/models"), env, brokerFetch);
@@ -39,11 +38,10 @@ describe("proxy do Laboratorio", () => {
     const blocked = await handleRequest(new Request("https://bombapvp.com/api/lab/admin"), env, brokerFetch);
     expect(blocked.status).toBe(404);
     expect(brokerFetch).toHaveBeenCalledTimes(2);
-    expect(env.LAB_DECISION_RATE_LIMITER.limit).toHaveBeenCalledOnce();
   });
 
-  it("bloqueia excesso de decisões antes de chamar o broker", async () => {
-    const brokerFetch = vi.fn();
+  it("nao aplica rate limit intencional as decisoes", async () => {
+    const brokerFetch = vi.fn(async () => Response.json({ ok: true }));
     const env = {
       ASSETS: { fetch: vi.fn() },
       LAB_BROKER_URL: "https://broker.example",
@@ -56,8 +54,9 @@ describe("proxy do Laboratorio", () => {
       body: "{}",
     }), env, brokerFetch);
 
-    expect(response.status).toBe(429);
-    expect(brokerFetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(brokerFetch).toHaveBeenCalledOnce();
+    expect(env.LAB_DECISION_RATE_LIMITER.limit).not.toHaveBeenCalled();
   });
 
   it("ignora o ExecutionContext injetado pelo runtime", async () => {

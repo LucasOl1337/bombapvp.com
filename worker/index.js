@@ -18,12 +18,6 @@ export async function handleRequest(request, env, fetchImpl = globalThis.fetch) 
   if (!env.LAB_BROKER_URL || !env.LAB_BROKER_SECRET) {
     return json(503, { ok: false, error: "lab_broker_not_configured" });
   }
-  if (route.target === "/decision" && env.LAB_DECISION_RATE_LIMITER) {
-    const key = request.headers.get("cf-connecting-ip") || "unknown";
-    const { success } = await env.LAB_DECISION_RATE_LIMITER.limit({ key });
-    if (!success) return json(429, { ok: false, error: "rate_limited" });
-  }
-
   const target = new URL(route.target, `${String(env.LAB_BROKER_URL).replace(/\/+$/, "")}/`);
   const headers = new Headers({ "x-bomba-lab-secret": env.LAB_BROKER_SECRET });
   const contentType = request.headers.get("Content-Type");

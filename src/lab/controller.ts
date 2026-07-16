@@ -5,7 +5,8 @@ import type { LabClient, LabDecision, LabDecisionResult } from "./client.ts";
 type LabGame = Pick<{
   exportOnlineSnapshot(): OnlineGameSnapshot;
   setServerPlayerInput(playerId: PlayerId, input: OnlineInputState): void;
-}, "exportOnlineSnapshot" | "setServerPlayerInput">;
+  clearServerPlayerInput(playerId: PlayerId): void;
+}, "exportOnlineSnapshot" | "setServerPlayerInput" | "clearServerPlayerInput">;
 
 export type LabCompetitor = Readonly<{ playerId: PlayerId; model: string }>;
 export type LabControllerStatus = Readonly<{
@@ -18,13 +19,6 @@ export type LabControllerEvent =
   | Readonly<{ type: "request"; playerId: PlayerId }>
   | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>;
 
-const NEUTRAL_INPUT: OnlineInputState = Object.freeze({
-  direction: null,
-  bombPressed: false,
-  detonatePressed: false,
-  skillPressed: false,
-  skillHeld: false,
-});
 const INACTIVE_POLL_INTERVAL_MS = 50;
 const ERROR_RETRY_MIN_MS = 100;
 const ERROR_RETRY_MAX_MS = 1_000;
@@ -160,39 +154,24 @@ export function startLabController(
   const cleanups = new Set<() => void>();
 
   for (const competitor of competitors) {
-    game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
+    game.clearServerPlayerInput(competitor.playerId);
   }
 
   for (const competitor of competitors) {
     void (async () => {
-      let inputVersion = 0;
       let hasActiveInput = false;
       let consecutiveErrors = 0;
-      let expiryTimer: ReturnType<typeof setTimeout> | null = null;
       let stopped = false;
 
       const clearInput = (force = false): void => {
-        if (expiryTimer !== null) {
-          clearTimeout(expiryTimer);
-          expiryTimer = null;
-        }
-        inputVersion += 1;
         const shouldWrite = force || hasActiveInput;
         hasActiveInput = false;
-        if (shouldWrite) game.setServerPlayerInput(competitor.playerId, NEUTRAL_INPUT);
+        if (shouldWrite) game.clearServerPlayerInput(competitor.playerId);
       };
 
       const applyDecision = (decision: LabDecision): void => {
-        if (expiryTimer !== null) clearTimeout(expiryTimer);
-        inputVersion += 1;
-        const appliedVersion = inputVersion;
         hasActiveInput = true;
         game.setServerPlayerInput(competitor.playerId, toInput(decision));
-        expiryTimer = setTimeout(() => {
-          expiryTimer = null;
-          if (signal.aborted || appliedVersion !== inputVersion) return;
-          clearInput();
-        }, decision.durationMs);
       };
 
       const finish = (): void => {

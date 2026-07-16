@@ -66,7 +66,6 @@ function renderCard(document: Document, player: LabTelemetryPlayerReport, englis
       ["NET", formatMetric(player.timing.transportAverageMs, "ms"), english ? "Browser and proxy overhead" : "Overhead do navegador e proxies"],
       ["GAP", formatMetric(player.timing.pollGapAverageMs, "ms"), english ? "Average gap before the next request" : "Intervalo médio antes da próxima requisição"],
       ["UTIL", formatMetric(player.timing.pollingUtilizationPct, "%"), english ? "Polling time spent waiting for the model" : "Tempo do polling ocupado esperando o modelo"],
-      ["HOLD", formatMetric(player.actions.averageHoldMs, "ms"), english ? "Average action duration" : "Duração média da ação"],
       ["TOK", `${player.tokens.inputTokens}/${player.tokens.outputTokens}`, english ? "Input/output tokens" : "Tokens de entrada/saída"],
     ]));
   }

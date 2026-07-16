@@ -115,7 +115,7 @@ describe("Laboratorio 9Router", () => {
       nowMs = 145;
       return new Response(JSON.stringify({
         ok: true,
-        decision: { direction: "left", placeBomb: true, detonate: false, useSkill: false, durationMs: 400 },
+        decision: { direction: "left", placeBomb: true, detonate: false, useSkill: false },
         latencyMs: 35,
         usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -129,7 +129,7 @@ describe("Laboratorio 9Router", () => {
       model: "cx/gpt-5.6-sol",
       observation: buildLabObservation(snapshot(), 1),
     })).resolves.toMatchObject({
-      decision: { direction: "left", durationMs: 400 },
+      decision: { direction: "left" },
       roundTripMs: 45,
       upstreamLatencyMs: 35,
       usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
@@ -174,6 +174,10 @@ describe("Laboratorio 9Router", () => {
     const game = {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: (playerId: PlayerId, input: OnlineInputState) => inputs.push({ playerId, input }),
+      clearServerPlayerInput: (playerId: PlayerId) => inputs.push({
+        playerId,
+        input: { direction: null, bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false },
+      }),
     };
     const pendingDecision = new Promise<never>(() => undefined);
     const client = {
@@ -184,7 +188,6 @@ describe("Laboratorio 9Router", () => {
           placeBomb: true,
           detonate: false,
           useSkill: true,
-          durationMs: 400,
         },
         roundTripMs: 85,
         upstreamLatencyMs: 70,
@@ -218,17 +221,18 @@ describe("Laboratorio 9Router", () => {
     });
   });
 
-  it("inicia a proxima leitura assim que recebe uma decisao, sem esperar a duracao da acao", async () => {
+  it("inicia a proxima leitura assim que recebe uma decisao", async () => {
     const game = {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
     };
     const pendingDecision = new Promise<never>(() => undefined);
     const client = {
       listProfiles: vi.fn(),
       decide: vi.fn()
         .mockResolvedValueOnce({
-          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false, durationMs: 1_200 },
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
           roundTripMs: 80,
           upstreamLatencyMs: 70,
           usage: null,
@@ -241,15 +245,46 @@ describe("Laboratorio 9Router", () => {
     stop();
   });
 
+  it("mantem o ultimo movimento enquanto uma resposta lenta ainda esta em voo", async () => {
+    const inputs: OnlineInputState[] = [];
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+      clearServerPlayerInput: () => inputs.push({
+        direction: null, bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false,
+      }),
+    };
+    const pendingDecision = new Promise<never>(() => undefined);
+    const client = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockResolvedValueOnce({
+          decision: { direction: "right", placeBomb: true, detonate: false, useSkill: false },
+          roundTripMs: 13_000,
+          upstreamLatencyMs: 12_900,
+          usage: { inputTokens: 800, outputTokens: 1_000, totalTokens: 1_800 },
+        })
+        .mockReturnValueOnce(pendingDecision),
+    };
+
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna-xhigh" }]);
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(inputs.at(-1)?.direction).toBe("right");
+    stop();
+  });
+
   it("cede ao navegador somente para clientes locais com resposta sincronica", async () => {
     const game = {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
     };
     const client = {
       listProfiles: vi.fn(),
       decide: vi.fn().mockResolvedValue({
-        decision: { direction: null, placeBomb: false, detonate: false, useSkill: false, durationMs: 250 },
+        decision: { direction: null, placeBomb: false, detonate: false, useSkill: false },
         roundTripMs: 0,
         upstreamLatencyMs: 0,
         usage: null,
@@ -264,18 +299,21 @@ describe("Laboratorio 9Router", () => {
     expect(client.decide.mock.calls.length).toBeLessThan(100);
   });
 
-  it("mantem a decisao mais nova quando a validade da anterior termina", async () => {
+  it("substitui imediatamente a direcao anterior pela decisao mais nova", async () => {
     const inputs: OnlineInputState[] = [];
     const game = {
       exportOnlineSnapshot: () => snapshot(),
       setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
+      clearServerPlayerInput: () => inputs.push({
+        direction: null, bombPressed: false, detonatePressed: false, skillPressed: false, skillHeld: false,
+      }),
     };
     const pendingDecision = new Promise<never>(() => undefined);
     const client = {
       listProfiles: vi.fn(),
       decide: vi.fn()
         .mockResolvedValueOnce({
-          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false, durationMs: 60 },
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
           roundTripMs: 20,
           upstreamLatencyMs: 15,
           usage: null,
@@ -283,7 +321,7 @@ describe("Laboratorio 9Router", () => {
         .mockImplementationOnce(async () => {
           await new Promise((resolve) => setTimeout(resolve, 20));
           return {
-            decision: { direction: "left", placeBomb: false, detonate: false, useSkill: false, durationMs: 200 },
+            decision: { direction: "left", placeBomb: false, detonate: false, useSkill: false },
             roundTripMs: 20,
             upstreamLatencyMs: 15,
             usage: null,

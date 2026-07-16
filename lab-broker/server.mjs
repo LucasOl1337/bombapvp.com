@@ -18,8 +18,8 @@ const ALLOWED_ROUTES = new Set(PROFILES.map(({ route }) => route));
 const MAX_BODY_BYTES = 64 * 1024;
 const SYSTEM_PROMPT = [
   "You control one player in Bomba PvP.",
-  "Return only a JSON object with direction, placeBomb, detonate, useSkill and durationMs.",
-  "direction must be up, down, left, right or null. durationMs must be 250-1200.",
+  "Return only a JSON object with direction, placeBomb, detonate and useSkill.",
+  "direction must be up, down, left, right or null.",
   "Every request is a fresh complete tactical snapshot and immediately replaces your previous action.",
   "Survive first, avoid bombs and flames, collect useful powerups, then attack.",
 ].join(" ");
@@ -60,7 +60,6 @@ function normalizeDecision(value) {
     placeBomb: value?.placeBomb === true,
     detonate: value?.detonate === true,
     useSkill: value?.useSkill === true,
-    durationMs: Math.max(250, Math.min(1200, Number(value?.durationMs) || 400)),
   };
 }
 
@@ -128,7 +127,9 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
               { role: "system", content: SYSTEM_PROMPT },
               { role: "user", content: JSON.stringify(body.observation) },
             ],
-            max_tokens: 120,
+            ...(String(body.model).startsWith("cx/gpt-5")
+              ? { max_completion_tokens: 120 }
+              : { max_tokens: 120 }),
             response_format: { type: "json_object" },
             stream: false,
           }),

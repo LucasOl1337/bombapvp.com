@@ -16,7 +16,7 @@ describe("broker minimo do Laboratorio", () => {
       upstreamPayloads.push(JSON.parse(String(init.body)));
       return Response.json({
         choices: [{ message: { content: JSON.stringify({
-          direction: "up", placeBomb: false, detonate: false, useSkill: false, durationMs: 500,
+          direction: "up", placeBomb: false, detonate: false, useSkill: false,
         }) } }],
         usage: { prompt_tokens: 120, completion_tokens: 18, total_tokens: 138 },
       });
@@ -46,8 +46,18 @@ describe("broker minimo do Laboratorio", () => {
       usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
     });
     expect(upstreamPayloads[0].model).toBe("cx/gpt-5.6-sol-high");
-    expect(upstreamPayloads[0].max_tokens).toBe(120);
+    expect(upstreamPayloads[0].max_completion_tokens).toBe(120);
+    expect(upstreamPayloads[0]).not.toHaveProperty("max_tokens");
     expect(JSON.stringify(upstreamPayloads[0])).not.toMatch(/reasoning|thinking|effort/i);
+
+    const claudeDecision = await broker(new Request("http://broker/decision", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "cc/claude-fable-5", observation: { playerId: 2 } }),
+    }));
+    expect(claudeDecision.status).toBe(200);
+    expect(upstreamPayloads[1]).toMatchObject({ model: "cc/claude-fable-5", max_tokens: 120 });
+    expect(upstreamPayloads[1]).not.toHaveProperty("max_completion_tokens");
   });
 
   it("rejeita modelo fora da whitelist antes do upstream", async () => {

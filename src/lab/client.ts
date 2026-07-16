@@ -11,7 +11,6 @@ export type LabDecision = Readonly<{
   placeBomb: boolean;
   detonate: boolean;
   useSkill: boolean;
-  durationMs: number;
 }>;
 
 export type LabDecisionRequest = Readonly<{
@@ -53,14 +52,12 @@ function asDecision(value: unknown): LabDecision | null {
     typeof candidate.placeBomb !== "boolean"
     || typeof candidate.detonate !== "boolean"
     || typeof candidate.useSkill !== "boolean"
-    || typeof candidate.durationMs !== "number"
   ) return null;
   return {
     direction: candidate.direction ?? null,
     placeBomb: candidate.placeBomb,
     detonate: candidate.detonate,
     useSkill: candidate.useSkill,
-    durationMs: Math.max(250, Math.min(1200, candidate.durationMs)),
   };
 }
 

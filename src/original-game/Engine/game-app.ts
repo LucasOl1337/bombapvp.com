@@ -1565,6 +1565,11 @@ export class GameApp {
     this.onlineInputs[playerId] = mergeLatchedOnlineInput(this.onlineInputs[playerId], input);
   }
 
+  public clearServerPlayerInput(playerId: PlayerId): void {
+    this.externalInputPlayers[playerId] = true;
+    this.onlineInputs[playerId] = createNeutralOnlineInput();
+  }
+
   public advanceServerSimulation(deltaMs: number): void {
     const steps = Math.max(1, Math.round(deltaMs / FIXED_STEP_MS));
     for (let step = 0; step < steps; step += 1) {

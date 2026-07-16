@@ -28,15 +28,5 @@
   },
   "observability": {
     "enabled": true
-  },
-  "ratelimits": [
-    {
-      "name": "LAB_DECISION_RATE_LIMITER",
-      "namespace_id": "26071601",
-      "simple": {
-        "limit": 1200,
-        "period": 60
-      }
-    }
-  ]
+  }
 }
