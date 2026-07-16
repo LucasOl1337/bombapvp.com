@@ -106,7 +106,7 @@ function renderOverview(document: Document, report: LabTelemetryReport, english:
     identity.append(
       element(document, "span", "lab-bot-card__rank", `#${index + 1} · P${player.playerId}`),
       element(document, "strong", "", player.label),
-      element(document, "small", "", player.kind === "v1" ? (english ? "Deterministic" : "Determinístico") : "LLM"),
+      element(document, "small", "", player.kind === "llm" ? "LLM" : (english ? "Deterministic" : "Determinístico")),
     );
     top.append(identity, element(document, "span", `lab-state is-${presentationStatus(player)}`, translatedStatus(player, english)));
 

@@ -31,7 +31,7 @@ export type LabTelemetryEvent =
 export type LabTelemetryPlayerReport = Readonly<{
   playerId: PlayerId;
   label: string;
-  kind: "v1" | "llm";
+  kind: "v1" | "v2" | "llm";
   status: LabTelemetryStatus;
   timing: Readonly<{
     kind: "compute" | "round-trip";
@@ -94,7 +94,7 @@ export type LabTelemetryReport = Readonly<{
 type Competitor = Readonly<{
   playerId: PlayerId;
   label: string;
-  kind: "v1" | "llm";
+  kind: "v1" | "v2" | "llm";
 }>;
 
 type PlayerAccumulator = {
@@ -160,7 +160,7 @@ function actionKey(action: LabTelemetryAction): string {
 function createAccumulator(competitor: Competitor): PlayerAccumulator {
   return {
     competitor,
-    status: competitor.kind === "v1" ? "acting" : "waiting",
+    status: competitor.kind === "llm" ? "waiting" : "acting",
     decisions: 0,
     motorTicks: 0,
     safetyOverrides: 0,
@@ -296,7 +296,7 @@ export function createLabTelemetry(
           kind: entry.competitor.kind,
           status: entry.status,
           timing: {
-            kind: entry.competitor.kind === "v1" ? "compute" : "round-trip",
+            kind: entry.competitor.kind === "llm" ? "round-trip" : "compute",
             lastMs: entry.decisionMsLast === null ? null : round(entry.decisionMsLast),
             averageMs: averageDecisionMs,
             p95Ms: percentile95(entry.decisionMsSamples),

@@ -5,6 +5,7 @@ import { buildLabObservation, startLabController } from "../src/lab/controller.t
 import {
   createLabMatchParams,
   LAB_V1_MODEL,
+  LAB_V2_MODEL,
   parseLabMatchCompetitors,
 } from "../src/lab/competitors.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../src/original-game/NetCode/protocol.ts";
@@ -90,6 +91,28 @@ describe("Laboratorio 9Router", () => {
       { playerId: 2, model: "cx/gpt-5.6-sol", kind: "llm", label: "GPT 5.6 Sol Ultra" },
       { playerId: 3, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
       { playerId: 4, model: "cc/claude-fable-5", kind: "llm", label: "Claude Fable 5" },
+    ]);
+  });
+
+  it("reconhece o V2 como bot local determinístico e ignora labels externas", () => {
+    const params = createLabMatchParams([LAB_V2_MODEL, LAB_V1_MODEL], ["falso", "falso"]);
+
+    expect(params?.toString()).toBe("mode=lab&model1=bot-v2&model2=bot-v1");
+    expect(parseLabMatchCompetitors(params!)).toEqual([
+      { playerId: 1, model: LAB_V2_MODEL, kind: "v2", label: "V2" },
+      { playerId: 2, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
+    ]);
+  });
+
+  it("monta o confronto V2 contra Luna Leve preservando tipos e rótulos", () => {
+    const params = createLabMatchParams(
+      [LAB_V2_MODEL, "cx/gpt-5.6-luna"],
+      ["rótulo falso", "GPT 5.6 Luna Leve"],
+    );
+
+    expect(parseLabMatchCompetitors(params!)).toEqual([
+      { playerId: 1, model: LAB_V2_MODEL, kind: "v2", label: "V2" },
+      { playerId: 2, model: "cx/gpt-5.6-luna", kind: "llm", label: "GPT 5.6 Luna Leve" },
     ]);
   });
 

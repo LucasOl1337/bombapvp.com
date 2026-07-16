@@ -1,18 +1,25 @@
 import type { PlayerId } from "../original-game/Gameplay/types.ts";
 
 export const LAB_V1_MODEL = "bot-v1";
+export const LAB_V2_MODEL = "bot-v2";
 export const LAB_MIN_COMPETITORS = 2;
 export const LAB_MAX_COMPETITORS = 4;
 
 export type LabMatchCompetitor = Readonly<{
   playerId: PlayerId;
   model: string;
-  kind: "v1" | "llm";
+  kind: "v1" | "v2" | "llm";
   label: string;
 }>;
 
 function normalizeLabel(label: string | null): string {
   return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
+}
+
+function localBotKind(model: string): "v1" | "v2" | null {
+  if (model === LAB_V1_MODEL) return "v1";
+  if (model === LAB_V2_MODEL) return "v2";
+  return null;
 }
 
 export function createLabMatchParams(
@@ -30,7 +37,7 @@ export function createLabMatchParams(
   normalizedModels.forEach((model, index) => {
     params.set(`model${index + 1}`, model);
     const label = normalizeLabel(labels[index] ?? null);
-    if (model !== LAB_V1_MODEL && label) params.set(`label${index + 1}`, label);
+    if (!localBotKind(model) && label) params.set(`label${index + 1}`, label);
   });
   return params;
 }
@@ -51,11 +58,12 @@ export function parseLabMatchCompetitors(params: URLSearchParams): readonly LabM
 
   return models.filter(Boolean).map((model, index) => {
     const selectedLabel = normalizeLabel(params.get(`label${index + 1}`));
+    const kind = localBotKind(model);
     return {
       playerId: (index + 1) as PlayerId,
       model,
-      kind: model === LAB_V1_MODEL ? "v1" : "llm",
-      label: model === LAB_V1_MODEL ? "V1" : (selectedLabel || model),
+      kind: kind ?? "llm",
+      label: kind === "v1" ? "V1" : kind === "v2" ? "V2" : (selectedLabel || model),
     };
   });
 }

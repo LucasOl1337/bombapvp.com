@@ -136,7 +136,7 @@ describe("Bomba PvP app", () => {
     expect(view.getByRole("region", { name: "Laboratório Bot vs Bot" })).toBeTruthy();
 
     const start = await view.findByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
-    await view.findByText("V1 local + 2 perfis autorizados do 9Router.");
+    await view.findByText("V1 e V2 locais + 2 perfis autorizados do 9Router.");
     await vi.waitFor(() => expect(start.disabled).toBe(false));
     fireEvent.click(start);
     expect(app.getSnapshot()).toMatchObject({
@@ -145,13 +145,13 @@ describe("Bomba PvP app", () => {
     });
   });
 
-  it("configura até quatro competidores misturando LLMs e V1", async () => {
+  it("configura até quatro competidores misturando LLMs, V2 e V1", async () => {
     const root = createRoot();
     app = createBombApp({ hostname: "bombapvp.com", root, initialPath: "/laboratorio" });
     const view = within(root);
 
     const playerCount = view.getByRole("combobox", { name: "Quantidade de jogadores" });
-    await view.findByText("V1 local + 2 perfis autorizados do 9Router.");
+    await view.findByText("V1 e V2 locais + 2 perfis autorizados do 9Router.");
     fireEvent.change(playerCount, { target: { value: "4" } });
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
@@ -161,11 +161,11 @@ describe("Bomba PvP app", () => {
 
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5&model3=bot-v1&model4=bot-v1",
+      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5&model3=bot-v2&model4=bot-v1",
     });
   });
 
-  it("mantém o V1 disponível quando o 9Router está fora do ar", async () => {
+  it("mantém V2 e V1 disponíveis quando o 9Router está fora do ar", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new Error("offline");
     }));
@@ -174,17 +174,18 @@ describe("Bomba PvP app", () => {
     const view = within(root);
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
-    await view.findByText("V1 disponível. O laboratório não conseguiu alcançar o 9Router.");
+    await view.findByText("V1 e V2 disponíveis. O laboratório não conseguiu alcançar o 9Router.");
     expect(root.querySelectorAll('option[value="bot-v1"]')).toHaveLength(4);
+    expect(root.querySelectorAll('option[value="bot-v2"]')).toHaveLength(4);
     expect(start.disabled).toBe(false);
     fireEvent.click(start);
 
     expect(app.getSnapshot().currentPath).toBe(
-      "/arena/?mode=lab&model1=bot-v1&model2=bot-v1",
+      "/arena/?mode=lab&model1=bot-v2&model2=bot-v1",
     );
   });
 
-  it("libera o V1 mesmo quando a consulta ao 9Router fica pendente", () => {
+  it("libera V2 contra V1 mesmo quando a consulta ao 9Router fica pendente", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
     const root = createRoot();
     app = createBombApp({ hostname: "bombapvp.com", root, initialPath: "/laboratorio" });
@@ -192,11 +193,11 @@ describe("Bomba PvP app", () => {
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
     expect(start.disabled).toBe(false);
-    expect(view.getByText("V1 disponível. Consultando modelos do 9Router…")).toBeTruthy();
+    expect(view.getByText("V1 e V2 disponíveis. Consultando modelos do 9Router…")).toBeTruthy();
     fireEvent.click(start);
 
     expect(app.getSnapshot().currentPath).toBe(
-      "/arena/?mode=lab&model1=bot-v1&model2=bot-v1",
+      "/arena/?mode=lab&model1=bot-v2&model2=bot-v1",
     );
   });
 

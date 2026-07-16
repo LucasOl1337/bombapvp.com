@@ -4,6 +4,7 @@ import { GameApp } from "./Engine/game-app";
 import { createLabClient } from "../lab/client";
 import { startLabController } from "../lab/controller";
 import { parseLabMatchCompetitors } from "../lab/competitors";
+import { BOT_V2_CHARACTER_INDEX } from "./Engine/bot-v2";
 import { createLabTelemetry, type LabTelemetryReport } from "../lab/telemetry";
 import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
@@ -57,19 +58,25 @@ async function bootOriginalGame(): Promise<void> {
     const telemetry = createLabTelemetry(competitors);
     const activePlayerIds = competitors.map(({ playerId }) => playerId);
     const botPlayerIds = competitors
-      .filter(({ kind }) => kind === "v1")
+      .filter(({ kind }) => kind !== "llm")
       .map(({ playerId }) => playerId);
+    const botV2PlayerIds = competitors
+      .filter(({ kind }) => kind === "v2")
+      .map(({ playerId }) => playerId);
+    const characterSelections: Record<PlayerId, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
     const playerLabels: Record<PlayerId, string> = { 1: "", 2: "", 3: "", 4: "" };
     competitors.forEach(({ playerId, label }) => {
       playerLabels[playerId] = label;
     });
+    for (const playerId of botV2PlayerIds) characterSelections[playerId] = BOT_V2_CHARACTER_INDEX;
 
     game.startServerAuthoritativeMatch(
       activePlayerIds,
-      { 1: 0, 2: 1, 3: 2, 4: 3 },
+      characterSelections,
       {
         roomMode: "endless",
         botPlayerIds,
+        botV2PlayerIds,
         playerLabels,
         hideNativeHud: true,
         showWorldPlayerLabels: true,

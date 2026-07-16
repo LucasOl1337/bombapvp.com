@@ -104,6 +104,7 @@ import {
   getBotSafetyDecision as botAI_getSafetyDecision,
   getStableBotDirection as botAI_getStableBotDirection,
 } from "./bot-ai";
+import { getBotV2Decision as botAI_getBotV2Decision } from "./bot-v2";
 import {
   buildDangerMap,
   getBombBlastKeys as projectBombBlastKeys,
@@ -505,6 +506,7 @@ export class GameApp {
   private automationControlledPlayer: PlayerId = 2;
   private localBotFill = 0;
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private botV2ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botEnabled = false;
   private botDecisionObserver: ((measurement: BotDecisionMeasurement) => void) | null = null;
   private botBombCooldownMs = 0;
@@ -723,6 +725,7 @@ export class GameApp {
     this.activePlayerIds = [1, 2];
     this.localBotFill = 0;
     this.botControlledPlayers = createBooleanPlayerRecord(false);
+    this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
     this.botEnabled = false;
     this.botDecisionObserver = null;
     this.menuReady = createBooleanPlayerRecord(false);
@@ -1021,6 +1024,7 @@ export class GameApp {
     } else {
       this.localBotFill = 0;
       this.botControlledPlayers = createBooleanPlayerRecord(false);
+      this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
       this.botEnabled = false;
     }
     this.resetRound(false);
@@ -1137,6 +1141,7 @@ export class GameApp {
     player.velocity = { x: 0, y: 0 };
     player.activeBombs = 0;
     this.botControlledPlayers[playerId] = false;
+    this.botV2ControlledPlayers[playerId] = false;
     this.activePlayerIds = this.activePlayerIds.filter((id) => id !== playerId);
     if (this.mode === "match" && !this.roundOutcome) {
       this.evaluateRoundState();
@@ -1273,10 +1278,14 @@ export class GameApp {
     this.primeCharacterSprites();
   }
 
-  private setBotPlayers(botPlayerIds: PlayerId[]): void {
+  private setBotPlayers(botPlayerIds: PlayerId[], botV2PlayerIds: PlayerId[] = []): void {
     const nextBots = new Set(botPlayerIds);
+    const nextV2Bots = new Set(botV2PlayerIds);
     this.botControlledPlayers = createPlayerRecord((playerId) => (
       nextBots.has(playerId) && this.activePlayerIds.includes(playerId)
+    ));
+    this.botV2ControlledPlayers = createPlayerRecord((playerId) => (
+      this.botControlledPlayers[playerId] && nextV2Bots.has(playerId)
     ));
     this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
     this.syncPlayerLabels();
@@ -1558,6 +1567,7 @@ export class GameApp {
       arena?: ArenaDefinition;
       roomMode?: LobbyMode;
       botPlayerIds?: PlayerId[];
+      botV2PlayerIds?: PlayerId[];
       botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
       playerLabels?: Record<PlayerId, string>;
@@ -1592,7 +1602,7 @@ export class GameApp {
     this.characterMenuOpen = createBooleanPlayerRecord(false);
     this.localBotFill = 0;
     this.botDecisionObserver = options.botDecisionObserver ?? null;
-    this.setBotPlayers(options.botPlayerIds ?? []);
+    this.setBotPlayers(options.botPlayerIds ?? [], options.botV2PlayerIds ?? []);
     this.applyEndlessStats(options.endlessStats);
     this.primeCharacterSprites();
     this.startMatch();
@@ -2054,15 +2064,10 @@ export class GameApp {
       ? [1, 2]
       : ([1, ...ALL_PLAYER_IDS.slice(1, 1 + nextFill)] as PlayerId[]);
     this.activePlayerIds = normalizeActivePlayerIds(nextActivePlayerIds);
-    this.botControlledPlayers = createBooleanPlayerRecord(false);
-    if (nextFill > 0) {
-      for (const playerId of this.activePlayerIds) {
-        if (playerId !== 1) {
-          this.botControlledPlayers[playerId] = true;
-        }
-      }
-    }
-    this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
+    const botPlayerIds = nextFill > 0
+      ? this.activePlayerIds.filter((playerId) => playerId !== 1)
+      : [];
+    this.setBotPlayers(botPlayerIds);
     const nextReady = createBooleanPlayerRecord(false);
     nextReady[1] = preserveP1Ready ? this.menuReady[1] : false;
     for (const playerId of this.activePlayerIds) {
@@ -2417,7 +2422,10 @@ export class GameApp {
 
   private getBotDecision(player: PlayerState): BotDecision {
     const startedAtMs = monotonicNow();
-    const decision = botAI_getBotDecision(player, this.createBotContext(this.getSharedBotDangerMap()));
+    const context = this.createBotContext(this.getSharedBotDangerMap());
+    const decision = this.botV2ControlledPlayers[player.id]
+      ? botAI_getBotV2Decision(player, context)
+      : botAI_getBotDecision(player, context);
     this.botDecisionObserver?.({
       playerId: player.id,
       decision,

@@ -1,6 +1,11 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
-import { LAB_MAX_COMPETITORS, LAB_MIN_COMPETITORS, LAB_V1_MODEL } from "../lab/competitors.ts";
+import {
+  LAB_MAX_COMPETITORS,
+  LAB_MIN_COMPETITORS,
+  LAB_V1_MODEL,
+  LAB_V2_MODEL,
+} from "../lab/competitors.ts";
 
 type Dispatch = (intent: AppIntent) => void;
 type CharacterSnapshot = AppSnapshot["characters"][number];
@@ -455,16 +460,21 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
       "p",
       "laboratory__note",
       isPortuguese
-        ? "V1 roda localmente com a AI determinística atual. As credenciais das LLMs ficam somente no backend."
-        : "V1 runs locally with the current deterministic AI. LLM credentials stay on the backend.",
+        ? "V1 e V2 rodam localmente. O V2 força bombas de contato; credenciais de LLM ficam somente no backend."
+        : "V1 and V2 run locally. V2 forces contact bombs; LLM credentials stay on the backend.",
     ),
     start,
   );
 
   const populate = (profiles: LabModelProfile[]): void => {
-    const llmProfiles = profiles.filter(({ route }) => route !== LAB_V1_MODEL);
+    const llmProfiles = profiles.filter(({ route }) => route !== LAB_V1_MODEL && route !== LAB_V2_MODEL);
     const competitors = [
       ...llmProfiles,
+      {
+        id: LAB_V2_MODEL,
+        label: isPortuguese ? "V2 · Bot determinístico agressivo" : "V2 · Aggressive deterministic bot",
+        route: LAB_V2_MODEL,
+      },
       {
         id: LAB_V1_MODEL,
         label: isPortuguese ? "V1 · Bot determinístico" : "V1 · Deterministic bot",
@@ -476,7 +486,9 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
         const option = document.createElement("option");
         option.value = profile.route;
         option.textContent = profile.label;
-        option.dataset.labLabel = profile.route === LAB_V1_MODEL ? "V1" : profile.label;
+        option.dataset.labLabel = profile.route === LAB_V1_MODEL
+          ? "V1"
+          : profile.route === LAB_V2_MODEL ? "V2" : profile.label;
         return option;
       }));
       select.selectedIndex = Math.min(index, competitors.length - 1);
@@ -485,21 +497,21 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
     updateVisibleSlots();
     start.disabled = false;
     status.textContent = isPortuguese
-      ? `V1 local + ${llmProfiles.length} perfis autorizados do 9Router.`
-      : `Local V1 + ${llmProfiles.length} approved 9Router profiles.`;
+      ? `V1 e V2 locais + ${llmProfiles.length} perfis autorizados do 9Router.`
+      : `Local V1 and V2 + ${llmProfiles.length} approved 9Router profiles.`;
   };
 
   populate([]);
   status.textContent = isPortuguese
-    ? "V1 disponível. Consultando modelos do 9Router…"
-    : "V1 is available. Checking 9Router models…";
+    ? "V1 e V2 disponíveis. Consultando modelos do 9Router…"
+    : "V1 and V2 are available. Checking 9Router models…";
 
   void createLabClient().listProfiles().then((profiles) => {
     populate(profiles);
   }).catch(() => {
     status.textContent = isPortuguese
-      ? "V1 disponível. O laboratório não conseguiu alcançar o 9Router."
-      : "V1 is available. The lab could not reach 9Router.";
+      ? "V1 e V2 disponíveis. O laboratório não conseguiu alcançar o 9Router."
+      : "V1 and V2 are available. The lab could not reach 9Router.";
   });
 
   form.addEventListener("submit", (event) => {
