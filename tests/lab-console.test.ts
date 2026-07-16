@@ -75,8 +75,14 @@ describe("console do laboratorio", () => {
 
     const actionsButton = getByRole(document.body, "button", { name: "Ações" });
     fireEvent.click(actionsButton);
+    expect([...document.querySelectorAll(".lab-console__tabs button.is-active")].map((node) => node.textContent)).toEqual(["Ações"]);
     expect(document.body.textContent).toContain("→ Direita");
     expect(document.body.textContent).toContain("Detonar");
+
+    fireEvent.click(getByRole(document.body, "button", { name: "Telemetria" }));
+    expect([...document.querySelectorAll(".lab-console__tabs button.is-active")].map((node) => node.textContent)).toEqual(["Telemetria"]);
+    expect(document.body.textContent).toContain("Loop de decisão");
+    fireEvent.click(actionsButton);
 
     const content = document.querySelector<HTMLElement>(".lab-console__content")!;
     content.scrollTop = 120;

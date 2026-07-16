@@ -252,12 +252,14 @@ export function createLabConsole(document: Document, english: boolean): Readonly
   const syncControls = (): void => {
     for (const [value, button] of Object.entries(viewButtons) as [LabView, HTMLButtonElement][]) {
       const active = value === view;
-      button.classList.toggle("is-active", active);
+      button.classList.remove("is-active");
+      if (active) button.classList.add("is-active");
       button.setAttribute("aria-pressed", String(active));
     }
     for (const [value, button] of Object.entries(tabButtons) as [LabTab, HTMLButtonElement][]) {
       const active = value === tab;
-      button.classList.toggle("is-active", active);
+      button.classList.remove("is-active");
+      if (active) button.classList.add("is-active");
       button.setAttribute("aria-pressed", String(active));
     }
   };
