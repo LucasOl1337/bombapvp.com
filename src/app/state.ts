@@ -9,7 +9,7 @@ import {
   type ProductCopy,
 } from "./catalog.ts";
 
-export type AppScreen = "launcher" | "character-selection" | "launch-ready" | "laboratory";
+export type AppScreen = "launcher" | "character-selection" | "launch-ready" | "gameplay" | "laboratory";
 
 export type AppSnapshot = Readonly<{
   brand: "Bomba PvP";
@@ -64,6 +64,18 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
       ...catalog,
       activeExperience,
       selectedCharacter: null,
+    });
+  }
+
+  if (experienceId === "bot-training" && normalizedPath === "/treino/jogar") {
+    return freezeSnapshot({
+      brand: "Bomba PvP",
+      locale,
+      screen: "gameplay",
+      currentPath: "/treino/jogar",
+      ...catalog,
+      activeExperience,
+      selectedCharacter: catalog.characters[0] ?? null,
     });
   }
 
@@ -122,13 +134,16 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
     ) {
       return snapshot;
     }
-    const currentPath =
-      snapshot.activeExperience.id === "continuous-room" ? "/jogar/pronto" : "/treino/pronto";
-    return freezeSnapshot({ ...snapshot, screen: "launch-ready", currentPath });
+    if (snapshot.activeExperience.id === "bot-training") {
+      return freezeSnapshot({ ...snapshot, screen: "gameplay", currentPath: "/treino/jogar" });
+    }
+    return freezeSnapshot({ ...snapshot, screen: "launch-ready", currentPath: "/jogar/pronto" });
   }
 
   if (intent.type === "back-to-selection") {
-    if (snapshot.screen !== "launch-ready" || !snapshot.activeExperience) return snapshot;
+    if ((snapshot.screen !== "launch-ready" && snapshot.screen !== "gameplay") || !snapshot.activeExperience) {
+      return snapshot;
+    }
     return freezeSnapshot({
       ...snapshot,
       screen: "character-selection",

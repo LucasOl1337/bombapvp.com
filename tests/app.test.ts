@@ -78,7 +78,7 @@ describe("Bomba PvP app", () => {
     expect(visitedPaths).toEqual(["/jogar/personagem", "/jogar/pronto"]);
   });
 
-  it("usa a mesma seleção para treino sem duplicar a experiência", () => {
+  it("começa a gameplay contra bots com um único botão após a seleção", () => {
     const root = createRoot();
     app = createBombApp({
       hostname: "bombapvp.com",
@@ -92,19 +92,39 @@ describe("Bomba PvP app", () => {
       activeExperience: { id: "bot-training" },
     });
     fireEvent.click(view.getByRole("button", { name: "Nico, Escolher" }));
-    fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
+    fireEvent.click(view.getByRole("button", { name: "Começar partida" }));
     expect(app.getSnapshot()).toMatchObject({
-      screen: "launch-ready",
-      currentPath: "/treino/pronto",
+      screen: "gameplay",
+      currentPath: "/treino/jogar",
       selectedCharacter: { name: "Nico" },
     });
+    expect(view.getByRole("region", { name: "Treino contra bots" })).toBeTruthy();
+    expect(view.getByText("3 bots restantes")).toBeTruthy();
+    expect(view.getByRole("button", { name: "Bomba" })).toBeTruthy();
 
-    fireEvent.click(view.getByRole("button", { name: "Revisar personagem" }));
+    fireEvent.click(view.getByRole("button", { name: "← Trocar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
       screen: "character-selection",
       currentPath: "/treino/personagem",
       selectedCharacter: { name: "Nico" },
     });
+  });
+
+  it("aceita a rota direta da arena com um personagem padrão", () => {
+    const root = createRoot();
+    app = createBombApp({
+      hostname: "bombpvp.com",
+      root,
+      initialPath: "/treino/jogar",
+    });
+
+    expect(app.getSnapshot()).toMatchObject({
+      locale: "en",
+      screen: "gameplay",
+      currentPath: "/treino/jogar",
+      selectedCharacter: { name: "Ranni" },
+    });
+    expect(within(root).getByRole("region", { name: "Bot training" })).toBeTruthy();
   });
 
   it("trata o laboratório como produto próprio e declara sua fronteira de conta", () => {

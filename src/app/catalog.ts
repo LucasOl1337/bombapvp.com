@@ -38,6 +38,7 @@ export type ProductCopy = Readonly<{
   selectedLabel: string;
   noSelectionLabel: string;
   continueLabel: string;
+  startTrainingLabel: string;
   backLabel: string;
   backToLauncherLabel: string;
   reviseLabel: string;
@@ -156,6 +157,7 @@ const PT_COPY: ProductCopy = Object.freeze({
   selectedLabel: "Selecionado",
   noSelectionLabel: "Nenhum personagem selecionado",
   continueLabel: "Confirmar personagem",
+  startTrainingLabel: "Começar partida",
   backLabel: "Voltar",
   backToLauncherLabel: "Voltar ao início",
   reviseLabel: "Revisar personagem",
@@ -185,6 +187,7 @@ const EN_COPY: ProductCopy = Object.freeze({
   selectedLabel: "Selected",
   noSelectionLabel: "No character selected",
   continueLabel: "Confirm character",
+  startTrainingLabel: "Start match",
   backLabel: "Back",
   backToLauncherLabel: "Back to start",
   reviseLabel: "Review character",

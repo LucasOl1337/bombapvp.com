@@ -1,4 +1,5 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
+import { createGameplayView } from "../gameplay/view.ts";
 
 type Dispatch = (intent: AppIntent) => void;
 
@@ -190,7 +191,9 @@ function renderCharacterSelection(
   );
   const confirm = button(
     document,
-    snapshot.copy.continueLabel,
+    snapshot.activeExperience?.id === "bot-training"
+      ? snapshot.copy.startTrainingLabel
+      : snapshot.copy.continueLabel,
     "action action--primary action--confirm",
     { type: "confirm-character" },
     dispatch,
@@ -298,7 +301,7 @@ function renderFooter(document: Document, snapshot: AppSnapshot): HTMLElement {
   return footer;
 }
 
-export function renderApp(root: HTMLElement, snapshot: AppSnapshot, dispatch: Dispatch): void {
+export function renderApp(root: HTMLElement, snapshot: AppSnapshot, dispatch: Dispatch): () => void {
   const document = root.ownerDocument;
   const main = element(document, "main", "app-shell app-shell--" + snapshot.screen);
   main.lang = snapshot.locale;
@@ -307,13 +310,26 @@ export function renderApp(root: HTMLElement, snapshot: AppSnapshot, dispatch: Di
   backdrop.setAttribute("aria-hidden", "true");
   const content = element(document, "div", "app-shell__content");
 
+  let disposeView = (): void => undefined;
   if (snapshot.screen === "launcher") content.append(renderLauncher(document, snapshot, dispatch));
   if (snapshot.screen === "character-selection") {
     content.append(renderCharacterSelection(document, snapshot, dispatch));
   }
   if (snapshot.screen === "launch-ready") content.append(renderReady(document, snapshot, dispatch));
+  if (snapshot.screen === "gameplay" && snapshot.selectedCharacter) {
+    const gameplay = createGameplayView({
+      document,
+      locale: snapshot.locale,
+      selectedCharacter: snapshot.selectedCharacter,
+      characters: snapshot.characters,
+      onLeave: () => dispatch({ type: "back-to-selection" }),
+    });
+    content.append(gameplay.element);
+    disposeView = gameplay.dispose;
+  }
   if (snapshot.screen === "laboratory") content.append(renderLaboratory(document, snapshot, dispatch));
 
   main.append(backdrop, renderBrand(document, snapshot, dispatch), content, renderFooter(document, snapshot));
   root.replaceChildren(main);
+  return disposeView;
 }
