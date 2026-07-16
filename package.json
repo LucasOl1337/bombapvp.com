@@ -9,6 +9,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "check:cloudflare": "npm run build && wrangler deploy --dry-run",
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "dev:cloudflare": "npm run build && wrangler dev",
     "test": "vitest run --environment happy-dom",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run test && npm run build"
@@ -18,6 +21,7 @@
     "happy-dom": "20.10.6",
     "typescript": "5.9.2",
     "vite": "7.3.6",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "wrangler": "4.111.0"
   }
 }
