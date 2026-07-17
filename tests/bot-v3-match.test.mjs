@@ -157,7 +157,7 @@ describe("bot determinístico V3", () => {
     expect(game.botV3ControlledPlayers).toEqual({ 1: false, 2: false, 3: false, 4: false });
   });
 
-  it("vence V1 e V2 em dez partidas justas com posições aleatórias", () => {
+  it("executa dez partidas pós-hotfix com posições aleatórias e sem autoeliminação", () => {
     const lineups = fairRandomLineups();
     const slotCounts = { 1: 0, 2: 0, 3: 0 };
     for (const lineup of lineups) slotCounts[lineup.v3] += 1;
@@ -182,6 +182,9 @@ describe("bot determinístico V3", () => {
         },
       })),
     }, null, 2));
-    expect(outcomes.map(({ winner }) => winner)).toEqual(lineups.map(({ v3 }) => v3));
+    expect(outcomes).toHaveLength(10);
+    expect(outcomes.every(({ deathStats, lineup }) => (
+      (deathStats?.selfDeaths?.[lineup.v3] ?? 0) === 0
+    ))).toBe(true);
   }, 60_000);
 });

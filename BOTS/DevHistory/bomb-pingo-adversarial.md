@@ -113,8 +113,29 @@ Causas: Bomb teve 19 mortes por oponente e sobreviveu 53 vezes. Pingo teve 47 mo
 
 ## Próximo gate
 
-1. Publicar a integração Bomb/Pingo em produção e validar os dois domínios.
+1. Repetir todos os baselines de Bomb e Pingo após o hotfix da Ranni.
 2. Evoluir Pingo contra as derrotas `standard` e `sparse-breakables`, preservando zero self-deaths.
 3. Evoluir Bomb contra a paridade de `open-no-drops`, preservando zero self-deaths.
 4. Gerar suite reservada somente quando ambos mostrarem força equilibrada nas três variantes.
 5. Usar o reservado apenas para promoção; qualquer correção posterior exige uma nova suite reservada.
+
+## Invalidação pré-hotfix — ultimate da Ranni
+
+Em 2026-07-16 foi confirmado que concluir a ultimate da Ranni sem deslocamento concedia os 1.500 ms completos de canalização invulnerável, mas aplicava somente 300 ms de cooldown. O Bomb acionava sistematicamente esse caminho de emergência sem direção e podia repetir a invulnerabilidade aproximadamente a cada 1,8 segundo.
+
+O comportamento foi emergente: a policy não continha uma regra para contornar o cooldown. Ela apenas aprendeu, por construção determinística, a acionar a fase estacionária sempre que não existia fuga segura. A combinação dessa decisão defensiva com a exceção de 300 ms no mecanismo compartilhado transformou a emergência em um ciclo quase contínuo de invulnerabilidade. Foi uma descoberta impressionante do espaço de regras, mas também uma vantagem ilegal que contaminou a avaliação.
+
+O mecanismo compartilhado passou a cobrar os 8.000 ms completos após toda canalização concluída, com ou sem deslocamento. Um teste de regressão cobre o término sem movimento e garante que a habilidade não volta ao estado ocioso antes dos oito segundos.
+
+Consequências para a liga:
+
+- `development-v1-final` (Bomb 52–19 Pingo, um empate) deixa de ser evidência elegível para promoção;
+- `pingo-v2-dev-a` (Bomb 55–17 Pingo) e seus diagnósticos também são pré-hotfix e inválidos para força;
+- nenhuma comparação anterior pode sustentar superioridade do Bomb;
+- ambos os bots precisam de novos baselines justos após a publicação e validação do hotfix.
+
+### Cápsula temporal
+
+A tag Git anotada `archive/bots-ranni-stationary-phase-2026-07-16` aponta para o commit publicado `200915d`, exatamente antes do hotfix. Ela preserva policy, motor, testes e integração daquele instante. Deve ser usada somente em checkout/worktree local para demonstração histórica; nunca deve ser publicada novamente em produção, pois contém o cooldown explorável.
+
+O teste histórico do V3 que exigia dez vitórias consecutivas com a mesma fase estacionária também perdeu validade após o conserto. No estado pós-hotfix ele passa a verificar apenas a execução justa, posições balanceadas e ausência de autoeliminação; qualquer nova alegação de força do V3 precisa de um gate novo sob a mecânica corrigida.
