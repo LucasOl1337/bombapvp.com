@@ -5,6 +5,7 @@ import {
   LAB_MIN_COMPETITORS,
   LAB_V1_MODEL,
   LAB_V2_MODEL,
+  LAB_V3_MODEL,
 } from "../lab/competitors.ts";
 
 type Dispatch = (intent: AppIntent) => void;
@@ -460,16 +461,23 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
       "p",
       "laboratory__note",
       isPortuguese
-        ? "V1 e V2 rodam localmente. O V2 força bombas de contato; credenciais de LLM ficam somente no backend."
-        : "V1 and V2 run locally. V2 forces contact bombs; LLM credentials stay on the backend.",
+        ? "V1, V2 e V3 rodam localmente. O V3 usa planejamento de fase e zonas de explosão; credenciais de LLM ficam somente no backend."
+        : "V1, V2, and V3 run locally. V3 plans ice phases and blast zones; LLM credentials stay on the backend.",
     ),
     start,
   );
 
   const populate = (profiles: LabModelProfile[]): void => {
-    const llmProfiles = profiles.filter(({ route }) => route !== LAB_V1_MODEL && route !== LAB_V2_MODEL);
+    const llmProfiles = profiles.filter(({ route }) => (
+      route !== LAB_V1_MODEL && route !== LAB_V2_MODEL && route !== LAB_V3_MODEL
+    ));
     const competitors = [
       ...llmProfiles,
+      {
+        id: LAB_V3_MODEL,
+        label: isPortuguese ? "V3 · Bombardeiro de fase" : "V3 · Phase bomber",
+        route: LAB_V3_MODEL,
+      },
       {
         id: LAB_V2_MODEL,
         label: isPortuguese ? "V2 · Bot determinístico agressivo" : "V2 · Aggressive deterministic bot",
@@ -488,7 +496,7 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
         option.textContent = profile.label;
         option.dataset.labLabel = profile.route === LAB_V1_MODEL
           ? "V1"
-          : profile.route === LAB_V2_MODEL ? "V2" : profile.label;
+          : profile.route === LAB_V2_MODEL ? "V2" : profile.route === LAB_V3_MODEL ? "V3" : profile.label;
         return option;
       }));
       select.selectedIndex = Math.min(index, competitors.length - 1);
@@ -497,21 +505,21 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
     updateVisibleSlots();
     start.disabled = false;
     status.textContent = isPortuguese
-      ? `V1 e V2 locais + ${llmProfiles.length} perfis autorizados do 9Router.`
-      : `Local V1 and V2 + ${llmProfiles.length} approved 9Router profiles.`;
+      ? `V1, V2 e V3 locais + ${llmProfiles.length} perfis autorizados do 9Router.`
+      : `Local V1, V2, and V3 + ${llmProfiles.length} approved 9Router profiles.`;
   };
 
   populate([]);
   status.textContent = isPortuguese
-    ? "V1 e V2 disponíveis. Consultando modelos do 9Router…"
-    : "V1 and V2 are available. Checking 9Router models…";
+    ? "V1, V2 e V3 disponíveis. Consultando modelos do 9Router…"
+    : "V1, V2, and V3 are available. Checking 9Router models…";
 
   void createLabClient().listProfiles().then((profiles) => {
     populate(profiles);
   }).catch(() => {
     status.textContent = isPortuguese
-      ? "V1 e V2 disponíveis. O laboratório não conseguiu alcançar o 9Router."
-      : "V1 and V2 are available. The lab could not reach 9Router.";
+      ? "V1, V2 e V3 disponíveis. O laboratório não conseguiu alcançar o 9Router."
+      : "V1, V2, and V3 are available. The lab could not reach 9Router.";
   });
 
   form.addEventListener("submit", (event) => {

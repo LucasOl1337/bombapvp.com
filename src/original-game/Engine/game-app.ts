@@ -105,6 +105,7 @@ import {
   getStableBotDirection as botAI_getStableBotDirection,
 } from "./bot-ai";
 import { getBotV2Decision as botAI_getBotV2Decision } from "./bot-v2";
+import { getBotV3Decision as botAI_getBotV3Decision } from "./bot-v3";
 import {
   buildDangerMap,
   getBombBlastKeys as projectBombBlastKeys,
@@ -508,6 +509,7 @@ export class GameApp {
   private localBotFill = 0;
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botV2ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private botV3ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botEnabled = false;
   private botDecisionObserver: ((measurement: BotDecisionMeasurement) => void) | null = null;
   private botBombCooldownMs = 0;
@@ -728,6 +730,7 @@ export class GameApp {
     this.localBotFill = 0;
     this.botControlledPlayers = createBooleanPlayerRecord(false);
     this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
+    this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
     this.botEnabled = false;
     this.botDecisionObserver = null;
     this.menuReady = createBooleanPlayerRecord(false);
@@ -1027,6 +1030,7 @@ export class GameApp {
       this.localBotFill = 0;
       this.botControlledPlayers = createBooleanPlayerRecord(false);
       this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
+      this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
       this.botEnabled = false;
     }
     this.resetRound(false);
@@ -1144,6 +1148,7 @@ export class GameApp {
     player.activeBombs = 0;
     this.botControlledPlayers[playerId] = false;
     this.botV2ControlledPlayers[playerId] = false;
+    this.botV3ControlledPlayers[playerId] = false;
     this.activePlayerIds = this.activePlayerIds.filter((id) => id !== playerId);
     if (this.mode === "match" && !this.roundOutcome) {
       this.evaluateRoundState();
@@ -1280,14 +1285,22 @@ export class GameApp {
     this.primeCharacterSprites();
   }
 
-  private setBotPlayers(botPlayerIds: PlayerId[], botV2PlayerIds: PlayerId[] = []): void {
+  private setBotPlayers(
+    botPlayerIds: PlayerId[],
+    botV2PlayerIds: PlayerId[] = [],
+    botV3PlayerIds: PlayerId[] = [],
+  ): void {
     const nextBots = new Set(botPlayerIds);
     const nextV2Bots = new Set(botV2PlayerIds);
+    const nextV3Bots = new Set(botV3PlayerIds);
     this.botControlledPlayers = createPlayerRecord((playerId) => (
       nextBots.has(playerId) && this.activePlayerIds.includes(playerId)
     ));
     this.botV2ControlledPlayers = createPlayerRecord((playerId) => (
       this.botControlledPlayers[playerId] && nextV2Bots.has(playerId)
+    ));
+    this.botV3ControlledPlayers = createPlayerRecord((playerId) => (
+      this.botControlledPlayers[playerId] && nextV3Bots.has(playerId)
     ));
     this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
     this.syncPlayerLabels();
@@ -1570,6 +1583,7 @@ export class GameApp {
       roomMode?: LobbyMode;
       botPlayerIds?: PlayerId[];
       botV2PlayerIds?: PlayerId[];
+      botV3PlayerIds?: PlayerId[];
       botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
       playerLabels?: Record<PlayerId, string>;
@@ -1604,7 +1618,11 @@ export class GameApp {
     this.characterMenuOpen = createBooleanPlayerRecord(false);
     this.localBotFill = 0;
     this.botDecisionObserver = options.botDecisionObserver ?? null;
-    this.setBotPlayers(options.botPlayerIds ?? [], options.botV2PlayerIds ?? []);
+    this.setBotPlayers(
+      options.botPlayerIds ?? [],
+      options.botV2PlayerIds ?? [],
+      options.botV3PlayerIds ?? [],
+    );
     this.applyEndlessStats(options.endlessStats);
     this.primeCharacterSprites();
     this.startMatch();
@@ -2425,9 +2443,11 @@ export class GameApp {
   private getBotDecision(player: PlayerState): BotDecision {
     const startedAtMs = monotonicNow();
     const context = this.createBotContext(this.getSharedBotDangerMap());
-    const decision = this.botV2ControlledPlayers[player.id]
-      ? botAI_getBotV2Decision(player, context)
-      : botAI_getBotDecision(player, context);
+    const decision = this.botV3ControlledPlayers[player.id]
+      ? botAI_getBotV3Decision(player, context)
+      : this.botV2ControlledPlayers[player.id]
+        ? botAI_getBotV2Decision(player, context)
+        : botAI_getBotDecision(player, context);
     this.botDecisionObserver?.({
       playerId: player.id,
       decision,

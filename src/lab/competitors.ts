@@ -2,13 +2,14 @@ import type { PlayerId } from "../original-game/Gameplay/types.ts";
 
 export const LAB_V1_MODEL = "bot-v1";
 export const LAB_V2_MODEL = "bot-v2";
+export const LAB_V3_MODEL = "bot-v3";
 export const LAB_MIN_COMPETITORS = 2;
 export const LAB_MAX_COMPETITORS = 4;
 
 export type LabMatchCompetitor = Readonly<{
   playerId: PlayerId;
   model: string;
-  kind: "v1" | "v2" | "llm";
+  kind: "v1" | "v2" | "v3" | "llm";
   label: string;
 }>;
 
@@ -16,9 +17,10 @@ function normalizeLabel(label: string | null): string {
   return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
 }
 
-function localBotKind(model: string): "v1" | "v2" | null {
+function localBotKind(model: string): "v1" | "v2" | "v3" | null {
   if (model === LAB_V1_MODEL) return "v1";
   if (model === LAB_V2_MODEL) return "v2";
+  if (model === LAB_V3_MODEL) return "v3";
   return null;
 }
 
@@ -63,7 +65,7 @@ export function parseLabMatchCompetitors(params: URLSearchParams): readonly LabM
       playerId: (index + 1) as PlayerId,
       model,
       kind: kind ?? "llm",
-      label: kind === "v1" ? "V1" : kind === "v2" ? "V2" : (selectedLabel || model),
+      label: kind === "v1" ? "V1" : kind === "v2" ? "V2" : kind === "v3" ? "V3" : (selectedLabel || model),
     };
   });
 }

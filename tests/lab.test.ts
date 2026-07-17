@@ -6,6 +6,7 @@ import {
   createLabMatchParams,
   LAB_V1_MODEL,
   LAB_V2_MODEL,
+  LAB_V3_MODEL,
   parseLabMatchCompetitors,
 } from "../src/lab/competitors.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../src/original-game/NetCode/protocol.ts";
@@ -101,6 +102,17 @@ describe("Laboratorio 9Router", () => {
     expect(parseLabMatchCompetitors(params!)).toEqual([
       { playerId: 1, model: LAB_V2_MODEL, kind: "v2", label: "V2" },
       { playerId: 2, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
+    ]);
+  });
+
+  it("reconhece o V3 como bot local determinístico e ignora labels externas", () => {
+    const params = createLabMatchParams([LAB_V3_MODEL, LAB_V2_MODEL, LAB_V1_MODEL], ["x", "y", "z"]);
+
+    expect(params?.toString()).toBe("mode=lab&model1=bot-v3&model2=bot-v2&model3=bot-v1");
+    expect(parseLabMatchCompetitors(params!)).toEqual([
+      { playerId: 1, model: LAB_V3_MODEL, kind: "v3", label: "V3" },
+      { playerId: 2, model: LAB_V2_MODEL, kind: "v2", label: "V2" },
+      { playerId: 3, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
     ]);
   });
 
