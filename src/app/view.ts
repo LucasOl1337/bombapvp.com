@@ -330,7 +330,10 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  if (snapshot.activeExperience?.id === "bot-training") {
+  if (
+    snapshot.activeExperience?.id === "bot-training"
+    || snapshot.activeExperience?.id === "continuous-room"
+  ) {
     const opponentField = element(document, "label", "training-bot-field");
     const opponentLabel = element(
       document,
@@ -343,20 +346,18 @@ function renderCharacterSelection(
       "aria-label",
       snapshot.locale === "pt-BR" ? "Bot adversário" : "Bot opponent",
     );
-    ([
-      { value: "bomb", label: "Bomb v2 · Agressivo" },
-      { value: "pingo", label: "Pingo v2 · Tático" },
-    ] as const).forEach(({ value, label }) => {
+    snapshot.bots.forEach(({ id, label }) => {
       const option = document.createElement("option");
-      option.value = value;
+      option.value = id;
       option.textContent = label;
       opponent.append(option);
     });
-    opponent.value = snapshot.selectedTrainingBot;
-    opponent.addEventListener("change", () => dispatch({
-      type: "select-training-bot",
-      botId: opponent.value === "pingo" ? "pingo" : "bomb",
-    }));
+    opponent.value = snapshot.selectedBot;
+    opponent.addEventListener("change", () => {
+      const selectedBot = snapshot.bots.find(({ id }) => id === opponent.value);
+      if (!selectedBot) return;
+      dispatch({ type: "select-bot", botId: selectedBot.id });
+    });
     opponentField.append(opponentLabel, opponent);
     confirmation.append(selectionSummary, opponentField, confirm);
   } else {

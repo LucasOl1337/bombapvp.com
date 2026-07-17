@@ -1,13 +1,14 @@
 import "./original-game.css";
 import { loadGameAssets } from "./Engine/assets";
-import { GameApp, type BotDecisionPolicy } from "./Engine/game-app";
+import { GameApp } from "./Engine/game-app";
 import { createLabClient } from "../lab/client";
 import { startLabController } from "../lab/controller";
 import { parseLabMatchCompetitors } from "../lab/competitors";
-import { BOMB_CHARACTER_INDEX, getBombDecision } from "./Engine/bot-bomb";
-import { getBotPingoDecision } from "./Engine/bot-pingo";
-import { BOT_V2_CHARACTER_INDEX } from "./Engine/bot-v2";
-import { BOT_V3_CHARACTER_INDEX } from "./Engine/bot-v3";
+import {
+  createLocalBotAssignments,
+  createOfflineBotMatchSetup,
+  getLocalBotById,
+} from "./Engine/bot-registry";
 import { createLabTelemetry, type LabTelemetryReport } from "../lab/telemetry";
 import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
@@ -63,40 +64,22 @@ async function bootOriginalGame(): Promise<void> {
     const botPlayerIds = competitors
       .filter(({ kind }) => kind !== "llm")
       .map(({ playerId }) => playerId);
-    const botV2PlayerIds = competitors
-      .filter(({ kind }) => kind === "v2")
-      .map(({ playerId }) => playerId);
-    const botV3PlayerIds = competitors
-      .filter(({ kind }) => kind === "v3")
-      .map(({ playerId }) => playerId);
-    const botDecisionPolicies: Partial<Record<PlayerId, BotDecisionPolicy>> = {};
+    const localBotAssignments = createLocalBotAssignments(competitors.flatMap(({ playerId, kind }) => (
+      kind === "llm" ? [] : [{ playerId, bot: getLocalBotById(kind) }]
+    )));
     const characterSelections: Record<PlayerId, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
+    Object.assign(characterSelections, localBotAssignments.characterSelections);
     const playerLabels: Record<PlayerId, string> = { 1: "", 2: "", 3: "", 4: "" };
     competitors.forEach(({ playerId, label }) => {
       playerLabels[playerId] = label;
     });
-    for (const playerId of botV2PlayerIds) characterSelections[playerId] = BOT_V2_CHARACTER_INDEX;
-    for (const playerId of botV3PlayerIds) characterSelections[playerId] = BOT_V3_CHARACTER_INDEX;
-    competitors.forEach(({ playerId, kind }) => {
-      if (kind === "bomb") {
-        characterSelections[playerId] = BOMB_CHARACTER_INDEX;
-        botDecisionPolicies[playerId] = getBombDecision;
-      }
-      if (kind === "pingo") {
-        characterSelections[playerId] = BOMB_CHARACTER_INDEX;
-        botDecisionPolicies[playerId] = getBotPingoDecision;
-      }
-    });
-
     game.startServerAuthoritativeMatch(
       activePlayerIds,
       characterSelections,
       {
         roomMode: "endless",
         botPlayerIds,
-        botV2PlayerIds,
-        botV3PlayerIds,
-        botDecisionPolicies,
+        botDecisionPolicies: localBotAssignments.botDecisionPolicies,
         playerLabels,
         hideNativeHud: true,
         showWorldPlayerLabels: true,
@@ -157,19 +140,8 @@ async function bootOriginalGame(): Promise<void> {
     return;
   }
 
-  if (mode === "training") {
-    const trainingBot = params.get("bot") === "pingo" ? "pingo" : "bomb";
-    const policy = trainingBot === "pingo" ? getBotPingoDecision : getBombDecision;
-    const label = trainingBot === "pingo" ? "PINGO" : "BOMB";
-    game.startOfflineBotMatch(1, "classic", {
-      botDecisionPolicies: { 2: policy },
-      botCharacterSelections: { 2: BOMB_CHARACTER_INDEX },
-      playerLabels: { 2: label },
-    });
-    return;
-  }
-
-  game.startOfflineBotMatch(3, "endless");
+  const offlineSetup = createOfflineBotMatchSetup(mode, params);
+  game.startOfflineBotMatch(offlineSetup.botFill, offlineSetup.roomMode, offlineSetup.options);
 }
 
 void bootOriginalGame().catch((error: unknown) => {

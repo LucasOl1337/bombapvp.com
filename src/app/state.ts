@@ -9,9 +9,14 @@ import {
   type ProductCopy,
 } from "./catalog.ts";
 import { createLabMatchParams } from "../lab/competitors.ts";
+import {
+  DEFAULT_CONTINUOUS_BOT_ID,
+  DEFAULT_TRAINING_BOT_ID,
+  type LocalBotId,
+  type LocalBotMetadata,
+} from "../original-game/Engine/bot-catalog.ts";
 
 export type AppScreen = "launcher" | "character-selection" | "game-launch" | "laboratory";
-export type TrainingBotId = "bomb" | "pingo";
 
 export type AppSnapshot = Readonly<{
   brand: "Bomba PvP";
@@ -20,16 +25,17 @@ export type AppSnapshot = Readonly<{
   currentPath: string;
   experiences: readonly Experience[];
   characters: readonly Character[];
+  bots: readonly LocalBotMetadata[];
   copy: ProductCopy;
   activeExperience: Experience | null;
   selectedCharacter: Character | null;
-  selectedTrainingBot: TrainingBotId;
+  selectedBot: LocalBotId;
 }>;
 
 export type AppIntent =
   | Readonly<{ type: "open-experience"; experienceId: ExperienceId }>
   | Readonly<{ type: "select-character"; characterId: CharacterId }>
-  | Readonly<{ type: "select-training-bot"; botId: TrainingBotId }>
+  | Readonly<{ type: "select-bot"; botId: LocalBotId }>
   | Readonly<{ type: "confirm-character" }>
   | Readonly<{ type: "start-lab-match"; models: readonly string[]; labels?: readonly string[] }>
   | Readonly<{ type: "back-to-selection" }>
@@ -53,6 +59,12 @@ function experienceForPath(path: string): ExperienceId | null {
   return null;
 }
 
+function defaultBotForExperience(experienceId: ExperienceId | null): LocalBotId {
+  return experienceId === "continuous-room"
+    ? DEFAULT_CONTINUOUS_BOT_ID
+    : DEFAULT_TRAINING_BOT_ID;
+}
+
 export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
   const catalog = catalogFor(locale);
   const normalizedPath = normalizePath(path);
@@ -69,7 +81,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
       ...catalog,
       activeExperience,
       selectedCharacter: null,
-      selectedTrainingBot: "bomb",
+      selectedBot: defaultBotForExperience(experienceId),
     });
   }
 
@@ -82,7 +94,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
       ...catalog,
       activeExperience,
       selectedCharacter: null,
-      selectedTrainingBot: "bomb",
+      selectedBot: defaultBotForExperience(experienceId),
     });
   }
 
@@ -94,7 +106,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
     ...catalog,
     activeExperience: null,
     selectedCharacter: null,
-    selectedTrainingBot: "bomb",
+    selectedBot: defaultBotForExperience(null),
   });
 }
 
@@ -122,13 +134,14 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
     return freezeSnapshot({ ...snapshot, selectedCharacter });
   }
 
-  if (intent.type === "select-training-bot") {
+  if (intent.type === "select-bot") {
     if (
       snapshot.screen !== "character-selection"
-      || snapshot.activeExperience?.id !== "bot-training"
-      || snapshot.selectedTrainingBot === intent.botId
+      || (snapshot.activeExperience?.id !== "bot-training"
+        && snapshot.activeExperience?.id !== "continuous-room")
+      || snapshot.selectedBot === intent.botId
     ) return snapshot;
-    return freezeSnapshot({ ...snapshot, selectedTrainingBot: intent.botId });
+    return freezeSnapshot({ ...snapshot, selectedBot: intent.botId });
   }
 
   if (intent.type === "confirm-character") {
@@ -140,8 +153,7 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
       return snapshot;
     }
     const mode = snapshot.activeExperience.id === "continuous-room" ? "continuous" : "training";
-    const bot = mode === "training" ? `&bot=${snapshot.selectedTrainingBot}` : "";
-    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}${bot}`;
+    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}&bot=${encodeURIComponent(snapshot.selectedBot)}`;
     return freezeSnapshot({ ...snapshot, screen: "game-launch", currentPath });
   }
 
