@@ -2,16 +2,19 @@ import "./original-game.css";
 import { loadGameAssets } from "./Engine/assets";
 import { GameApp } from "./Engine/game-app";
 import { createLabClient } from "../lab/client";
-import { startLabController } from "../lab/controller";
-import { parseLabMatchCompetitors } from "../lab/competitors";
+import { createLabMatchCompetitors } from "../lab/competitors";
+import { buildLabObservation } from "../lab/observation";
+import { startLabRuntime, type LabMatch } from "../lab/runtime";
 import {
   createLocalBotAssignments,
   createOfflineBotMatchSetup,
   getLocalBotById,
 } from "./Engine/bot-registry";
-import { createLabTelemetry, type LabTelemetryReport } from "../lab/telemetry";
+import type { LabTelemetryReport } from "../lab/telemetry";
 import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
+import { getCharacterDefinition } from "../characters/catalog";
+import { launchRequestFromSearchParams } from "../matches/url-search-params";
 
 declare global {
   interface Window {
@@ -24,26 +27,18 @@ const rootElement = document.querySelector<HTMLElement>("#app");
 if (!rootElement) throw new Error("Original Bomba PvP game root was not found.");
 const root: HTMLElement = rootElement;
 
-const CHARACTER_IDS = [
-  "03a976fb-7313-4064-a477-5bb9b0760034",
-  "6ee8baa5-3277-413b-ae0e-2659b9cc52e9",
-  "d083c3dc-7162-4391-8628-6adde0b8d8d6",
-  "5474c45c-2987-43e0-af2c-a6500c836881",
-] as const;
-
 async function bootOriginalGame(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
-  const selectedCharacterId = params.get("character");
-  const selectedCharacterIndex = Math.max(0, CHARACTER_IDS.indexOf(
-    selectedCharacterId as (typeof CHARACTER_IDS)[number],
-  ));
-  const mode = params.get("mode") === "continuous"
-    ? "continuous"
-    : params.get("mode") === "lab" ? "lab" : "training";
+  const launchResult = launchRequestFromSearchParams(params);
+  if (!launchResult.ok) throw new Error(launchResult.error);
+  const launchRequest = launchResult.request;
+  const selectedCharacterIndex = launchRequest.mode === "lab"
+    ? 0
+    : getCharacterDefinition(launchRequest.character ?? "")?.roster.order ?? 0;
   const hostname = window.location.hostname.replace(/^www\./, "");
 
   document.documentElement.lang = hostname === "bombpvp.com" ? "en" : "pt-BR";
-  if (mode === "lab") {
+  if (launchRequest.mode === "lab") {
     document.body.classList.add("lab-mode");
     root.classList.add("experience-match__stage");
     root.dataset.fullscreen = "true";
@@ -57,83 +52,58 @@ async function bootOriginalGame(): Promise<void> {
   game.setOfflinePreferredCharacter(selectedCharacterIndex);
   game.start();
 
-  if (mode === "lab") {
-    const competitors = parseLabMatchCompetitors(params);
-    const telemetry = createLabTelemetry(competitors);
-    const activePlayerIds = competitors.map(({ playerId }) => playerId);
-    const botPlayerIds = competitors
-      .filter(({ kind }) => kind !== "llm")
-      .map(({ playerId }) => playerId);
-    const localBotAssignments = createLocalBotAssignments(competitors.flatMap(({ playerId, kind }) => (
-      kind === "llm" ? [] : [{ playerId, bot: getLocalBotById(kind) }]
-    )));
-    const characterSelections: Record<PlayerId, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
-    Object.assign(characterSelections, localBotAssignments.characterSelections);
-    const playerLabels: Record<PlayerId, string> = { 1: "", 2: "", 3: "", 4: "" };
-    competitors.forEach(({ playerId, label }) => {
-      playerLabels[playerId] = label;
+  if (launchRequest.mode === "lab") {
+    const competitors = createLabMatchCompetitors(launchRequest);
+    const match: LabMatch = {
+      startSession(session) {
+        const localBotAssignments = createLocalBotAssignments(
+          session.localCompetitors.map(({ playerId, kind }) => ({
+            playerId,
+            bot: getLocalBotById(kind),
+          })),
+        );
+        const characterSelections: Record<PlayerId, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
+        Object.assign(characterSelections, localBotAssignments.characterSelections);
+        game.startServerAuthoritativeMatch(
+          [...session.activePlayerIds],
+          characterSelections,
+          {
+            roomMode: "endless",
+            botPlayerIds: session.localCompetitors.map(({ playerId }) => playerId),
+            botDecisionPolicies: localBotAssignments.botDecisionPolicies,
+            playerLabels: { ...session.playerLabels },
+            hideNativeHud: true,
+            showWorldPlayerLabels: true,
+            botDecisionObserver: ({ playerId, decision, computeMs }) => session.recordLocalDecision({
+              playerId,
+              decision,
+              computeMs,
+            }),
+          },
+        );
+      },
+      readSnapshot: () => game.exportOnlineSnapshot(),
+      setPlayerInput: (playerId, input) => game.setServerPlayerInput(playerId, input),
+      replacePlayerInput: (playerId, input) => game.replaceServerPlayerInput(playerId, input),
+      clearPlayerInput: (playerId) => game.clearServerPlayerInput(playerId),
+      getSafetyInput: (playerId, input) => game.getServerSafetyInput(playerId, input),
+    };
+    const runtime = startLabRuntime({
+      match,
+      decider: createLabClient(),
+      competitors,
+      observe: buildLabObservation,
     });
 
-    game.startServerAuthoritativeMatch(
-      activePlayerIds,
-      characterSelections,
-      {
-        roomMode: "endless",
-        botPlayerIds,
-        botDecisionPolicies: localBotAssignments.botDecisionPolicies,
-        playerLabels,
-        hideNativeHud: true,
-        showWorldPlayerLabels: true,
-        botDecisionObserver: ({ playerId, decision, computeMs }) => telemetry.record({
-          type: "decision",
-          playerId,
-          decisionMs: computeMs,
-          action: decision,
-        }),
-      },
-    );
-
     const labConsole = createLabConsole(document, document.documentElement.lang === "en");
-    const readTelemetry = (): LabTelemetryReport => telemetry.read(game.exportOnlineSnapshot());
+    const readTelemetry = (): LabTelemetryReport => runtime.readReport();
     window.get_lab_telemetry = readTelemetry;
     const refreshPanel = (): void => labConsole.render(readTelemetry());
     refreshPanel();
     const refreshTimer = window.setInterval(refreshPanel, 500);
 
-    const llmCompetitors = competitors
-      .filter(({ kind }) => kind === "llm")
-      .map(({ playerId, model }) => ({ playerId, model }));
-    const stop = llmCompetitors.length > 0
-      ? startLabController(game, createLabClient(), llmCompetitors, (event) => {
-          if (event.type === "decision") {
-            telemetry.record({
-              type: "decision",
-              playerId: event.playerId,
-              decisionMs: event.result.roundTripMs,
-              upstreamLatencyMs: event.result.upstreamLatencyMs,
-              action: event.result.decision,
-              usage: event.result.usage,
-            });
-            return;
-          }
-          if (event.type === "request") {
-            telemetry.record({ type: "request", playerId: event.playerId });
-            return;
-          }
-          if (event.type === "motor") {
-            telemetry.record({
-              type: "motor",
-              playerId: event.playerId,
-              safetyOverride: event.safetyOverride,
-            });
-            return;
-          }
-          telemetry.record({ type: "status", playerId: event.status.playerId, status: event.status.state });
-          if (event.status.state === "error") telemetry.record({ type: "error", playerId: event.status.playerId });
-        })
-      : () => undefined;
     window.addEventListener("pagehide", () => {
-      stop();
+      runtime.stop();
       window.clearInterval(refreshTimer);
       labConsole.dispose();
       delete window.get_lab_telemetry;
@@ -141,7 +111,7 @@ async function bootOriginalGame(): Promise<void> {
     return;
   }
 
-  const offlineSetup = createOfflineBotMatchSetup(mode, params);
+  const offlineSetup = createOfflineBotMatchSetup(launchRequest);
   game.startOfflineBotMatch(offlineSetup.botFill, offlineSetup.roomMode, offlineSetup.options);
 }
 

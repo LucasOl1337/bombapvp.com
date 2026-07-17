@@ -59,6 +59,69 @@ describe("proxy do Laboratorio", () => {
     expect(env.LAB_DECISION_RATE_LIMITER.limit).not.toHaveBeenCalled();
   });
 
+  it("preserva o erro publico correlacionado e Retry-After do broker", async () => {
+    const brokerFetch = vi.fn(async () => Response.json({
+      ok: false,
+      error: { code: "model_disabled" },
+      requestId: "opaque-worker-429",
+      retryAfterMs: 2_000,
+    }, {
+      status: 429,
+      headers: { "Retry-After": "2" },
+    }));
+    const env = {
+      ASSETS: { fetch: vi.fn() },
+      LAB_BROKER_URL: "https://broker.example",
+      LAB_BROKER_SECRET: "secret",
+    };
+    const response = await handleRequest(new Request("https://bombapvp.com/api/lab/decision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "cx/gpt-5.6-sol",
+        observation: {},
+        requestId: "opaque-worker-429",
+      }),
+    }), env, brokerFetch);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("2");
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "model_disabled" },
+      requestId: "opaque-worker-429",
+      retryAfterMs: 2_000,
+    });
+  });
+
+  it("correlaciona erros locais antes e durante o acesso ao broker", async () => {
+    const decisionRequest = (requestId) => new Request("https://bombapvp.com/api/lab/decision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "cx/gpt-5.6-sol", observation: {}, requestId }),
+    });
+    const unconfigured = await handleRequest(decisionRequest("opaque-worker-503"), {
+      ASSETS: { fetch: vi.fn() },
+    }, vi.fn());
+    expect(unconfigured.status).toBe(503);
+    await expect(unconfigured.json()).resolves.toEqual({
+      ok: false,
+      error: { code: "lab_broker_not_configured" },
+      requestId: "opaque-worker-503",
+    });
+
+    const unavailable = await handleRequest(decisionRequest("opaque-worker-502"), {
+      ASSETS: { fetch: vi.fn() },
+      LAB_BROKER_URL: "https://broker.example",
+      LAB_BROKER_SECRET: "secret",
+    }, vi.fn(async () => { throw new Error("unavailable"); }));
+    expect(unavailable.status).toBe(502);
+    await expect(unavailable.json()).resolves.toEqual({
+      ok: false,
+      error: { code: "lab_broker_unavailable" },
+      requestId: "opaque-worker-502",
+    });
+  });
+
   it("ignora o ExecutionContext injetado pelo runtime", async () => {
     const brokerFetch = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", brokerFetch);

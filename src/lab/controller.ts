@@ -1,6 +1,14 @@
-import type { PlayerId, PlayerState } from "../original-game/Gameplay/types.ts";
+import type { PlayerId } from "../original-game/Gameplay/types.ts";
 import type { OnlineGameSnapshot, OnlineInputState } from "../original-game/NetCode/protocol.ts";
+import { LabPublicError } from "./client.ts";
 import type { LabClient, LabDecision, LabDecisionResult } from "./client.ts";
+import { buildLabObservation } from "./observation";
+import {
+  LAB_MAX_IN_FLIGHT_PER_COMPETITOR,
+  LAB_MAX_RETRY_AFTER_MS,
+} from "./runtime.ts";
+
+export { buildLabObservation } from "./observation";
 
 type LabGame = {
   exportOnlineSnapshot(): OnlineGameSnapshot;
@@ -22,22 +30,23 @@ export type LabControllerEvent =
   | Readonly<{ type: "decision"; playerId: PlayerId; result: LabDecisionResult }>
   | Readonly<{ type: "motor"; playerId: PlayerId; safetyOverride: boolean }>;
 export type LabControllerOptions = Readonly<{
+  /** @deprecated Kept for source compatibility; concurrency is capped per competitor. */
   lunaDecisionLanes?: number;
 }>;
 
 const INACTIVE_POLL_INTERVAL_MS = 50;
 const ERROR_RETRY_MIN_MS = 100;
 const ERROR_RETRY_MAX_MS = 1_000;
-const LUNA_LIGHT_DECISION_LANES = 4;
-const LUNA_LIGHT_LANE_STAGGER_MS = 500;
 export const LAB_EXECUTION_MOTOR_INTERVAL_MS = 50;
 
-function decisionLaneCount(model: string, options: LabControllerOptions): number {
-  if (model !== "cx/gpt-5.6-luna") return 1;
-  const configuredLanes = options.lunaDecisionLanes ?? LUNA_LIGHT_DECISION_LANES;
-  return Number.isFinite(configuredLanes)
-    ? Math.max(1, Math.floor(configuredLanes))
-    : LUNA_LIGHT_DECISION_LANES;
+function retryDelayMs(error: unknown, consecutiveErrors: number): number {
+  if (error instanceof LabPublicError && error.retryAfterMs !== null) {
+    return Math.min(LAB_MAX_RETRY_AFTER_MS, Math.max(0, error.retryAfterMs));
+  }
+  return Math.min(
+    ERROR_RETRY_MAX_MS,
+    ERROR_RETRY_MIN_MS * (2 ** Math.max(0, consecutiveErrors - 1)),
+  );
 }
 
 function canApplyDecision(
@@ -54,87 +63,6 @@ function canApplyDecision(
     && !currentSnapshot.roundOutcome
     && currentSnapshot.roundNumber === requestedRound
     && Boolean(currentPlayer?.active && currentPlayer.alive);
-}
-
-function observePlayer(player: PlayerState) {
-  return {
-    id: player.id,
-    tile: player.tile,
-    position: player.position,
-    velocity: player.velocity,
-    direction: player.direction,
-    lastMoveDirection: player.lastMoveDirection,
-    alive: player.alive,
-    bombsAvailable: Math.max(0, player.maxBombs - player.activeBombs),
-    bombCapacity: player.maxBombs,
-    flameRange: player.flameRange,
-    speedLevel: player.speedLevel,
-    remoteLevel: player.remoteLevel,
-    shieldCharges: player.shieldCharges,
-    bombPassLevel: player.bombPassLevel,
-    kickLevel: player.kickLevel,
-    shortFuseLevel: player.shortFuseLevel,
-    flameGuardMs: player.flameGuardMs,
-    spawnProtectionMs: player.spawnProtectionMs,
-    skill: {
-      id: player.skill.id,
-      phase: player.skill.phase,
-      channelRemainingMs: player.skill.channelRemainingMs,
-      cooldownMs: player.skill.cooldownRemainingMs,
-      projectedPosition: player.skill.projectedPosition,
-    },
-  };
-}
-
-export function buildLabObservation(snapshot: OnlineGameSnapshot, playerId: PlayerId) {
-  const self = snapshot.players[playerId];
-  return {
-    playerId,
-    frameId: snapshot.frameId,
-    serverTimeMs: snapshot.serverTimeMs,
-    round: snapshot.roundNumber,
-    elapsedMs: snapshot.roundTimeMs,
-    score: snapshot.score,
-    endlessStats: snapshot.endlessStats,
-    self: observePlayer(self),
-    enemies: snapshot.activePlayerIds
-      .filter((id) => id !== playerId)
-      .map((id) => observePlayer(snapshot.players[id])),
-    bombs: snapshot.bombs.map((bomb) => ({
-      id: bomb.id,
-      ownerId: bomb.ownerId,
-      tile: bomb.tile,
-      fuseMs: Math.round(bomb.fuseMs),
-      flameRange: bomb.flameRange,
-      ownerCanPass: bomb.ownerCanPass,
-    })),
-    flames: snapshot.flames.map((flame) => ({
-      tile: flame.tile,
-      remainingMs: Math.round(flame.remainingMs),
-      ownerId: flame.ownerId ?? null,
-    })),
-    magicBeams: snapshot.magicBeams.map((beam) => ({
-      ownerId: beam.ownerId,
-      origin: beam.origin,
-      direction: beam.direction,
-      tiles: beam.tiles,
-      remainingMs: Math.round(beam.remainingMs),
-    })),
-    powerUps: snapshot.powerUps
-      .filter((powerUp) => powerUp.revealed && !powerUp.collected)
-      .map((powerUp) => ({ type: powerUp.type, tile: powerUp.tile })),
-    arena: {
-      grid: snapshot.arena.grid,
-      solid: snapshot.arena.tiles.solid,
-      breakable: snapshot.breakableTiles,
-      wrapPortals: snapshot.arena.wrapPortals,
-    },
-    suddenDeath: {
-      active: snapshot.suddenDeathActive,
-      closedTiles: snapshot.suddenDeathClosedTiles,
-      closingTiles: snapshot.suddenDeathClosingTiles,
-    },
-  };
 }
 
 function toInput(decision: LabDecision): OnlineInputState {
@@ -182,7 +110,7 @@ export function startLabController(
   client: LabClient,
   competitors: readonly LabCompetitor[],
   onEvent: (event: LabControllerEvent) => void = () => undefined,
-  options: LabControllerOptions = {},
+  _options: LabControllerOptions = {},
 ): () => void {
   const controller = new AbortController();
   const { signal } = controller;
@@ -209,8 +137,6 @@ export function startLabController(
     let motorRoundNumber: number | null = null;
     let nextRequestSequence = 1;
     let lastAppliedRequestSequence = 0;
-    let scheduledRoundNumber: number | null = null;
-    let nextLaneStartAtMs = 0;
 
     const resetIntent = (): void => {
       latestDirection = null;
@@ -309,32 +235,14 @@ export function startLabController(
 
     const runDecisionLane = async (): Promise<void> => {
       let consecutiveErrors = 0;
-      let stagedRoundNumber: number | null = null;
       while (!signal.aborted) {
         const snapshot = game.exportOnlineSnapshot();
         const player = snapshot.players[competitor.playerId];
         if (snapshot.mode !== "match" || snapshot.paused || snapshot.roundOutcome || !player?.active || !player.alive) {
-          stagedRoundNumber = null;
           clearInput();
           onEvent({ type: "status", status: { playerId: competitor.playerId, state: "waiting" } });
           await delay(INACTIVE_POLL_INTERVAL_MS, signal);
           continue;
-        }
-
-        if (stagedRoundNumber !== snapshot.roundNumber) {
-          stagedRoundNumber = snapshot.roundNumber;
-          const now = Date.now();
-          if (scheduledRoundNumber !== snapshot.roundNumber) {
-            scheduledRoundNumber = snapshot.roundNumber;
-            nextLaneStartAtMs = now;
-          }
-          const scheduledStartAtMs = Math.max(now, nextLaneStartAtMs);
-          nextLaneStartAtMs = scheduledStartAtMs + LUNA_LIGHT_LANE_STAGGER_MS;
-          const staggerMs = scheduledStartAtMs - now;
-          if (staggerMs > 0) {
-            await delay(staggerMs, signal);
-            continue;
-          }
         }
 
         try {
@@ -380,10 +288,7 @@ export function startLabController(
               error: error instanceof Error ? error.message : "lab_decision_failed",
             },
           });
-          const retryMs = Math.min(
-            ERROR_RETRY_MAX_MS,
-            ERROR_RETRY_MIN_MS * (2 ** Math.max(0, consecutiveErrors - 1)),
-          );
+          const retryMs = retryDelayMs(error, consecutiveErrors);
           await delay(retryMs, signal);
         }
       }
@@ -391,7 +296,7 @@ export function startLabController(
 
     void Promise.all(
       Array.from(
-        { length: decisionLaneCount(competitor.model, options) },
+        { length: LAB_MAX_IN_FLIGHT_PER_COMPETITOR },
         () => runDecisionLane(),
       ),
     ).finally(finish);

@@ -26,8 +26,45 @@ const SYSTEM_PROMPT = [
   "Survive first, avoid bombs and flames, collect useful powerups, then attack.",
 ].join(" ");
 
-function json(status, body) {
-  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+function json(status, body, headers = {}) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers },
+  });
+}
+
+function readRequestId(body) {
+  return typeof body?.requestId === "string" && body.requestId.length > 0
+    ? body.requestId
+    : null;
+}
+
+function retryAfterDetails(response, payload) {
+  const header = response.headers.get("Retry-After");
+  if (typeof payload?.retryAfterMs === "number" && Number.isFinite(payload.retryAfterMs)) {
+    return { header, ms: Math.max(0, Math.round(payload.retryAfterMs)) };
+  }
+  if (!header) return { header: null, ms: null };
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return { header, ms: Math.max(0, Math.round(seconds * 1_000)) };
+  const dateMs = Date.parse(header);
+  return { header, ms: Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : null };
+}
+
+function upstreamErrorCode(payload, fallback) {
+  if (typeof payload?.error?.code === "string") return payload.error.code;
+  if (typeof payload?.code === "string") return payload.code;
+  if (typeof payload?.error === "string") return payload.error;
+  return fallback;
+}
+
+function decisionError(status, code, requestId, retry = { header: null, ms: null }) {
+  return json(status, {
+    ok: false,
+    error: { code },
+    ...(requestId ? { requestId } : {}),
+    ...(retry.ms === null ? {} : { retryAfterMs: retry.ms }),
+  }, retry.header ? { "Retry-After": retry.header } : {});
 }
 
 function equalSecret(actual, expected) {
@@ -86,10 +123,31 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
     if (url.pathname === "/health" && request.method === "GET") {
       return json(200, { ok: true, source: "9router", configured: Boolean(normalizedBase && apiKey && secret) });
     }
-    if (!equalSecret(request.headers.get("x-bomba-lab-secret"), secret)) {
-      return json(401, { ok: false, error: "unauthorized" });
+    const isDecisionRequest = url.pathname === "/decision" && request.method === "POST";
+    let decisionBody = null;
+    let decisionRequestId = null;
+    if (isDecisionRequest) {
+      try {
+        decisionBody = await readBody(request);
+        decisionRequestId = readRequestId(decisionBody);
+      } catch (error) {
+        return decisionError(
+          error instanceof Error && error.message === "body_too_large" ? 413 : 400,
+          "invalid_request",
+          null,
+        );
+      }
     }
-    if (!normalizedBase || !apiKey) return json(503, { ok: false, error: "9router_not_configured" });
+    if (!equalSecret(request.headers.get("x-bomba-lab-secret"), secret)) {
+      return isDecisionRequest
+        ? decisionError(401, "unauthorized", decisionRequestId)
+        : json(401, { ok: false, error: "unauthorized" });
+    }
+    if (!normalizedBase || !apiKey) {
+      return isDecisionRequest
+        ? decisionError(503, "9router_not_configured", decisionRequestId)
+        : json(503, { ok: false, error: "9router_not_configured" });
+    }
 
     if (url.pathname === "/models" && request.method === "GET") {
       try {
@@ -108,15 +166,14 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
       }
     }
 
-    if (url.pathname === "/decision" && request.method === "POST") {
-      let body;
-      try {
-        body = await readBody(request);
-      } catch (error) {
-        return json(error instanceof Error && error.message === "body_too_large" ? 413 : 400, { ok: false, error: "invalid_request" });
+    if (isDecisionRequest) {
+      const body = decisionBody;
+      const requestId = decisionRequestId;
+      if (!requestId) return decisionError(400, "request_id_required", null);
+      if (!ALLOWED_ROUTES.has(body?.model)) return decisionError(400, "model_not_allowed", requestId);
+      if (!body.observation || typeof body.observation !== "object") {
+        return decisionError(400, "observation_required", requestId);
       }
-      if (!ALLOWED_ROUTES.has(body?.model)) return json(400, { ok: false, error: "model_not_allowed" });
-      if (!body.observation || typeof body.observation !== "object") return json(400, { ok: false, error: "observation_required" });
 
       const startedAt = Date.now();
       try {
@@ -137,7 +194,20 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
           }),
           signal: AbortSignal.timeout(20_000),
         });
-        if (!upstream.ok) return json(502, { ok: false, error: "9router_decision_unavailable" });
+        if (!upstream.ok) {
+          let errorPayload = null;
+          try {
+            errorPayload = await upstream.json();
+          } catch {
+            // The status and correlation still remain useful for a non-JSON upstream error.
+          }
+          return decisionError(
+            upstream.status,
+            upstreamErrorCode(errorPayload, "9router_decision_unavailable"),
+            requestId,
+            retryAfterDetails(upstream, errorPayload),
+          );
+        }
         const payload = await upstream.json();
         const decision = normalizeDecision(parseModelContent(payload?.choices?.[0]?.message?.content));
         return json(200, {
@@ -145,9 +215,16 @@ export function createLabBroker({ fetch: fetchImpl, baseUrl, apiKey, secret }) {
           decision,
           latencyMs: Date.now() - startedAt,
           usage: normalizeUsage(payload?.usage),
+          ...(requestId ? { requestId } : {}),
         });
-      } catch {
-        return json(502, { ok: false, error: "9router_decision_unavailable" });
+      } catch (error) {
+        const timedOut = error instanceof Error
+          && (error.name === "TimeoutError" || error.name === "AbortError");
+        return decisionError(
+          timedOut ? 504 : 502,
+          timedOut ? "9router_decision_timeout" : "9router_decision_unavailable",
+          requestId,
+        );
       }
     }
 

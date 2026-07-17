@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
 import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
-import { BOT_V2_CHARACTER_INDEX } from "../src/original-game/Engine/bot-v2.ts";
+import { BOT_V2_CHARACTER_INDEX, getBotV2Decision } from "../src/original-game/Engine/bot-v2.ts";
 import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
 
 function assets() {
@@ -27,6 +27,26 @@ function countAuthoritativeSkillStart(previousPhase, currentPhase, requestCount)
   return requestCount > 0 && previousPhase !== "channeling" && currentPhase === "channeling" ? 1 : 0;
 }
 
+function bodyBombOverlapArea(position, tile) {
+  const tileCenter = {
+    x: tile.x * TILE_SIZE + TILE_SIZE / 2,
+    y: tile.y * TILE_SIZE + TILE_SIZE / 2,
+  };
+  const playerHalf = TILE_SIZE / 2;
+  const tileHalf = TILE_SIZE / 2;
+  const overlapWidth = Math.max(
+    0,
+    Math.min(playerHalf, position.x - tileCenter.x + tileHalf)
+      - Math.max(-playerHalf, position.x - tileCenter.x - tileHalf),
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(playerHalf, position.y - tileCenter.y + tileHalf)
+      - Math.max(-playerHalf, position.y - tileCenter.y - tileHalf),
+  );
+  return overlapWidth * overlapHeight;
+}
+
 function playDuel(seed, evaluatedPlayerId, useV2) {
   const arena = { ...createDefaultArenaDefinition(), randomSeed: seed };
   const game = new GameApp({}, assets(), arena);
@@ -39,7 +59,7 @@ function playDuel(seed, evaluatedPlayerId, useV2) {
     {
       roomMode: "endless",
       botPlayerIds: [1, 2],
-      botV2PlayerIds: useV2 ? [evaluatedPlayerId] : [],
+      botDecisionPolicies: useV2 ? { [evaluatedPlayerId]: getBotV2Decision } : {},
       botDecisionObserver: ({ playerId, decision }) => {
         if (playerId !== evaluatedPlayerId) return;
         actions.decisions += 1;
@@ -117,7 +137,6 @@ describe("avaliação balanceada do bot V2", () => {
           arena: openArena,
           roomMode: "endless",
           botPlayerIds: [1],
-          botV2PlayerIds: [1],
           botDecisionPolicies: { 1: policy },
           botDecisionObserver: ({ playerId, decision }) => {
             if (playerId === 1 && decision.useSkill) skillRequests += 1;
@@ -125,13 +144,19 @@ describe("avaliação balanceada do bot V2", () => {
         },
       );
       game.advanceServerSimulation(1_300);
-      game.players[1].position = { x: 60, y: 60 };
-      game.players[1].tile = { x: 1, y: 1 };
-      game.players[1].direction = "right";
-      game.players[1].lastMoveDirection = "right";
-      game.players[1].spawnProtectionMs = 0;
-      game.players[2].position = { x: 180, y: 60 };
-      game.players[2].tile = { x: 4, y: 1 };
+      const snapshot = game.exportOnlineSnapshot();
+      Object.assign(snapshot.players[1], {
+        position: { x: 60, y: 60 },
+        tile: { x: 1, y: 1 },
+        direction: "right",
+        lastMoveDirection: "right",
+        spawnProtectionMs: 0,
+      });
+      Object.assign(snapshot.players[2], {
+        position: { x: 180, y: 60 },
+        tile: { x: 4, y: 1 },
+      });
+      game.applyOnlineSnapshot(snapshot);
       return { game, getSkillRequests: () => skillRequests };
     }
 
@@ -142,11 +167,13 @@ describe("avaliação balanceada do bot V2", () => {
       useSkill: positiveArmed && player.skill.phase === "idle",
       skillAction: "start",
     }));
-    positive.game.players[1].skill.phase = "cooldown";
-    positive.game.players[1].skill.cooldownRemainingMs = 10;
+    const positiveSnapshot = positive.game.exportOnlineSnapshot();
+    positiveSnapshot.players[1].skill.phase = "cooldown";
+    positiveSnapshot.players[1].skill.cooldownRemainingMs = 10;
+    positive.game.applyOnlineSnapshot(positiveSnapshot);
     positiveArmed = true;
     const positiveRequestsBefore = positive.getSkillRequests();
-    const positivePreviousPhase = positive.game.players[1].skill.phase;
+    const positivePreviousPhase = positive.game.exportOnlineSnapshot().players[1].skill.phase;
     positive.game.advanceServerSimulation(50);
     const positiveAfter = positive.game.exportOnlineSnapshot().players[1].skill.phase;
     const positiveRequestCount = positive.getSkillRequests() - positiveRequestsBefore;
@@ -167,11 +194,13 @@ describe("avaliação balanceada do bot V2", () => {
       if (useSkill) negativeIssued = true;
       return { direction: "right", placeBomb: false, useSkill, skillAction: "start" };
     });
-    negative.game.players[1].skill.phase = "cooldown";
-    negative.game.players[1].skill.cooldownRemainingMs = 100;
+    const negativeSnapshot = negative.game.exportOnlineSnapshot();
+    negativeSnapshot.players[1].skill.phase = "cooldown";
+    negativeSnapshot.players[1].skill.cooldownRemainingMs = 100;
+    negative.game.applyOnlineSnapshot(negativeSnapshot);
     negativeArmed = true;
     const negativeRequestsBefore = negative.getSkillRequests();
-    const negativePreviousPhase = negative.game.players[1].skill.phase;
+    const negativePreviousPhase = negative.game.exportOnlineSnapshot().players[1].skill.phase;
     negative.game.advanceServerSimulation(50);
     const negativeAfter = negative.game.exportOnlineSnapshot().players[1].skill.phase;
     const negativeRequestCount = negative.getSkillRequests() - negativeRequestsBefore;
@@ -213,7 +242,7 @@ describe("avaliação balanceada do bot V2", () => {
     game.startServerAuthoritativeMatch(
       [1, 2],
       { 1: BOT_V2_CHARACTER_INDEX, 2: BOT_V2_CHARACTER_INDEX, 3: 2, 4: 3 },
-      { roomMode: "endless", botPlayerIds: [1, 2], botV2PlayerIds: [1] },
+      { roomMode: "endless", botPlayerIds: [1, 2], botDecisionPolicies: { 1: getBotV2Decision } },
     );
 
     let trackedBombId = null;
@@ -235,7 +264,7 @@ describe("avaliação balanceada do bot V2", () => {
         ));
         if (bodyBomb) {
           trackedBombId = bodyBomb.id;
-          overlapAtObservation = game.getBodyTileOverlapArea(victim.position, bodyBomb.tile);
+          overlapAtObservation = bodyBombOverlapArea(victim.position, bodyBomb.tile);
         }
       }
 
@@ -243,7 +272,7 @@ describe("avaliação balanceada do bot V2", () => {
         ? null
         : snapshot.bombs.find((bomb) => bomb.id === trackedBombId);
       if (trackedBomb) {
-        const overlapArea = game.getBodyTileOverlapArea(victim.position, trackedBomb.tile);
+        const overlapArea = bodyBombOverlapArea(victim.position, trackedBomb.tile);
         minimumOverlapWhileAlive = Math.min(minimumOverlapWhileAlive, overlapArea);
         if (overlapArea === 0) {
           clearedBeforeResolution = true;
@@ -282,17 +311,28 @@ describe("avaliação balanceada do bot V2", () => {
     expect(skillStarts).toBe(skillRequests);
   }, 30_000);
 
-  it("descarta a variante V2 ao sair da sessão do laboratório", () => {
+  it("encerra a política V2 ao sair da sessão do laboratório", () => {
     const game = new GameApp({}, assets(), createDefaultArenaDefinition());
+    let decisions = 0;
     game.startServerAuthoritativeMatch(
       [1, 2],
       { 1: BOT_V2_CHARACTER_INDEX, 2: BOT_V2_CHARACTER_INDEX, 3: 2, 4: 3 },
-      { botPlayerIds: [1, 2], botV2PlayerIds: [1] },
+      {
+        botPlayerIds: [1, 2],
+        botDecisionPolicies: { 1: getBotV2Decision },
+        botDecisionObserver: ({ playerId }) => {
+          if (playerId === 1) decisions += 1;
+        },
+      },
     );
-    expect(game.botV2ControlledPlayers).toMatchObject({ 1: true, 2: false });
+    game.advanceServerSimulation(50);
+    expect(decisions).toBeGreaterThan(0);
 
+    const decisionsBeforeClear = decisions;
     game.clearOnlinePeer();
+    game.advanceServerSimulation(50);
 
-    expect(game.botV2ControlledPlayers).toEqual({ 1: false, 2: false, 3: false, 4: false });
+    expect(game.exportOnlineSnapshot().mode).toBe("menu");
+    expect(decisions).toBe(decisionsBeforeClear);
   });
 });

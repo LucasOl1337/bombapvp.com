@@ -3,6 +3,7 @@ import { assetUrl } from "./asset-url";
 import type { ArenaThemeDefinition } from "../Arenas/arena-theme-library";
 import { getArenaThemeById, resolveArenaTheme } from "../Arenas/arena-theme-library";
 import { CHARACTER_ROSTER_MANIFEST } from "../Characters/Animations/character-roster-manifest";
+import { listPowerUpDefinitions } from "../Gameplay/powerups";
 
 export interface DirectionalSprites {
   up: HTMLImageElement | null;
@@ -64,7 +65,7 @@ export interface GameAssets {
   powerUps: Partial<Record<PowerUpType, HTMLImageElement | null>>;
 }
 
-interface CharacterManifestEntry {
+export interface CharacterManifestEntry {
   id: string;
   name: string;
   size?: { width: number; height: number } | null;
@@ -81,7 +82,7 @@ interface CharacterManifestEntry {
   order?: number;
 }
 
-interface CharacterManifestPayload {
+export interface CharacterManifestPayload {
   generatedAt?: string;
   characters?: CharacterManifestEntry[];
 }
@@ -309,59 +310,45 @@ function hasLoadedSpriteImage(sprites: DirectionalSprites): boolean {
   ].some((framesByDirection) => Object.values(framesByDirection).some((frames) => frames.length > 0));
 }
 
-function isUsablePublicCharacterManifest(entries: CharacterManifestEntry[]): boolean {
-  if (entries.length === 0) {
-    return false;
-  }
-
-  const seenIds = new Set<string>();
-  for (const entry of entries) {
-    if (!entry.id || seenIds.has(entry.id)) {
-      return false;
-    }
-    seenIds.add(entry.id);
-  }
-
-  return CHARACTER_ROSTER_MANIFEST.every((entry) => seenIds.has(entry.id));
-}
-
-async function loadCharacterRoster(): Promise<CharacterRosterEntry[]> {
-  const manifestPayload = await loadCharacterManifest();
+export function composeCharacterRoster(
+  manifestPayload: CharacterManifestPayload = {},
+): CharacterRosterEntry[] {
   const publicManifestEntries = Array.isArray(manifestPayload.characters) ? manifestPayload.characters : [];
-  const usePublicManifest = isUsablePublicCharacterManifest(publicManifestEntries);
-  const manifestEntries: CharacterManifestEntry[] = usePublicManifest
-    ? publicManifestEntries
-    : CHARACTER_ROSTER_MANIFEST;
-  const assetVersion = usePublicManifest ? manifestPayload.generatedAt ?? undefined : undefined;
-  const sortedEntries = manifestEntries
-    .map((entry, selectionIndex) => ({ entry, selectionIndex }))
+  const canonicalIds = new Set(CHARACTER_ROSTER_MANIFEST.map(({ id }) => id));
+  const physicalEntryById = new Map<string, CharacterManifestEntry>();
+  for (const entry of publicManifestEntries) {
+    if (!canonicalIds.has(entry.id) || physicalEntryById.has(entry.id)) continue;
+    physicalEntryById.set(entry.id, entry);
+  }
+  const assetVersion = physicalEntryById.size > 0 ? manifestPayload.generatedAt ?? undefined : undefined;
+  const sortedEntries = [...CHARACTER_ROSTER_MANIFEST]
     .sort((left, right) => {
-      const orderA = typeof left.entry.order === "number" ? left.entry.order : Number.MAX_SAFE_INTEGER;
-      const orderB = typeof right.entry.order === "number" ? right.entry.order : Number.MAX_SAFE_INTEGER;
+      const orderA = typeof left.order === "number" ? left.order : Number.MAX_SAFE_INTEGER;
+      const orderB = typeof right.order === "number" ? right.order : Number.MAX_SAFE_INTEGER;
       if (orderA !== orderB) {
         return orderA - orderB;
       }
-      return left.entry.name.localeCompare(right.entry.name);
+      return left.name.localeCompare(right.name);
     });
 
-  const rosterEntries: Array<CharacterRosterEntry | null> = await Promise.all(sortedEntries.map(async ({ entry, selectionIndex }) => {
-    if (!entry.id) {
-      return null;
-    }
+  return sortedEntries.map((entry, selectionIndex) => {
+    const physicalEntry = physicalEntryById.get(entry.id);
     return {
       id: entry.id,
-      name: entry.name || entry.id.slice(0, 8),
-      size: entry.size ?? null,
+      name: entry.name,
+      size: physicalEntry?.size ?? null,
       selectionIndex,
-      assetVersion,
-      animations: entry.animations,
-      pinned: entry.pinned === true,
-      defaultSlot: entry.defaultSlot,
-      order: entry.order,
+      pinned: entry.defaultSlot !== undefined,
+      ...(assetVersion === undefined ? {} : { assetVersion }),
+      ...(physicalEntry?.animations === undefined ? {} : { animations: physicalEntry.animations }),
+      ...(entry.defaultSlot === undefined ? {} : { defaultSlot: entry.defaultSlot }),
+      ...(entry.order === undefined ? {} : { order: entry.order }),
     } satisfies CharacterRosterEntry;
-  }));
+  });
+}
 
-  return rosterEntries.filter((entry): entry is CharacterRosterEntry => entry !== null);
+async function loadCharacterRoster(): Promise<CharacterRosterEntry[]> {
+  return composeCharacterRoster(await loadCharacterManifest());
 }
 
 function getFallbackSpritesForRosterEntry(
@@ -416,6 +403,42 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
   const resolvedTheme = arenaThemeId ? getArenaThemeById(arenaThemeId) : null;
   const arenaTheme = resolvedTheme ?? resolveArenaTheme(typeof window !== "undefined" ? window.location.search : "");
   const arenaTilePaths = arenaTheme.renderMode === "sprite" ? arenaTheme.tilePaths ?? null : null;
+  const powerUpDefinitions = listPowerUpDefinitions();
+  const [baseAssets, powerUpEntries] = await Promise.all([
+    Promise.all([
+      loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player1"), ["hires", ""]),
+      loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player2")),
+      loadCharacterRoster(),
+      arenaTilePaths
+        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.base), assetUrl("/Assets/TileMaps/floor-base.png")])
+        : Promise.resolve(null),
+      arenaTilePaths
+        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.lane), assetUrl("/Assets/TileMaps/floor-alt.png")])
+        : Promise.resolve(null),
+      arenaTilePaths
+        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.spawn), assetUrl("/Assets/TileMaps/floor-spawn.png")])
+        : Promise.resolve(null),
+      arenaTilePaths
+        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.wall), assetUrl("/Assets/TileMaps/wall.png")])
+        : Promise.resolve(null),
+      arenaTilePaths
+        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.crate), assetUrl("/Assets/TileMaps/crate.png")])
+        : Promise.resolve(null),
+      loadImage(assetUrl("/Assets/TileMaps/crate-break-0.png")),
+      loadImage(assetUrl("/Assets/TileMaps/crate-break-1.png")),
+      loadImage(assetUrl("/Assets/TileMaps/crate-break-2.png")),
+      loadImage(assetUrl("/Assets/TileMaps/crate-break-3.png")),
+      loadImage(assetUrl("/Assets/VisualEffects/bomb.png")),
+      loadImage(assetUrl("/Assets/VisualEffects/flame.png")),
+      loadImage(assetUrl("/Assets/VisualEffects/speed-spark-trail.png")),
+      loadImage(assetUrl("/Assets/UiLayouts/arena-victory-emblem.webp")),
+      loadImage(assetUrl("/Assets/UiLayouts/arena-stalemate-emblem.png")),
+    ]),
+    Promise.all(powerUpDefinitions.map(async (definition) => ([
+      definition.type,
+      await loadImage(assetUrl(definition.asset.path)),
+    ] as const))),
+  ]);
   const [
     playerOne,
     playerTwo,
@@ -434,51 +457,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     speedSparkTrail,
     victoryEmblem,
     stalemateEmblem,
-    bombUp,
-    flameUp,
-    speedUp,
-    remoteUp,
-    shieldUp,
-    bombPassUp,
-    kickUp,
-    shortFuseUp,
-  ] = await Promise.all([
-    loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player1"), ["hires", ""]),
-    loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player2")),
-    loadCharacterRoster(),
-    arenaTilePaths
-      ? loadFirstAvailableImage([assetUrl(arenaTilePaths.base), assetUrl("/Assets/TileMaps/floor-base.png")])
-      : Promise.resolve(null),
-    arenaTilePaths
-      ? loadFirstAvailableImage([assetUrl(arenaTilePaths.lane), assetUrl("/Assets/TileMaps/floor-alt.png")])
-      : Promise.resolve(null),
-    arenaTilePaths
-      ? loadFirstAvailableImage([assetUrl(arenaTilePaths.spawn), assetUrl("/Assets/TileMaps/floor-spawn.png")])
-      : Promise.resolve(null),
-    arenaTilePaths
-      ? loadFirstAvailableImage([assetUrl(arenaTilePaths.wall), assetUrl("/Assets/TileMaps/wall.png")])
-      : Promise.resolve(null),
-    arenaTilePaths
-      ? loadFirstAvailableImage([assetUrl(arenaTilePaths.crate), assetUrl("/Assets/TileMaps/crate.png")])
-      : Promise.resolve(null),
-    loadImage(assetUrl("/Assets/TileMaps/crate-break-0.png")),
-    loadImage(assetUrl("/Assets/TileMaps/crate-break-1.png")),
-    loadImage(assetUrl("/Assets/TileMaps/crate-break-2.png")),
-    loadImage(assetUrl("/Assets/TileMaps/crate-break-3.png")),
-    loadImage(assetUrl("/Assets/VisualEffects/bomb.png")),
-    loadImage(assetUrl("/Assets/VisualEffects/flame.png")),
-    loadImage(assetUrl("/Assets/VisualEffects/speed-spark-trail.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/arena-victory-emblem.webp")),
-    loadImage(assetUrl("/Assets/UiLayouts/arena-stalemate-emblem.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-bomb.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-flame.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-speed-rastro-relampago.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-remote.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-shield.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-bomb-pass.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-kick.png")),
-    loadImage(assetUrl("/Assets/UiLayouts/power-short-fuse-v2.png")),
-  ]);
+  ] = baseAssets;
   const playerSprites: Partial<Record<PlayerId, DirectionalSprites>> = {
     1: playerOne,
     2: playerTwo,
@@ -534,16 +513,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       victoryEmblem,
       stalemateEmblem,
     },
-    powerUps: {
-      "bomb-up": bombUp,
-      "flame-up": flameUp,
-      "speed-up": speedUp,
-      "remote-up": remoteUp,
-      "shield-up": shieldUp,
-      "bomb-pass-up": bombPassUp,
-      "kick-up": kickUp,
-      "short-fuse-up": shortFuseUp,
-    },
+    powerUps: Object.fromEntries(powerUpEntries) as Partial<Record<PowerUpType, HTMLImageElement | null>>,
     characterSpriteLoader,
   };
 }

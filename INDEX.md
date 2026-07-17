@@ -5,13 +5,20 @@
 | Caminho | Conteudo |
 | --- | --- |
 | `src/app/` | Estado, catalogo e interface do launcher. |
+| `src/characters/` | Catalogo canonico de identidade, apresentacao, roster e skill dos personagens. |
+| `src/matches/` | Contrato puro de launch request e adaptador de URL entre launcher e arena. |
+| `src/lab/` | Cliente, observacao, runtime, telemetria e adapters do Laboratorio. |
 | `src/original-game/` | Motor original, bots, personagens e regras da arena. |
+| `src/original-game/Engine/match-cycle.ts` | Ciclo autoritativo puro de rodada, placar, cronometro e resultado. |
+| `src/original-game/Engine/bomb-explosions.ts` | Resolucao autoritativa pura de alcance, bloqueios, caixas e reacoes em cadeia das explosoes. |
+| `src/original-game/Gameplay/tile-key.ts` | Codec canonico da identidade textual de tiles, reexportado por `Arenas/arena.ts`. |
+| `src/original-game/Engine/bot-contracts.ts` e `bot-runtime.ts` | Seam comum de policies e lifecycle dos bots locais/remotos. |
 | `docs/benchmarks/` | Experimentos datados de latencia e performance dos bots. |
 | `BOTS/CuriosidadesHistoricas.md` | Registro numerado de comportamentos emergentes e episodios memoraveis dos bots. |
 | `BOTS/DevHistory/` | Post-mortems e historico das tentativas de desenvolvimento dos bots. |
 | `public/Assets/` | Sprites, mapas, audio e demais assets do jogo. |
 | `arena/` | Documento HTML isolado da gameplay. |
-| `tests/` | Testes automatizados do launcher e das rotas. |
+| `tests/` e `vitest.config.ts` | Contratos rapidos, testes de UI e gates longos separados por projeto. |
 | `vite.config.ts` e `wrangler.jsonc` | Build multipagina e publicacao Cloudflare. |
 
 ## Quando ler

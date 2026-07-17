@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLabClient } from "../src/lab/client.ts";
+import { createLabClient, LabPublicError } from "../src/lab/client.ts";
 import type { LabClient } from "../src/lab/client.ts";
 import { buildLabObservation, startLabController } from "../src/lab/controller.ts";
 import {
@@ -173,8 +173,10 @@ describe("Laboratorio 9Router", () => {
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       nowMs = 145;
+      const requestBody = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({
         ok: true,
+        requestId: requestBody.requestId,
         decision: { direction: "left", placeBomb: true, detonate: false, useSkill: false },
         latencyMs: 35,
         usage: { inputTokens: 120, outputTokens: 18, totalTokens: 138 },
@@ -305,7 +307,38 @@ describe("Laboratorio 9Router", () => {
     stop();
   });
 
-  it("escalona quatro leituras concorrentes do Luna para evitar snapshots duplicados", async () => {
+  it("respeita Retry-After no controller legado com teto de trinta segundos", async () => {
+    vi.useFakeTimers();
+    const game = {
+      exportOnlineSnapshot: () => snapshot(),
+      setServerPlayerInput: vi.fn(),
+      clearServerPlayerInput: vi.fn(),
+    };
+    const client: LabClient = {
+      listProfiles: vi.fn(),
+      decide: vi.fn()
+        .mockRejectedValueOnce(new LabPublicError({
+          status: 429,
+          code: "rate_limited",
+          requestId: "lab-legacy-rate-limit",
+          retryAfterMs: 120_000,
+        }))
+        .mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-sol" }]);
+
+    try {
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(client.decide).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(client.decide).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("mantem no maximo uma leitura do Luna em voo por competidor", async () => {
     vi.useFakeTimers();
     const startedAt = Date.now();
     const game = {
@@ -328,22 +361,18 @@ describe("Laboratorio 9Router", () => {
       stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
       expect(client.decide).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(500);
-      expect(client.decide).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(500);
-      expect(client.decide).toHaveBeenCalledTimes(3);
-      await vi.advanceTimersByTimeAsync(500);
-      expect(client.decide).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(client.decide).toHaveBeenCalledTimes(1);
       expect(client.decide.mock.calls.map(([request]) => (
         request.observation as { frameId: number }
-      ).frameId)).toEqual([0, 500, 1_000, 1_500]);
+      ).frameId)).toEqual([0]);
     } finally {
       stop();
       vi.useRealTimers();
     }
   });
 
-  it("restaura o escalonamento das lanes quando uma nova rodada fica ativa", async () => {
+  it("inicia uma unica lane quando uma nova rodada fica ativa", async () => {
     vi.useFakeTimers();
     const startedAt = Date.now();
     let active = false;
@@ -372,18 +401,18 @@ describe("Laboratorio 9Router", () => {
       active = true;
       await vi.advanceTimersByTimeAsync(1_600);
 
-      expect(client.decide).toHaveBeenCalledTimes(4);
+      expect(client.decide).toHaveBeenCalledTimes(1);
       const requestedFrames = client.decide.mock.calls.map(([request]) => (
         request.observation as { frameId: number }
       ).frameId);
-      expect(new Set(requestedFrames).size).toBe(4);
+      expect(new Set(requestedFrames).size).toBe(1);
     } finally {
       stop();
       vi.useRealTimers();
     }
   });
 
-  it("coordena o stagger quando requests da rodada anterior terminam em momentos diferentes", async () => {
+  it("inicia a leitura da rodada nova depois que a leitura anterior termina", async () => {
     vi.useFakeTimers();
     const startedAt = Date.now();
     let roundNumber = 1;
@@ -411,38 +440,31 @@ describe("Laboratorio 9Router", () => {
       roundTripMs: 2_000,
       upstreamLatencyMs: 1_900,
       usage: null,
+      requestId: "lab-test-round-stagger",
     };
     let stop: () => void = () => undefined;
 
     try {
       stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
       await vi.advanceTimersByTimeAsync(1_600);
-      expect(client.decide).toHaveBeenCalledTimes(4);
-      const previousRoundResolvers = pendingResolvers.slice(0, 4);
+      expect(client.decide).toHaveBeenCalledTimes(1);
 
       roundNumber = 2;
-      previousRoundResolvers[2]!(result);
+      pendingResolvers[0]!(result);
       await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(250);
-      previousRoundResolvers[0]!(result);
-      await vi.advanceTimersByTimeAsync(250);
-      previousRoundResolvers[3]!(result);
-      await vi.advanceTimersByTimeAsync(500);
-      previousRoundResolvers[1]!(result);
-      await vi.advanceTimersByTimeAsync(600);
 
       const newRoundFrames = decide.mock.calls
         .map(([request]) => request.observation as { round: number; frameId: number })
         .filter((observation) => observation.round === 2)
         .map((observation) => observation.frameId);
-      expect(newRoundFrames).toEqual([1_600, 2_100, 2_600, 3_100]);
+      expect(newRoundFrames).toEqual([1_600]);
     } finally {
       stop();
       vi.useRealTimers();
     }
   });
 
-  it("aumenta de quatro para sete decisões em cinco segundos ao dobrar as lanes do Luna", async () => {
+  it("ignora configuracoes legadas que tentam abrir mais de uma lane por competidor", async () => {
     vi.useFakeTimers();
     const measureAppliedDecisions = async (lunaDecisionLanes: number): Promise<number> => {
       let appliedDecisions = 0;
@@ -459,6 +481,7 @@ describe("Laboratorio 9Router", () => {
             roundTripMs: 2_000,
             upstreamLatencyMs: 1_900,
             usage: null,
+            requestId: "lab-test-luna-lanes",
           }), 2_000);
         })),
       };
@@ -481,49 +504,11 @@ describe("Laboratorio 9Router", () => {
     };
 
     try {
-      await expect(measureAppliedDecisions(2)).resolves.toBe(4);
-      await expect(measureAppliedDecisions(4)).resolves.toBe(7);
+      await expect(measureAppliedDecisions(2)).resolves.toBe(2);
+      await expect(measureAppliedDecisions(4)).resolves.toBe(2);
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("descarta a resposta antiga quando duas leituras do Luna chegam fora de ordem", async () => {
-    const inputs: OnlineInputState[] = [];
-    const game = {
-      exportOnlineSnapshot: () => snapshot(),
-      setServerPlayerInput: (_playerId: PlayerId, input: OnlineInputState) => inputs.push(input),
-      clearServerPlayerInput: vi.fn(),
-    };
-    let resolveFirst!: (result: Awaited<ReturnType<LabClient["decide"]>>) => void;
-    let resolveSecond!: (result: Awaited<ReturnType<LabClient["decide"]>>) => void;
-    const first = new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => { resolveFirst = resolve; });
-    const second = new Promise<Awaited<ReturnType<LabClient["decide"]>>>((resolve) => { resolveSecond = resolve; });
-    const pendingDecision = new Promise<never>(() => undefined);
-    const result = (direction: "left" | "right") => ({
-      decision: { direction, placeBomb: false, detonate: false, useSkill: false },
-      roundTripMs: 100,
-      upstreamLatencyMs: 90,
-      usage: null,
-    });
-    const client: LabClient = {
-      listProfiles: vi.fn(),
-      decide: vi.fn()
-        .mockReturnValueOnce(first)
-        .mockReturnValueOnce(second)
-        .mockReturnValue(pendingDecision),
-    };
-
-    const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
-    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
-    resolveSecond(result("left"));
-    await vi.waitFor(() => expect(inputs.at(-1)?.direction).toBe("left"));
-    resolveFirst(result("right"));
-    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(4));
-
-    expect(inputs.some(({ direction }) => direction === "right")).toBe(false);
-    expect(inputs.at(-1)?.direction).toBe("left");
-    stop();
   });
 
   it("descarta uma decisao que terminou depois do inicio da rodada seguinte", async () => {
@@ -544,15 +529,16 @@ describe("Laboratorio 9Router", () => {
     };
 
     const stop = startLabController(game, client, [{ playerId: 1, model: "cx/gpt-5.6-luna" }]);
-    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(1));
     roundNumber = 2;
     resolveFirst({
       decision: { direction: "right", placeBomb: true, detonate: false, useSkill: false },
       roundTripMs: 100,
       upstreamLatencyMs: 90,
       usage: null,
+      requestId: "lab-test-next-round",
     });
-    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(client.decide).toHaveBeenCalledTimes(2));
 
     expect(game.setServerPlayerInput.mock.calls.some(([, input]) => (
       input.direction === "right" || input.bombPressed

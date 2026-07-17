@@ -1,9 +1,15 @@
-import type { PlayerId } from "../original-game/Gameplay/types.ts";
+import type { PlayerId } from "../original-game/Gameplay/types";
 import {
   getLocalBotMetadataById,
   getLocalBotMetadataByModel,
   type LocalBotId,
 } from "../original-game/Engine/bot-catalog";
+import { resolveLaunchRequest } from "../matches/launch-request";
+import type { LabLaunchRequest } from "../matches/launch-request";
+import {
+  launchRequestFromSearchParams,
+  launchRequestToSearchParams,
+} from "../matches/url-search-params";
 
 function requireLocalBotModel(id: LocalBotId): `bot-${LocalBotId}` {
   const bot = getLocalBotMetadataById(id);
@@ -26,52 +32,30 @@ export type LabMatchCompetitor = Readonly<{
   label: string;
 }>;
 
-function normalizeLabel(label: string | null): string {
-  return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
-}
-
 export function createLabMatchParams(
   models: readonly string[],
   labels: readonly string[] = [],
 ): URLSearchParams | null {
-  const normalizedModels = models.map((model) => model.trim());
-  if (
-    normalizedModels.length < LAB_MIN_COMPETITORS
-    || normalizedModels.length > LAB_MAX_COMPETITORS
-    || normalizedModels.some((model) => !model)
-  ) return null;
-
-  const params = new URLSearchParams({ mode: "lab" });
-  normalizedModels.forEach((model, index) => {
-    params.set(`model${index + 1}`, model);
-    const label = normalizeLabel(labels[index] ?? null);
-    if (!getLocalBotMetadataByModel(model) && label) params.set(`label${index + 1}`, label);
-  });
-  return params;
+  const result = resolveLaunchRequest({ mode: "lab", models, labels });
+  return result.ok ? launchRequestToSearchParams(result.request) : null;
 }
 
 export function parseLabMatchCompetitors(params: URLSearchParams): readonly LabMatchCompetitor[] {
-  const models = Array.from({ length: LAB_MAX_COMPETITORS }, (_, index) => (
-    params.get(`model${index + 1}`)?.trim() ?? ""
-  ));
+  const result = launchRequestFromSearchParams(params, "lab");
+  if (!result.ok) throw new Error(result.error);
+  if (result.request.mode !== "lab") throw new Error("lab_competitors_missing");
 
-  if (models.slice(0, LAB_MIN_COMPETITORS).some((model) => !model)) {
-    throw new Error("lab_competitors_missing");
-  }
+  return createLabMatchCompetitors(result.request);
+}
 
-  const firstGap = models.findIndex((model) => !model);
-  if (firstGap >= 0 && models.slice(firstGap + 1).some(Boolean)) {
-    throw new Error("lab_competitor_gap");
-  }
-
-  return models.filter(Boolean).map((model, index) => {
-    const selectedLabel = normalizeLabel(params.get(`label${index + 1}`));
+export function createLabMatchCompetitors(request: LabLaunchRequest): readonly LabMatchCompetitor[] {
+  return request.competitors.map(({ model, label }, index) => {
     const bot = getLocalBotMetadataByModel(model);
     return {
       playerId: (index + 1) as PlayerId,
       model,
       kind: bot?.id ?? "llm",
-      label: bot?.label ?? (selectedLabel || model),
+      label: bot?.label ?? label ?? model,
     };
   });
 }

@@ -67,6 +67,7 @@ import {
   formatBombFuseSeconds,
   formatControlKey,
   getBombFuseMsForPlayer,
+  getDemolitionComboDropTypes,
   getPowerUpDefinition,
   getPowerUpLevel,
   isPowerUpMaxed,
@@ -96,7 +97,12 @@ import {
   SoundManager,
   SFX_MANIFEST,
 } from "./sound-manager";
-import type { BotContext, BotDecision } from "./bot-ai";
+import type {
+  BotContext,
+  BotDecision,
+  BotDecisionMeasurement,
+  BotDecisionPolicy,
+} from "./bot-contracts";
 import {
   buildBotDangerMap as botAI_buildDangerMap,
   canBotSafelyPlaceBomb as botAI_canSafelyPlaceBomb,
@@ -104,8 +110,7 @@ import {
   getBotSafetyDecision as botAI_getSafetyDecision,
   getStableBotDirection as botAI_getStableBotDirection,
 } from "./bot-ai";
-import { getBotV2Decision as botAI_getBotV2Decision } from "./bot-v2";
-import { getBotV3Decision as botAI_getBotV3Decision } from "./bot-v3";
+import { createBotRuntime, type BotRuntime } from "./bot-runtime";
 import {
   buildDangerMap,
   getBombBlastKeys as projectBombBlastKeys,
@@ -113,6 +118,13 @@ import {
   SUDDEN_DEATH_TICK_MS,
   type ProjectedBomb,
 } from "./danger-map";
+import {
+  createMatchCycle,
+  type MatchCycle,
+  type MatchCycleEvent,
+  type MatchCycleSnapshot,
+} from "./match-cycle";
+import { resolveBombExplosions, type BombExplosion } from "./bomb-explosions";
 import type { SkillContext } from "../ultimate/skill-system";
 import {
   createDefaultPlayerSkillState,
@@ -161,21 +173,7 @@ const EXPLOSION_SCREEN_SHAKE_MS = 160;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_PX = 4;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_MAX_PX = 6;
 const DEMOLITION_COMBO_MIN_CRATES = 2;
-const DEMOLITION_COMBO_DROP_TYPES: readonly SkillPowerUpType[] = [
-  "bomb-up",
-  "flame-up",
-  "speed-up",
-  "shield-up",
-  "short-fuse-up",
-];
-
-export type BotDecisionMeasurement = Readonly<{
-  playerId: PlayerId;
-  decision: BotDecision;
-  computeMs: number;
-}>;
-
-export type BotDecisionPolicy = (player: PlayerState, context: BotContext) => BotDecision;
+export type { BotDecisionMeasurement, BotDecisionPolicy } from "./bot-contracts";
 
 declare global {
   interface Window {
@@ -198,13 +196,6 @@ const directionDelta: Record<Direction, TileCoord> = {
   left: { x: -1, y: 0 },
   right: { x: 1, y: 0 },
 };
-const cardinalDirectionDeltas: readonly TileCoord[] = [
-  directionDelta.up,
-  directionDelta.down,
-  directionDelta.left,
-  directionDelta.right,
-];
-
 const PLAYER_HITBOX_HALF = TILE_SIZE * 0.5;
 const LANE_SNAP_THRESHOLD = TILE_SIZE * 0.45;
 const LANE_LOCK_THRESHOLD = 3;
@@ -415,7 +406,7 @@ interface BombKickImpactFeedback {
   elapsedMs: number;
 }
 
-interface ChainReactionFeedback {
+export interface ExplosionChainReactionFeedback {
   fromTile: TileCoord;
   toTile: TileCoord;
   elapsedMs: number;
@@ -470,6 +461,12 @@ export interface ExplosionFeedbackConnector {
   toX: number;
   toY: number;
   style: NonNullable<FlameState["style"]>;
+}
+
+export interface ExplosionFeedbackReadModel {
+  cells: ExplosionFeedbackCell[];
+  connectors: ExplosionFeedbackConnector[];
+  chainReactions: ExplosionChainReactionFeedback[];
 }
 
 export interface PlayerFlameOcclusionIndicator {
@@ -663,8 +660,16 @@ export class GameApp {
   private roundTimeMs = ROUND_DURATION_MS;
   private paused = false;
   private roundOutcome: RoundOutcome | null = null;
+  private roundOutcomeMessage = "";
   private roundStartCueMs = 0;
   private matchWinner: PlayerId | null = null;
+  private matchCycle: MatchCycle = createMatchCycle({
+    mode: "classic",
+    activePlayerIds: [1, 2],
+    roundDurationMs: ROUND_DURATION_MS,
+    roundEndDelayMs: ROUND_END_DELAY_MS,
+    targetWins: TARGET_WINS,
+  });
   private matchResultCooldownMs = 0;
   private autoPausedForHiddenTab = false;
   private onlineRoomMode: LobbyMode = "classic";
@@ -683,19 +688,19 @@ export class GameApp {
   private automationControlledPlayer: PlayerId = 2;
   private localBotFill = 0;
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
-  private botV2ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
-  private botV3ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botDecisionPolicies: Partial<Record<PlayerId, BotDecisionPolicy>> = {};
+  private botRuntimes: Partial<Record<PlayerId, BotRuntime>> = {};
   private botEnabled = false;
   private botDecisionObserver: ((measurement: BotDecisionMeasurement) => void) | null = null;
-  private botBombCooldownMs = 0;
+  /** Match-wide pacing rule preserved from the original bot engine. */
+  private roomBotBombPlacementThrottleMs = 0;
   private botCommittedDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
   private botPendingReverseDirection: Record<PlayerId, Direction | null> = createDirectionPlayerRecord(null);
   private botPendingReverseFrames: Record<PlayerId, number> = createNumberPlayerRecord(0);
   private animationClockMs = 0;
   private crateBreakAnimations: CrateBreakAnimation[] = [];
   private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
-  private chainReactionFeedback: ChainReactionFeedback[] = [];
+  private chainReactionFeedback: ExplosionChainReactionFeedback[] = [];
   private ranniBlinkFeedback: Record<PlayerId, RanniBlinkFeedback | null> = createPlayerRecord(() => null);
   private readonly prefersReducedMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
@@ -866,7 +871,7 @@ export class GameApp {
       suddenDeathIndex: this.suddenDeathIndex,
       suddenDeathPath: this.suddenDeathPath,
       suddenDeathClosureEffects: this.suddenDeathClosureEffects,
-      botBombCooldownMs: this.botBombCooldownMs,
+      roomBombPlacementThrottleMs: this.roomBotBombPlacementThrottleMs,
       botCommittedDirection: this.botCommittedDirection,
       botPendingReverseDirection: this.botPendingReverseDirection,
       botPendingReverseFrames: this.botPendingReverseFrames,
@@ -917,7 +922,7 @@ export class GameApp {
       clonePlayerState: (player) => this.clonePlayerState(player),
       tryAbsorbInstantHit: (player, attackerId) => this.tryAbsorbInstantHit(player, attackerId),
       breakCrateAtKey: (key) => this.breakCrateAtKey(key),
-      addFlame: (tile, durationMs, style, ownerId) => this.addFlame(tile, durationMs, style, undefined, ownerId),
+      addFlame: (tile, durationMs, style, ownerId) => this.addFlame(tile, durationMs, style, ownerId),
       soundManager: { playOneShot: (name: string) => this.soundManager.playOneShot(name as any) },
     };
   }
@@ -929,9 +934,8 @@ export class GameApp {
     this.activePlayerIds = [1, 2];
     this.localBotFill = 0;
     this.botControlledPlayers = createBooleanPlayerRecord(false);
-    this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
-    this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
     this.botDecisionPolicies = {};
+    this.botRuntimes = {};
     this.botEnabled = false;
     this.botDecisionObserver = null;
     this.menuReady = createBooleanPlayerRecord(false);
@@ -980,10 +984,17 @@ export class GameApp {
     }
     this.soundManager.playOneShot("matchStart");
     this.mode = "match";
+    this.score = this.onlineRoomMode === "endless"
+      ? { ...this.endlessRoundWins }
+      : createNumberPlayerRecord(0);
+    this.roundNumber = 1;
+    this.roundTimeMs = ROUND_DURATION_MS;
     this.matchWinner = null;
     this.paused = false;
     this.autoPausedForHiddenTab = false;
     this.roundOutcome = null;
+    this.roundOutcomeMessage = "";
+    this.replaceMatchCycleFromProjection();
     this.roundStartCueMs = ROUND_START_CUE_MS;
     this.menuReady = createBooleanPlayerRecord(false);
     for (const playerId of this.activePlayerIds) {
@@ -1057,6 +1068,7 @@ export class GameApp {
     this.roundOutcome = snapshot.roundOutcome
       ? { ...snapshot.roundOutcome }
       : null;
+    this.roundOutcomeMessage = snapshot.roundOutcome?.message ?? "";
     this.syncRoundStartCue(
       previousMode,
       previousRoundNumber,
@@ -1082,6 +1094,7 @@ export class GameApp {
     this.matchResultChoice = createPlayerRecord(() => null);
     this.matchResultCooldownMs = 0;
     this.applyEndlessStats(snapshot.endlessStats);
+    this.replaceMatchCycleFromProjection();
     this.syncRoundStartCue(
       previousMode,
       previousRoundNumber,
@@ -1140,6 +1153,7 @@ export class GameApp {
     this.paused = frame.paused;
     this.autoPausedForHiddenTab = false;
     this.roundOutcome = frame.roundOutcome ? { ...frame.roundOutcome } : null;
+    this.roundOutcomeMessage = frame.roundOutcome?.message ?? "";
     this.syncRoundStartCue(
       previousMode,
       previousRoundNumber,
@@ -1167,6 +1181,7 @@ export class GameApp {
     this.setBotPlayers(frame.botPlayerIds ?? []);
     this.nextBombId = frame.nextBombId;
     this.applyEndlessStats(frame.endlessStats);
+    this.replaceMatchCycleFromProjection();
     this.syncRoundStartCue(
       previousMode,
       previousRoundNumber,
@@ -1216,10 +1231,13 @@ export class GameApp {
     this.paused = false;
     this.autoPausedForHiddenTab = false;
     this.roundOutcome = null;
-    this.botBombCooldownMs = 0;
+    this.roomBotBombPlacementThrottleMs = 0;
     this.botCommittedDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseFrames = createNumberPlayerRecord(0);
+    for (const runtime of Object.values(this.botRuntimes)) {
+      runtime?.reset();
+    }
     this.animationClockMs = 0;
     this.suddenDeathActive = false;
     this.suddenDeathTickMs = SUDDEN_DEATH_TICK_MS;
@@ -1233,9 +1251,8 @@ export class GameApp {
     } else {
       this.localBotFill = 0;
       this.botControlledPlayers = createBooleanPlayerRecord(false);
-      this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
-      this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
       this.botDecisionPolicies = {};
+      this.botRuntimes = {};
       this.botEnabled = false;
     }
     this.resetRound(false);
@@ -1352,10 +1369,13 @@ export class GameApp {
     player.velocity = { x: 0, y: 0 };
     player.activeBombs = 0;
     this.botControlledPlayers[playerId] = false;
-    this.botV2ControlledPlayers[playerId] = false;
-    this.botV3ControlledPlayers[playerId] = false;
     delete this.botDecisionPolicies[playerId];
+    delete this.botRuntimes[playerId];
     this.activePlayerIds = this.activePlayerIds.filter((id) => id !== playerId);
+    this.matchCycle.dispatch({
+      type: "set-active-players",
+      activePlayerIds: this.activePlayerIds,
+    });
     if (this.mode === "match" && !this.roundOutcome) {
       this.evaluateRoundState();
     }
@@ -1511,24 +1531,20 @@ export class GameApp {
     this.primeCharacterSprites();
   }
 
-  private setBotPlayers(
-    botPlayerIds: PlayerId[],
-    botV2PlayerIds: PlayerId[] = [],
-    botV3PlayerIds: PlayerId[] = [],
-  ): void {
+  private setBotPlayers(botPlayerIds: PlayerId[]): void {
     const nextBots = new Set(botPlayerIds);
-    const nextV2Bots = new Set(botV2PlayerIds);
-    const nextV3Bots = new Set(botV3PlayerIds);
     this.botControlledPlayers = createPlayerRecord((playerId) => (
       nextBots.has(playerId) && this.activePlayerIds.includes(playerId)
     ));
-    this.botV2ControlledPlayers = createPlayerRecord((playerId) => (
-      this.botControlledPlayers[playerId] && nextV2Bots.has(playerId)
-    ));
-    this.botV3ControlledPlayers = createPlayerRecord((playerId) => (
-      this.botControlledPlayers[playerId] && nextV3Bots.has(playerId)
-    ));
     this.botEnabled = ALL_PLAYER_IDS.some((playerId) => this.botControlledPlayers[playerId]);
+    this.botRuntimes = Object.fromEntries(
+      ALL_PLAYER_IDS
+        .filter((playerId) => this.botControlledPlayers[playerId])
+        .map((playerId) => [
+          playerId,
+          createBotRuntime(this.botDecisionPolicies[playerId] ?? botAI_getBotDecision),
+        ]),
+    );
     this.syncPlayerLabels();
   }
 
@@ -1810,8 +1826,6 @@ export class GameApp {
       arena?: ArenaDefinition;
       roomMode?: LobbyMode;
       botPlayerIds?: PlayerId[];
-      botV2PlayerIds?: PlayerId[];
-      botV3PlayerIds?: PlayerId[];
       botDecisionPolicies?: Partial<Record<PlayerId, BotDecisionPolicy>>;
       botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
@@ -1848,11 +1862,7 @@ export class GameApp {
     this.localBotFill = 0;
     this.botDecisionObserver = options.botDecisionObserver ?? null;
     this.botDecisionPolicies = { ...options.botDecisionPolicies };
-    this.setBotPlayers(
-      options.botPlayerIds ?? [],
-      options.botV2PlayerIds ?? [],
-      options.botV3PlayerIds ?? [],
-    );
+    this.setBotPlayers(options.botPlayerIds ?? []);
     this.applyEndlessStats(options.endlessStats);
     this.primeCharacterSprites();
     this.startMatch();
@@ -1930,6 +1940,18 @@ export class GameApp {
 
   public exportOnlineSnapshot(): OnlineGameSnapshot {
     return this.createOnlineSnapshot();
+  }
+
+  public getExplosionFeedbackReadModel(): ExplosionFeedbackReadModel {
+    const geometry = buildExplosionFeedbackGeometry(this.flames);
+    return {
+      ...geometry,
+      chainReactions: this.chainReactionFeedback.map((effect) => ({
+        fromTile: { ...effect.fromTile },
+        toTile: { ...effect.toTile },
+        elapsedMs: effect.elapsedMs,
+      })),
+    };
   }
 
   private syncVisualPlayerPositions(): void {
@@ -2212,26 +2234,30 @@ export class GameApp {
     }
 
     if (this.roundOutcome) {
-      this.roundOutcome.countdownMs -= deltaMs;
-      if (this.roundOutcome.countdownMs <= 0) {
-        this.advanceAfterRound();
-      }
+      const events = this.matchCycle.dispatch({ type: "tick", deltaMs });
+      this.syncMatchCycleProjection();
+      this.handleMatchCycleEvents(events);
       return;
     }
 
     this.updateRoundStartCue(deltaMs);
-    this.roundTimeMs = Math.max(0, this.roundTimeMs - deltaMs);
+    const cycleEvents = this.matchCycle.dispatch({ type: "tick", deltaMs });
+    this.syncMatchCycleProjection();
     this.animationClockMs += deltaMs;
     this.updateVisualEffects(deltaMs);
-    if (this.roundTimeMs <= 0) {
-      this.finishRound(null, "timer", "Clock hit zero. Draw round.");
+    if (cycleEvents.length > 0) {
+      this.handleMatchCycleEvents(cycleEvents);
       return;
     }
 
     this.updateSuddenDeath(deltaMs);
-    this.botBombCooldownMs = Math.max(0, this.botBombCooldownMs - deltaMs);
+    this.roomBotBombPlacementThrottleMs = Math.max(
+      0,
+      this.roomBotBombPlacementThrottleMs - deltaMs,
+    );
     this.updatePlayers(deltaMs);
     this.updateBombs(deltaMs);
+    this.resolvePlayerDeathsFromFlames();
     this.updateFlames(deltaMs);
     this.collectPowerUps();
     this.evaluateRoundState();
@@ -2386,9 +2412,76 @@ export class GameApp {
       ? { ...this.endlessRoundWins }
       : { 1: 0, 2: 0, 3: 0, 4: 0 };
     this.roundNumber = 1;
+    this.roundTimeMs = ROUND_DURATION_MS;
     this.matchWinner = null;
+    this.roundOutcome = null;
+    this.roundOutcomeMessage = "";
+    this.replaceMatchCycleFromProjection();
     this.resetRound();
     this.mode = "match";
+  }
+
+  private replaceMatchCycleFromProjection(): void {
+    const cycle = createMatchCycle({
+      mode: this.onlineRoomMode,
+      activePlayerIds: this.activePlayerIds,
+      roundDurationMs: ROUND_DURATION_MS,
+      roundEndDelayMs: ROUND_END_DELAY_MS,
+      targetWins: TARGET_WINS,
+    });
+    cycle.restore({
+      roundNumber: this.roundNumber,
+      roundTimeMs: this.roundTimeMs,
+      score: this.score,
+      outcome: this.roundOutcome
+        ? {
+          winner: this.roundOutcome.winner,
+          reason: this.roundOutcome.reason,
+          countdownMs: Math.max(0, this.roundOutcome.countdownMs),
+        }
+        : null,
+      matchWinner: this.matchWinner,
+    });
+    this.matchCycle = cycle;
+  }
+
+  private syncMatchCycleProjection(snapshot: MatchCycleSnapshot = this.matchCycle.snapshot()): void {
+    this.score = { ...snapshot.score };
+    this.roundNumber = snapshot.roundNumber;
+    this.roundTimeMs = snapshot.roundTimeMs;
+    this.matchWinner = snapshot.matchWinner;
+    if (!snapshot.outcome) {
+      this.roundOutcome = null;
+      this.roundOutcomeMessage = "";
+      return;
+    }
+    this.roundOutcome = {
+      ...snapshot.outcome,
+      message: this.roundOutcomeMessage,
+    };
+  }
+
+  private handleMatchCycleEvents(events: readonly MatchCycleEvent[]): void {
+    for (const event of events) {
+      if (event.type === "round-timer-expired") {
+        this.finishRound(null, "timer", "Clock hit zero. Draw round.");
+        continue;
+      }
+      if (event.type === "round-started") {
+        if (this.onlineRoomMode === "endless") {
+          this.endlessRoundWins = { ...this.score };
+        }
+        this.input.clearPresses();
+        this.resetRound();
+        continue;
+      }
+      if (event.type === "match-finished") {
+        this.matchResultChoice = createPlayerRecord(() => null);
+        this.matchResultCooldownMs = MATCH_RESULT_RESTART_DELAY_MS;
+        this.input.clearPresses();
+        this.mode = "match-result";
+      }
+    }
   }
 
   private resetRound(showStartCue = true): void {
@@ -2410,13 +2503,17 @@ export class GameApp {
     this.nextBombId = 1;
     this.roundTimeMs = ROUND_DURATION_MS;
     this.roundOutcome = null;
+    this.roundOutcomeMessage = "";
     this.roundStartCueMs = showStartCue ? ROUND_START_CUE_MS : 0;
     this.paused = false;
     this.autoPausedForHiddenTab = false;
-    this.botBombCooldownMs = 0;
+    this.roomBotBombPlacementThrottleMs = 0;
     this.botCommittedDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseDirection = createDirectionPlayerRecord(null);
     this.botPendingReverseFrames = createNumberPlayerRecord(0);
+    for (const runtime of Object.values(this.botRuntimes)) {
+      runtime?.reset();
+    }
     this.animationClockMs = 0;
     this.suddenDeathActive = false;
     this.suddenDeathTickMs = SUDDEN_DEATH_TICK_MS;
@@ -2424,6 +2521,9 @@ export class GameApp {
     this.suddenDeathClosedTiles = new Set();
     this.suddenDeathClosureEffects = [];
     this.suddenDeathPath = this.buildSuddenDeathPath();
+    if (this.mode === "match") {
+      this.replaceMatchCycleFromProjection();
+    }
   }
 
   private createPlayers(): Record<PlayerId, PlayerState> {
@@ -2645,7 +2745,7 @@ export class GameApp {
           this.rememberBotDirection(id, player.direction);
         }
         if (placedBomb && botDecision?.placeBomb && this.isBotControlled(id)) {
-          this.botBombCooldownMs = BOT_BOMB_COOLDOWN_MS;
+          this.roomBotBombPlacementThrottleMs = BOT_BOMB_COOLDOWN_MS;
         }
       }
     } finally {
@@ -2720,14 +2820,10 @@ export class GameApp {
   private getBotDecision(player: PlayerState): BotDecision {
     const startedAtMs = monotonicNow();
     const context = this.createBotContext(this.getSharedBotDangerMap());
-    const injectedPolicy = this.botDecisionPolicies[player.id];
-    const decision = injectedPolicy
-      ? injectedPolicy(player, context)
-      : this.botV3ControlledPlayers[player.id]
-        ? botAI_getBotV3Decision(player, context)
-        : this.botV2ControlledPlayers[player.id]
-          ? botAI_getBotV2Decision(player, context)
-          : botAI_getBotDecision(player, context);
+    const runtime = this.botRuntimes[player.id]
+      ?? createBotRuntime(this.botDecisionPolicies[player.id] ?? botAI_getBotDecision);
+    this.botRuntimes[player.id] = runtime;
+    const decision = runtime.decide(player, context);
     this.botDecisionObserver?.({
       playerId: player.id,
       decision,
@@ -3516,20 +3612,22 @@ export class GameApp {
       bomb.fuseMs -= deltaMs;
     }
 
-    const queue = this.bombs.filter((bomb) => bomb.fuseMs <= 0).map((bomb) => bomb.id);
-    const exploded = new Set<number>();
-    while (queue.length > 0) {
-      const bombId = queue.shift();
-      if (bombId === undefined || exploded.has(bombId)) {
-        continue;
-      }
-      exploded.add(bombId);
-      this.explodeBomb(bombId, queue);
+    const explosions = resolveBombExplosions({
+      bombs: this.bombs,
+      arena: {
+        width: this.getArenaGridWidth(),
+        height: this.getArenaGridHeight(),
+        solid: this.arena.solid,
+        breakable: this.arena.breakable,
+      },
+    });
+    for (const explosion of explosions) {
+      this.applyBombExplosion(explosion);
     }
   }
 
-  private explodeBomb(bombId: number, queue: number[]): void {
-    const index = this.bombs.findIndex((item) => item.id === bombId);
+  private applyBombExplosion(explosion: BombExplosion): void {
+    const index = this.bombs.findIndex((item) => item.id === explosion.bombId);
     if (index === -1) {
       return;
     }
@@ -3539,44 +3637,28 @@ export class GameApp {
     this.players[bomb.ownerId].activeBombs = Math.max(0, this.players[bomb.ownerId].activeBombs - 1);
     this.soundManager.playOneShot("bombExplode");
     this.triggerExplosionScreenShake();
-    const flameTiles = new Set<string>();
-    const brokenCrateKeys: string[] = [];
-    const range = bomb.flameRange;
-    flameTiles.add(tileKey(bomb.tile.x, bomb.tile.y));
-
-    for (const direction of cardinalDirectionDeltas) {
-      for (let step = 1; step <= range; step += 1) {
-        const x = bomb.tile.x + direction.x * step;
-        const y = bomb.tile.y + direction.y * step;
-        if (x < 0 || y < 0 || x >= this.getArenaGridWidth() || y >= this.getArenaGridHeight()) {
-          break;
-        }
-        const key = tileKey(x, y);
-        if (this.arena.solid.has(key)) {
-          break;
-        }
-
-        flameTiles.add(key);
-        this.armBombAtTile({ x, y }, queue, bomb.tile);
-
-        if (this.breakCrateAtKey(key)) {
-          brokenCrateKeys.push(key);
-          break;
-        }
-      }
+    for (const reaction of explosion.chainReactions) {
+      this.chainReactionFeedback.push({
+        fromTile: { ...reaction.fromTile },
+        toTile: { ...reaction.toTile },
+        elapsedMs: 0,
+      });
     }
 
+    const brokenCrateKeys = explosion.brokenCrateKeys.filter((key) => this.breakCrateAtKey(key));
     this.ensureDemolitionComboDrop(brokenCrateKeys);
     if (brokenCrateKeys.length > 0) {
       this.soundManager.playOneShot("crateBreak");
     }
 
-    flameTiles.forEach((key) => {
-      const [xText, yText] = key.split(",");
-      this.addFlame({ x: Number(xText), y: Number(yText) }, FLAME_DURATION_MS, "normal", queue, bomb.ownerId);
-    });
+    for (const tile of explosion.flameTiles) {
+      this.addFlame(tile, FLAME_DURATION_MS, "normal", bomb.ownerId);
+    }
     this.soundManager.playOneShot("flames");
-    this.resolvePlayerDeathsAtTileKeys(flameTiles, bomb.ownerId);
+    this.resolvePlayerDeathsAtTileKeys(
+      explosion.flameTiles.map((tile) => tileKey(tile.x, tile.y)),
+      bomb.ownerId,
+    );
   }
 
   private triggerExplosionScreenShake(): void {
@@ -3601,22 +3683,12 @@ export class GameApp {
     };
   }
 
-  private armBombAtTile(tile: TileCoord, queue?: number[], sourceTile?: TileCoord): void {
+  private armBombAtTile(tile: TileCoord): void {
     const bomb = this.bombs.find((item) => item.tile.x === tile.x && item.tile.y === tile.y);
     if (!bomb) {
       return;
     }
-    if (sourceTile && bomb.fuseMs > 0) {
-      this.chainReactionFeedback.push({
-        fromTile: { ...sourceTile },
-        toTile: { ...bomb.tile },
-        elapsedMs: 0,
-      });
-    }
     bomb.fuseMs = 0;
-    if (queue && !queue.includes(bomb.id)) {
-      queue.push(bomb.id);
-    }
   }
 
   private revealPowerUpAt(key: string): void {
@@ -3649,7 +3721,8 @@ export class GameApp {
     }
 
     const dropKey = freeKeys[hash % freeKeys.length];
-    const type = DEMOLITION_COMBO_DROP_TYPES[hash % DEMOLITION_COMBO_DROP_TYPES.length] ?? "speed-up";
+    const comboDropTypes = getDemolitionComboDropTypes();
+    const type = comboDropTypes[hash % comboDropTypes.length] ?? "speed-up";
     if (!dropKey) {
       return;
     }
@@ -3789,10 +3862,9 @@ export class GameApp {
     tile: TileCoord,
     durationMs: number = FLAME_DURATION_MS,
     style: FlameState["style"] = "normal",
-    queue?: number[],
     ownerId: PlayerId | null = null,
   ): void {
-    this.armBombAtTile(tile, queue);
+    this.armBombAtTile(tile);
     const existing = this.flames.find((flame) => flame.tile.x === tile.x && flame.tile.y === tile.y);
     if (existing) {
       existing.remainingMs = Math.max(existing.remainingMs, durationMs);
@@ -3900,7 +3972,9 @@ export class GameApp {
       if (!player.alive) continue;
       player.tile = this.getTileFromPosition(player.position);
       const flame = this.flames.find((entry) => (
-        entry.tile.x === player.tile.x && entry.tile.y === player.tile.y
+        entry.remainingMs > 0
+        && entry.tile.x === player.tile.x
+        && entry.tile.y === player.tile.y
       ));
       if (flame) this.tryAbsorbInstantHit(player, flame.ownerId ?? null);
     }
@@ -4025,27 +4099,17 @@ export class GameApp {
     if (this.roundOutcome) {
       return;
     }
-    const clinchesMatch = this.onlineRoomMode !== "endless" && winner
-      ? this.score[winner] + 1 >= TARGET_WINS
-      : false;
+    this.roundOutcomeMessage = message;
+    const [event] = this.matchCycle.dispatch({ type: "finish-round", winner, reason });
+    if (!event || event.type !== "round-finished") {
+      return;
+    }
+    this.syncMatchCycleProjection();
     this.soundManager.playOneShot("roundEnd");
-    if (clinchesMatch) {
+    if (event.clinchesMatch) {
       this.soundManager.playOneShot("matchWin");
     }
-    if (winner) {
-      if (this.onlineRoomMode === "endless") {
-        this.score[winner] = this.endlessRoundWins[winner] + 1;
-      } else {
-        this.score[winner] += 1;
-      }
-    }
-    this.roundOutcome = {
-      winner,
-      reason,
-      message,
-      countdownMs: ROUND_END_DELAY_MS,
-    };
-    this.persistLocalSessionReturnBrief(winner, reason, clinchesMatch);
+    this.persistLocalSessionReturnBrief(winner, reason, event.clinchesMatch);
   }
 
   private persistLocalSessionReturnBrief(
@@ -4151,33 +4215,6 @@ export class GameApp {
       return `P${playerId}`;
     }
     return player.name === "BOT" ? `BOT P${playerId}` : player.name;
-  }
-
-  private advanceAfterRound(): void {
-    if (this.onlineRoomMode === "endless") {
-      const winner = this.roundOutcome?.winner ?? null;
-      if (winner) {
-        this.endlessRoundWins[winner] += 1;
-      }
-      this.score = { ...this.endlessRoundWins };
-      this.input.clearPresses();
-      this.roundNumber += 1;
-      this.resetRound();
-      return;
-    }
-    for (const playerId of this.activePlayerIds) {
-      if (this.score[playerId] >= TARGET_WINS) {
-        this.matchWinner = playerId;
-        this.matchResultChoice = createPlayerRecord(() => null);
-        this.matchResultCooldownMs = MATCH_RESULT_RESTART_DELAY_MS;
-        this.input.clearPresses();
-        this.mode = "match-result";
-        return;
-      }
-    }
-    this.input.clearPresses();
-    this.roundNumber += 1;
-    this.resetRound();
   }
 
   private getPlayerPixelPositionFromState(player: PlayerState): PixelCoord {
@@ -5696,13 +5733,13 @@ export class GameApp {
   }
 
   private drawExplosionFeedback(): void {
-    const geometry = buildExplosionFeedbackGeometry(this.flames);
-    if (geometry.cells.length === 0 && this.chainReactionFeedback.length === 0) {
+    const feedback = this.getExplosionFeedbackReadModel();
+    if (feedback.cells.length === 0 && feedback.chainReactions.length === 0) {
       return;
     }
 
     this.ctx.save();
-    for (const cell of geometry.cells) {
+    for (const cell of feedback.cells) {
       const alpha = Math.min(1, Math.max(0, cell.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
       const toxic = cell.style === "toxic";
       this.ctx.fillStyle = toxic
@@ -5718,7 +5755,7 @@ export class GameApp {
 
     this.ctx.lineCap = "round";
     this.ctx.globalCompositeOperation = "lighter";
-    for (const connector of geometry.connectors) {
+    for (const connector of feedback.connectors) {
       const toxic = connector.style === "toxic";
       this.ctx.strokeStyle = toxic ? "rgba(90, 255, 165, 0.25)" : "rgba(255, 108, 38, 0.28)";
       this.ctx.lineWidth = 10;
@@ -5731,7 +5768,7 @@ export class GameApp {
       this.ctx.stroke();
     }
 
-    for (const effect of this.chainReactionFeedback) {
+    for (const effect of feedback.chainReactions) {
       const progress = Math.min(1, effect.elapsedMs / CHAIN_REACTION_FEEDBACK_MS);
       const alpha = 1 - progress;
       const fromX = effect.fromTile.x * TILE_SIZE + TILE_SIZE / 2;

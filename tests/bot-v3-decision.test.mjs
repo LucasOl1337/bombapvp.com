@@ -61,7 +61,7 @@ function threatenedProjectionContext() {
     suddenDeathIndex: 0,
     suddenDeathPath: [],
     suddenDeathClosureEffects: [],
-    botBombCooldownMs: 0,
+    roomBombPlacementThrottleMs: 0,
     botCommittedDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseFrames: { 1: 0, 2: 0, 3: 0, 4: 0 },
@@ -129,12 +129,12 @@ describe("segurança projetada do bot V3", () => {
     expect(context.evaluateProjectedMovementOption).not.toHaveBeenCalled();
   });
 
-  it("não desloca a projeção por uma bomba que pertence ao rival", () => {
+  it("continua deslocando a projeção quando a ameaça passa a ser uma bomba rival", () => {
     const context = threatenedProjectionContext();
     context.bombs[0].ownerId = 2;
 
-    expect(getBotV3Decision(context.players[1], context).direction).toBeNull();
-    expect(context.evaluateProjectedMovementOption).not.toHaveBeenCalled();
+    expect(getBotV3Decision(context.players[1], context).direction).not.toBeNull();
+    expect(context.evaluateProjectedMovementOption).toHaveBeenCalledOnce();
   });
 
   it("não ordena uma saída projetada que o evaluator autoritativo bloqueia", () => {
@@ -144,4 +144,166 @@ describe("segurança projetada do bot V3", () => {
     expect(getBotV3Decision(context.players[1], context).direction).toBeNull();
     expect(context.evaluateProjectedMovementOption).toHaveBeenCalledOnce();
   });
+
+  it("libera cedo quando só o corpo físico conserva egress da bomba sob a projeção", () => {
+    const context = threatenedProjectionContext();
+    context.bombs[0].fuseMs = 700;
+    context.bombs.push({
+      id: 2,
+      ownerId: 2,
+      tile: { x: context.players[1].tile.x - 1, y: context.players[1].tile.y },
+      fuseMs: 700,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [1],
+      flameRange: 1,
+    });
+    context.isPlayerOverlappingTile = (_player, tile) => tile.x === 1 && tile.y === 2;
+    context.canMovementOptionAdvance = (_position, option) => option.direction === undefined;
+
+    expect(getBotV3Decision(context.players[1], context)).toMatchObject({
+      direction: null,
+      placeBomb: false,
+      useSkill: true,
+      skillAction: "release",
+    });
+  });
+
+  it("não libera cedo quando a única saída física continua ameaçada", () => {
+    const context = threatenedProjectionContext();
+    context.dangerMap = new Map([
+      ["2,2", 700],
+      ["2,1", 0],
+      ["1,2", 0],
+      ["2,3", 0],
+      ["3,2", 0],
+    ]);
+    context.bombs.push({
+      id: 2,
+      ownerId: 2,
+      tile: { x: context.players[1].tile.x - 1, y: context.players[1].tile.y },
+      fuseMs: 700,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [1],
+      flameRange: 1,
+    });
+    context.isPlayerOverlappingTile = (_player, tile) => tile.x === 1 && tile.y === 2;
+    context.evaluateMovementOption = vi.fn((_player, direction) => ({ direction, physical: true }));
+    context.canMovementOptionAdvance = (_position, option) => option.physical === true
+      && option.direction === "left";
+
+    expect(getBotV3Decision(context.players[1], context).useSkill).not.toBe(true);
+  });
+
+  it("mantém a imunidade quando não há tempo físico para sair após a liberação", () => {
+    const context = threatenedProjectionContext();
+    context.bombs.push({
+      id: 2,
+      ownerId: 2,
+      tile: { x: context.players[1].tile.x - 1, y: context.players[1].tile.y },
+      fuseMs: 700,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [1],
+      flameRange: 1,
+    });
+    context.isPlayerOverlappingTile = (_player, tile) => tile.x === 1 && tile.y === 2;
+    context.canMovementOptionAdvance = (_position, option) => option.direction === undefined;
+
+    expect(getBotV3Decision(context.players[1], context).useSkill).not.toBe(true);
+  });
+
+  it("usa a única fuga física executável enquanto conserva egress da bomba", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.phase = "cooldown";
+    candidate.skill.projectedPosition = null;
+    context.bombs.push({
+      id: 2,
+      ownerId: 2,
+      tile: { x: candidate.tile.x - 1, y: candidate.tile.y },
+      fuseMs: 700,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [1],
+      flameRange: 1,
+    });
+    context.isPlayerOverlappingTile = (_player, tile) => tile.x === 1 && tile.y === 2;
+    context.evaluateMovementOption = vi.fn((_player, direction) => ({ direction }));
+    context.canMovementOptionAdvance = (_position, option) => option.direction === "left";
+
+    expect(getBotV3Decision(candidate, context).direction).toBe("left");
+  });
+
+  it("planeja a fuga através da bomba que o corpo ainda pode atravessar", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.phase = "cooldown";
+    candidate.skill.projectedPosition = null;
+    context.bombs = [{
+      id: 2,
+      ownerId: 2,
+      tile: { x: candidate.tile.x - 1, y: candidate.tile.y },
+      fuseMs: 700,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [1],
+      flameRange: 1,
+    }];
+    context.arena.solid = new Set(["2,1", "2,3", "3,2"]);
+    context.isPlayerOverlappingTile = (_player, tile) => tile.x === 1 && tile.y === 2;
+    context.evaluateMovementOption = vi.fn((_player, direction) => ({ direction }));
+    context.canMovementOptionAdvance = () => true;
+
+    expect(getBotV3Decision(candidate, context).direction).toBe("left");
+  });
+
+  it("só inicia o blink quando a chama prevista termina até a liberação", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.phase = "idle";
+    candidate.skill.projectedPosition = null;
+    context.bombs[0].fuseMs = 950;
+
+    expect(getBotV3Decision(candidate, context).useSkill).not.toBe(true);
+
+    context.bombs[0].fuseMs = 850;
+    expect(getBotV3Decision(candidate, context).useSkill).toBe(true);
+  });
+
+  it("conclui a fuga da própria bomba antes de voltar à perseguição", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.phase = "idle";
+    candidate.skill.projectedPosition = null;
+    context.bombs = [{
+      id: 2,
+      ownerId: 1,
+      tile: { x: 2, y: 1 },
+      fuseMs: 1_900,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [],
+      flameRange: 1,
+    }];
+    context.players[2].tile = { x: 1, y: 2 };
+    context.players[2].position = {
+      x: TILE_SIZE + TILE_SIZE / 2,
+      y: 2 * TILE_SIZE + TILE_SIZE / 2,
+    };
+    context.arena.solid = new Set(["2,3"]);
+    context.dangerMap = new Map([["2,2", 1_900]]);
+
+    expect(getBotV3Decision(candidate, context).direction).toBe("right");
+  });
+
+  it("não libera cedo sobre uma chama ativa que acaba antes do cast", () => {
+    const context = threatenedProjectionContext();
+    context.flames.push({
+      tile: { ...context.players[1].tile },
+      remainingMs: 500,
+      style: "normal",
+      ownerId: 1,
+    });
+    context.isPlayerOverlappingTile = () => true;
+    context.canMovementOptionAdvance = () => false;
+
+    expect(getBotV3Decision(context.players[1], context).useSkill).not.toBe(true);
+  });
+
 });

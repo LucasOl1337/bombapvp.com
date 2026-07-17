@@ -1,5 +1,6 @@
 import { tileKey } from "../Arenas/arena";
-import { BASE_MOVE_MS, MIN_MOVE_MS, SPEED_STEP_MS, TILE_SIZE } from "../PersonalConfig/config";
+import { BASE_MOVE_MS, FLAME_DURATION_MS, MIN_MOVE_MS, SPEED_STEP_MS, TILE_SIZE } from "../PersonalConfig/config";
+import { RANNI_SKILL_CHANNEL_MS } from "../Characters/CustomMechanics/ranni-skill";
 import type {
   BombState,
   Direction,
@@ -7,7 +8,7 @@ import type {
   PowerUpType,
   TileCoord,
 } from "../Gameplay/types";
-import type { BotContext, BotDecision } from "./bot-ai";
+import type { BotContext, BotDecision } from "./bot-contracts";
 
 export const BOT_V3_CHARACTER_INDEX = 0;
 
@@ -21,6 +22,7 @@ const DELTA: Record<Direction, TileCoord> = {
 const DANGER_REACTION_MS = 1_200;
 const ARRIVAL_MARGIN_MS = 220;
 const PROJECTED_MOVEMENT_STEP_MS = 1_000 / 60;
+const PHASE_COMMIT_WINDOW_MS = RANNI_SKILL_CHANNEL_MS - FLAME_DURATION_MS;
 
 type SearchNode = Readonly<{
   tile: TileCoord;
@@ -56,13 +58,21 @@ function inBounds(tile: TileCoord, context: BotContext): boolean {
     && tile.y < context.arena.config.grid.height;
 }
 
-function isOpen(tile: TileCoord, start: TileCoord, context: BotContext): boolean {
+function isOpen(tile: TileCoord, start: TileCoord, player: PlayerState, context: BotContext): boolean {
   const key = tileKey(tile.x, tile.y);
   if (!inBounds(tile, context) || context.arena.solid.has(key) || context.arena.breakable.has(key)) return false;
   return !context.bombs.some((bomb) => (
     bomb.tile.x === tile.x
     && bomb.tile.y === tile.y
     && (tile.x !== start.x || tile.y !== start.y)
+    && !(
+      context.isPlayerOverlappingTile(player, bomb.tile)
+      && (
+        player.skill.phase === "channeling"
+          ? player.skill.projectedBombEgressIds?.includes(bomb.id)
+          : bomb.bodyEgressPlayerIds?.includes(player.id)
+      )
+    )
   ));
 }
 
@@ -152,7 +162,7 @@ function search(
       const delta = DELTA[direction];
       const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
       const key = tileKey(tile.x, tile.y);
-      if (visited.has(key) || !isOpen(tile, start, context)) continue;
+      if (visited.has(key) || !isOpen(tile, start, player, context)) continue;
       const steps = node.steps + 1;
       const eta = threats.get(key);
       if (eta !== undefined && eta <= steps * stepMs + ARRIVAL_MARGIN_MS) continue;
@@ -170,7 +180,7 @@ function search(
 function openNeighborCount(tile: TileCoord, player: PlayerState, context: BotContext): number {
   return DIRECTIONS.reduce((count, direction) => {
     const delta = DELTA[direction];
-    return count + (isOpen({ x: tile.x + delta.x, y: tile.y + delta.y }, player.tile, context) ? 1 : 0);
+    return count + (isOpen({ x: tile.x + delta.x, y: tile.y + delta.y }, player.tile, player, context) ? 1 : 0);
   }, 0);
 }
 
@@ -205,17 +215,70 @@ function projectedEscapeDirection(
     position: { ...projectedPosition },
   };
   const projectedTileKey = tileKey(projectedPlayer.tile.x, projectedPlayer.tile.y);
-  const hasOwnedBombThreat = context.bombs.some((bomb) => (
-    bomb.ownerId === player.id
-    && bomb.fuseMs <= player.skill.channelRemainingMs + DANGER_REACTION_MS
-    && blastTiles(bomb, context).some((tile) => tileKey(tile.x, tile.y) === projectedTileKey)
-  ));
-  if (!hasOwnedBombThreat) return null;
+  const projectedDanger = threats.get(projectedTileKey);
+  if (projectedDanger === undefined || projectedDanger > player.skill.channelRemainingMs + DANGER_REACTION_MS) {
+    return null;
+  }
 
   const direction = escapeDirection(projectedPlayer, enemies, threats, context);
   if (!direction) return null;
   const option = context.evaluateProjectedMovementOption(projectedPlayer, direction, PROJECTED_MOVEMENT_STEP_MS);
   return context.canMovementOptionAdvance(projectedPosition, option) ? direction : null;
+}
+
+function isProjectionTrappedOnBomb(player: PlayerState, context: BotContext): boolean {
+  const projectedPosition = player.skill.projectedPosition;
+  if (!projectedPosition || (player.skill.projectedBombEgressIds?.length ?? 0) > 0) return false;
+  const projectedPlayer: PlayerState = {
+    ...player,
+    tile: {
+      x: Math.floor(projectedPosition.x / TILE_SIZE),
+      y: Math.floor(projectedPosition.y / TILE_SIZE),
+    },
+    position: { ...projectedPosition },
+  };
+  return context.bombs.some((bomb) => (
+    context.isPlayerOverlappingTile(projectedPlayer, bomb.tile)
+    && bomb.bodyEgressPlayerIds?.includes(player.id)
+  ));
+}
+
+function isProjectionOnActiveFlame(player: PlayerState, context: BotContext): boolean {
+  const projectedPosition = player.skill.projectedPosition;
+  if (!projectedPosition) return false;
+  const projectedPlayer: PlayerState = {
+    ...player,
+    tile: {
+      x: Math.floor(projectedPosition.x / TILE_SIZE),
+      y: Math.floor(projectedPosition.y / TILE_SIZE),
+    },
+    position: { ...projectedPosition },
+  };
+  return context.flames.some((flame) => (
+    flame.remainingMs > 0
+    && context.isPlayerOverlappingTile(projectedPlayer, flame.tile)
+  ));
+}
+
+function physicalBombEgressDirection(
+  player: PlayerState,
+  preferred: Direction | null,
+  context: BotContext,
+): Direction | null {
+  const hasBodyEgress = context.bombs.some((bomb) => (
+    context.isPlayerOverlappingTile(player, bomb.tile)
+    && bomb.bodyEgressPlayerIds?.includes(player.id)
+  ));
+  if (!hasBodyEgress) return null;
+
+  const candidates = [preferred, ...orderedDirections(player)]
+    .filter((direction, index, directions): direction is Direction => (
+      direction !== null && directions.indexOf(direction) === index
+    ));
+  return candidates.find((direction) => {
+    const option = context.evaluateMovementOption(player, direction, PROJECTED_MOVEMENT_STEP_MS);
+    return context.canMovementOptionAdvance(player.position, option);
+  }) ?? null;
 }
 
 function hasClearAttackLine(from: TileCoord, target: TileCoord, range: number, context: BotContext): boolean {
@@ -289,7 +352,7 @@ function adjacentBreakable(player: PlayerState, context: BotContext): boolean {
 }
 
 function canPlacePhaseBomb(player: PlayerState, target: PlayerState | null, context: BotContext): boolean {
-  if (player.spawnProtectionMs > 0 || player.activeBombs >= player.maxBombs || context.botBombCooldownMs > 0) return false;
+  if (player.spawnProtectionMs > 0 || player.activeBombs >= player.maxBombs || context.roomBombPlacementThrottleMs > 0) return false;
   if (context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)) return false;
   return adjacentBreakable(player, context)
     || Boolean(target && (
@@ -326,13 +389,41 @@ function canRemoteStrike(player: PlayerState, target: PlayerState | null, contex
 export function getBotV3Decision(player: PlayerState, context: BotContext): BotDecision {
   const enemies = activeEnemies(player, context);
   const target = enemies[0] ?? null;
-  const threats = buildThreatMap(context);
+  const threats = context.dangerMap ?? buildThreatMap(context);
   const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
   const remoteThreat = hasRemoteBombThreat(player, context);
 
   if (player.skill.phase === "channeling") {
+    const direction = projectedEscapeDirection(player, enemies, threats, context);
+    const plannedPhysicalReleaseDirection = escapeDirection(player, enemies, threats, context);
+    const executablePhysicalReleaseDirection = physicalBombEgressDirection(
+      player,
+      plannedPhysicalReleaseDirection,
+      context,
+    );
+    const physicalReleaseDirection = executablePhysicalReleaseDirection === plannedPhysicalReleaseDirection
+      ? plannedPhysicalReleaseDirection
+      : null;
+    const hasPhysicalReleaseBudget = currentDanger === undefined
+      || currentDanger > moveDuration(player) + ARRIVAL_MARGIN_MS;
+    if (
+      direction === null
+      && player.skill.castElapsedMs > 0
+      && physicalReleaseDirection !== null
+      && hasPhysicalReleaseBudget
+      && !isProjectionOnActiveFlame(player, context)
+      && isProjectionTrappedOnBomb(player, context)
+    ) {
+      return {
+        direction: null,
+        placeBomb: false,
+        useSkill: true,
+        skillAction: "release",
+        targetId: target?.id,
+      };
+    }
     return {
-      direction: projectedEscapeDirection(player, enemies, threats, context),
+      direction,
       placeBomb: false,
       targetId: target?.id,
     };
@@ -342,10 +433,16 @@ export function getBotV3Decision(player: PlayerState, context: BotContext): BotD
     return { direction: null, placeBomb: false, targetId: target?.id };
   }
 
-  const threatened = currentDanger !== undefined && currentDanger <= DANGER_REACTION_MS;
+  const physicalEscape = escapeDirection(player, enemies, threats, context);
+  const bodyEgressDirection = physicalBombEgressDirection(player, physicalEscape, context);
+  if (bodyEgressDirection) {
+    return { direction: bodyEgressDirection, placeBomb: false, targetId: target?.id };
+  }
+
+  const phaseWindowThreat = currentDanger !== undefined && currentDanger <= PHASE_COMMIT_WINDOW_MS;
   const shouldPhase = player.skill.id === "ranni-ice-blink"
     && player.skill.phase === "idle"
-    && (threatened || remoteThreat);
+    && (phaseWindowThreat || remoteThreat);
   if (shouldPhase) {
     return {
       direction: null,
@@ -355,8 +452,8 @@ export function getBotV3Decision(player: PlayerState, context: BotContext): BotD
     };
   }
 
-  if (threatened) {
-    return { direction: escapeDirection(player, enemies, threats, context), placeBomb: false };
+  if (currentDanger !== undefined) {
+    return { direction: physicalEscape, placeBomb: false };
   }
 
   if (player.skill.phase === "cooldown") {

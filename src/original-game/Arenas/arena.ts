@@ -6,9 +6,9 @@ import type {
   ArenaState,
   ArenaValidationIssue,
   PowerUpState,
-  PowerUpType,
   TileCoord,
 } from "../Gameplay/types";
+import { getPowerUpDropPool } from "../Gameplay/powerups";
 import {
   GRID_HEIGHT,
   GRID_WIDTH,
@@ -17,6 +17,9 @@ import {
 } from "../PersonalConfig/config";
 import { ALL_PLAYER_IDS } from "../Gameplay/types";
 import { DEFAULT_ARENA_THEME_ID } from "./arena-theme-library";
+import { parseTileKey, tileKey } from "../Gameplay/tile-key";
+
+export { parseTileKey, tileKey } from "../Gameplay/tile-key";
 
 const BREAKABLE_POWERUP_DROP_RATE = 0.65;
 const MIN_ARENA_WIDTH = 7;
@@ -31,15 +34,6 @@ export interface ArenaValidationResult {
 
 export interface ActiveArenaResponse {
   arena: ArenaDefinition;
-}
-
-export function tileKey(x: number, y: number): string {
-  return `${x},${y}`;
-}
-
-export function parseTileKey(key: string): TileCoord {
-  const [xText, yText] = key.split(",");
-  return { x: Number(xText), y: Number(yText) };
 }
 
 export function createDefaultArenaDefinition(status: ArenaDefinitionStatus = "active"): ArenaDefinition {
@@ -331,33 +325,8 @@ function createDefaultBreakableTiles(width: number, height: number, solidKeys: s
 }
 
 function createPowerUpsFromBreakables(breakable: Set<string>, config: ArenaRuntimeConfig): PowerUpState[] {
-  // Stable weighted state: bomb-up and speed-up each have 5 slots; remote-up has 2. Keep slot order deterministic.
-  const dropPool: readonly PowerUpType[] = [
-    "speed-up",
-    "speed-up",
-    "remote-up",
-    "bomb-up",
-    "bomb-up",
-    "flame-up",
-    "flame-up",
-    "remote-up",
-    "shield-up",
-    "short-fuse-up",
-    "kick-up",
-    "kick-up",
-    "speed-up",
-    "bomb-up",
-    "speed-up",
-    "speed-up",
-    "bomb-up",
-    "bomb-up",
-    "flame-up",
-    "flame-up",
-    "shield-up",
-    "short-fuse-up",
-    "bomb-pass-up",
-    "kick-up",
-  ];
+  // Stable weighted state stays ordered by its canonical catalog slots.
+  const dropPool = getPowerUpDropPool();
   const powerUps: PowerUpState[] = [];
   const distributionSeed = config.randomSeed ?? config.version;
   const breakableKeys = [...breakable].sort();

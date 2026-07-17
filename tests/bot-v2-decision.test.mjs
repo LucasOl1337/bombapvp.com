@@ -62,7 +62,7 @@ function trappedContactContext() {
     suddenDeathIndex: 0,
     suddenDeathPath: [],
     suddenDeathClosureEffects: [],
-    botBombCooldownMs: 0,
+    roomBombPlacementThrottleMs: 0,
     botCommittedDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseFrames: { 1: 0, 2: 0, 3: 0, 4: 0 },

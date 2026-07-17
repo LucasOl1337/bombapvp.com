@@ -4,9 +4,8 @@ import { TILE_SIZE } from "../PersonalConfig/config";
 import {
   canBotSafelyPlaceBomb,
   getBotDecision,
-  type BotContext,
-  type BotDecision,
 } from "./bot-ai";
+import type { BotContext, BotDecision } from "./bot-contracts";
 
 export const BOT_V2_CHARACTER_INDEX = 1;
 

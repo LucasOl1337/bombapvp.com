@@ -103,7 +103,7 @@ function context({
     suddenDeathIndex,
     suddenDeathPath,
     suddenDeathClosureEffects,
-    botBombCooldownMs: 0,
+    roomBombPlacementThrottleMs: 0,
     botCommittedDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseFrames: { 1: 0, 2: 0, 3: 0, 4: 0 },
@@ -164,33 +164,6 @@ function projectedBombEgressDecision({
       && option.direction === projectedLastMoveDirection
       && option.egressIds.includes(22)
     ),
-  }));
-}
-
-function controlledPocketDecision({
-  pingoOverrides = {},
-  enemyTile = { x: 2, y: 2 },
-  enemyOverrides = {},
-  solid = [{ x: 1, y: 1 }, { x: 2, y: 0 }, { x: 3, y: 1 }],
-} = {}) {
-  const pingo = player(1, 2, 2, {
-    skill: {
-      id: "ranni-ice-blink",
-      phase: "cooldown",
-      channelRemainingMs: 0,
-      cooldownRemainingMs: 5_000,
-      castElapsedMs: 0,
-      projectedPosition: null,
-      projectedLastMoveDirection: null,
-      projectedBombEgressIds: [],
-    },
-    ...pingoOverrides,
-  });
-  const enemy = player(2, enemyTile.x, enemyTile.y, enemyOverrides);
-  return getBotPingoDecision(pingo, context({
-    players: { 1: pingo, 2: enemy },
-    solid,
-    powerUps: [{ tile: { x: 2, y: 1 }, revealed: true, collected: false }],
   }));
 }
 
@@ -1031,108 +1004,6 @@ describe("política Pingo", () => {
     }));
 
     expect(decision).toMatchObject({ direction: "right", placeBomb: false });
-  });
-
-  it("evita entrar em pocket de uma saída controlada pelo rival enquanto a Ranni recarrega", () => {
-    const decision = controlledPocketDecision();
-
-    expect(decision).toMatchObject({ direction: "left", placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a entrada quando o destino tem duas saídas corporais", () => {
-    const decision = controlledPocketDecision({
-      solid: [{ x: 1, y: 1 }, { x: 2, y: 0 }],
-    });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a entrada quando o rival distante não alcança a saída antes da retirada", () => {
-    const decision = controlledPocketDecision({ enemyTile: { x: 6, y: 4 } });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it("evita o pocket quando o rival alcança a saída antes da retirada", () => {
-    const decision = controlledPocketDecision({ enemyTile: { x: 1, y: 3 } });
-
-    expect(decision).toMatchObject({ direction: "left", placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a entrada quando o rival não pode plantar outra bomba", () => {
-    const decision = controlledPocketDecision({ enemyOverrides: { activeBombs: 1 } });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it.each([
-    ["inativo", { active: false }],
-    ["eliminado", { alive: false }],
-  ])("mantém a entrada quando o rival está %s", (_label, enemyOverrides) => {
-    const decision = controlledPocketDecision({ enemyOverrides });
-
-    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a entrada quando a Ranni está disponível", () => {
-    const decision = controlledPocketDecision({
-      enemyTile: { x: 1, y: 3 },
-      pingoOverrides: {
-        skill: {
-          id: "ranni-ice-blink",
-          phase: "idle",
-          channelRemainingMs: 0,
-          cooldownRemainingMs: 0,
-          castElapsedMs: 0,
-          projectedPosition: null,
-          projectedLastMoveDirection: null,
-          projectedBombEgressIds: [],
-        },
-      },
-    });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a entrada quando o destino não é pocket", () => {
-    const decision = controlledPocketDecision({ solid: [] });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it("mantém a decisão-base quando não existe alternativa executável fora do pocket", () => {
-    const decision = controlledPocketDecision({
-      solid: [
-        { x: 1, y: 1 }, { x: 2, y: 0 }, { x: 3, y: 1 },
-        { x: 1, y: 2 }, { x: 2, y: 3 }, { x: 3, y: 2 },
-      ],
-    });
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
-  });
-
-  it("conta o wrap do portal como uma segunda saída corporal real", () => {
-    const pingo = player(1, 2, 1, {
-      skill: {
-        id: "ranni-ice-blink",
-        phase: "cooldown",
-        channelRemainingMs: 0,
-        cooldownRemainingMs: 5_000,
-        castElapsedMs: 0,
-        projectedPosition: null,
-        projectedLastMoveDirection: null,
-        projectedBombEgressIds: [],
-      },
-    });
-    const enemy = player(2, 2, 1);
-    const decision = getBotPingoDecision(pingo, context({
-      players: { 1: pingo, 2: enemy },
-      solid: [{ x: 1, y: 0 }, { x: 3, y: 0 }],
-      wrapPortals: [{ x: 2, y: 0 }],
-      powerUps: [{ tile: { x: 2, y: 0 }, revealed: true, collected: false }],
-    }));
-
-    expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: false });
   });
 
   it("avança até uma fronteira destrutível quando as caixas isolam o adversário", () => {

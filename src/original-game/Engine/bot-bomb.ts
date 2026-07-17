@@ -13,7 +13,7 @@ import type {
   PowerUpType,
   TileCoord,
 } from "../Gameplay/types";
-import type { BotContext, BotDecision } from "./bot-ai";
+import type { BotContext, BotDecision } from "./bot-contracts";
 
 export const BOMB_CHARACTER_INDEX = 0;
 
@@ -278,7 +278,7 @@ function attackBombEscapeDirection(
     || target.spawnProtectionMs > 0
     || player.activeBombs >= player.maxBombs
     || !hasRanniSafetyWindowForNewBomb(player)
-    || context.botBombCooldownMs > 0
+    || context.roomBombPlacementThrottleMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
   ) return null;
 
@@ -305,7 +305,7 @@ function breakableBombEscapeDirection(
     player.spawnProtectionMs > 0
     || player.activeBombs >= player.maxBombs
     || !hasRanniSafetyWindowForNewBomb(player)
-    || context.botBombCooldownMs > 0
+    || context.roomBombPlacementThrottleMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
   ) return null;
   const adjacentBreakable = DIRECTIONS.some((direction) => {
@@ -419,9 +419,54 @@ function overlappingEnemyExitDirection(
     ? [dx >= 0 ? "right" : "left", dy >= 0 ? "down" : "up"]
     : [dy >= 0 ? "down" : "up", dx >= 0 ? "right" : "left"];
   return preferred.find((direction) => {
+    const destination = adjacentTile(player.tile, direction, context);
+    if (context.flames.some((flame) => (
+      flame.remainingMs > 0
+      && flame.ownerId === player.id
+      && flame.tile.x === destination.x
+      && flame.tile.y === destination.y
+    ))) {
+      return false;
+    }
     const option = context.evaluateMovementOption(player, direction, 1_000 / 60);
     return context.canMovementOptionAdvance(player.position, option);
   }) ?? null;
+}
+
+type CommittedOwnFlameEscape = Readonly<
+  | { hazard: false }
+  | { hazard: true; direction: Direction | null }
+>;
+
+function committedOwnFlameEscape(
+  player: PlayerState,
+  context: BotContext,
+): CommittedOwnFlameEscape {
+  const committedDirection = context.botCommittedDirection[player.id];
+  if (!committedDirection) return { hazard: false };
+  const committedDestination = adjacentTile(player.tile, committedDirection, context);
+  const committedIntoOwnFlame = context.flames.some((flame) => (
+    flame.remainingMs > 0
+    && flame.ownerId === player.id
+    && flame.tile.x === committedDestination.x
+    && flame.tile.y === committedDestination.y
+  ));
+  if (!committedIntoOwnFlame) return { hazard: false };
+
+  const direction = DIRECTIONS.find((candidateDirection) => {
+    if (candidateDirection === committedDirection) return false;
+    const destination = adjacentTile(player.tile, candidateDirection, context);
+    if (context.flames.some((flame) => (
+      flame.remainingMs > 0
+      && flame.tile.x === destination.x
+      && flame.tile.y === destination.y
+    ))) {
+      return false;
+    }
+    const option = context.evaluateMovementOption(player, candidateDirection, 1_000 / 60);
+    return context.canMovementOptionAdvance(player.position, option);
+  }) ?? null;
+  return { hazard: true, direction };
 }
 
 function canRemoteFinish(player: PlayerState, target: PlayerState, context: BotContext): boolean {
@@ -638,6 +683,13 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     ? attackBombEscapeDirection(player, target, enemies, context)
     : null;
   if (target && attackEscapeDirection) {
+    const committedFlameEscape = committedOwnFlameEscape(player, context);
+    if (committedFlameEscape.hazard) {
+      return {
+        direction: committedFlameEscape.direction,
+        placeBomb: false,
+      };
+    }
     return {
       direction: attackEscapeDirection,
       placeBomb: true,

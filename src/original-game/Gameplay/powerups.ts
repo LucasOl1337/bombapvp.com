@@ -9,8 +9,18 @@ import {
   MAX_SPEED_LEVEL,
 } from "../PersonalConfig/config";
 import type { MenuPlayerId, PlayerState, PowerUpType } from "./types";
+import { deepFreeze } from "../../shared/deep-freeze";
 
 export type SkillPowerUpType = PowerUpType;
+export type PowerUpLevelField =
+  | "maxBombs"
+  | "flameRange"
+  | "speedLevel"
+  | "remoteLevel"
+  | "shieldCharges"
+  | "bombPassLevel"
+  | "kickLevel"
+  | "shortFuseLevel";
 const MAX_SHORT_FUSE_LEVEL = 2;
 const SHORT_FUSE_STEP_MS = 400;
 const MIN_SHORT_FUSE_MS = 1_200;
@@ -20,69 +30,141 @@ export interface PowerUpDefinition {
   readonly label: string;
   readonly shortLabel: string;
   readonly tint: string;
+  readonly levelField: PowerUpLevelField;
   readonly maxLevel: number;
+  readonly drop: Readonly<{
+    poolSlots: readonly number[];
+    demolitionComboEligible: boolean;
+  }>;
+  readonly asset: Readonly<{
+    path: string;
+  }>;
 }
 
-const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = {
+const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = deepFreeze({
   "bomb-up": {
     type: "bomb-up",
     label: "Bomb Capacity",
     shortLabel: "B",
     tint: "#f4d35e",
+    levelField: "maxBombs",
     maxLevel: MAX_BOMBS,
+    drop: {
+      poolSlots: [3, 4, 13, 16, 17],
+      demolitionComboEligible: true,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-bomb.png",
+    },
   },
   "flame-up": {
     type: "flame-up",
     label: "Flame Range",
     shortLabel: "F",
     tint: "#ff7d66",
+    levelField: "flameRange",
     maxLevel: MAX_RANGE,
+    drop: {
+      poolSlots: [5, 6, 18, 19],
+      demolitionComboEligible: true,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-flame.png",
+    },
   },
   "speed-up": {
     type: "speed-up",
     label: "Move Speed",
     shortLabel: "S",
     tint: "#7cffb2",
+    levelField: "speedLevel",
     maxLevel: MAX_SPEED_LEVEL,
+    drop: {
+      poolSlots: [0, 1, 12, 14, 15],
+      demolitionComboEligible: true,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-speed-rastro-relampago.png",
+    },
   },
   "remote-up": {
     type: "remote-up",
     label: "Remote Detonation",
     shortLabel: "RD",
     tint: "#8cd6ff",
+    levelField: "remoteLevel",
     maxLevel: 1,
+    drop: {
+      poolSlots: [2, 7],
+      demolitionComboEligible: false,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-remote.png",
+    },
   },
   "shield-up": {
     type: "shield-up",
     label: "Shield Charge",
     shortLabel: "SH",
     tint: "#bba7ff",
+    levelField: "shieldCharges",
     maxLevel: MAX_SHIELD_CHARGES,
+    drop: {
+      poolSlots: [8, 20],
+      demolitionComboEligible: true,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-shield.png",
+    },
   },
   "bomb-pass-up": {
     type: "bomb-pass-up",
     label: "Bomb Pass",
     shortLabel: "BP",
     tint: "#f7a8ff",
+    levelField: "bombPassLevel",
     maxLevel: MAX_BOMB_PASS_LEVEL,
+    drop: {
+      poolSlots: [22],
+      demolitionComboEligible: false,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-bomb-pass.png",
+    },
   },
   "kick-up": {
     type: "kick-up",
     label: "Bomb Kick",
     shortLabel: "BK",
     tint: "#ffbc73",
+    levelField: "kickLevel",
     maxLevel: MAX_KICK_LEVEL,
+    drop: {
+      poolSlots: [10, 11, 23],
+      demolitionComboEligible: false,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-kick.png",
+    },
   },
   "short-fuse-up": {
     type: "short-fuse-up",
     label: "Short Fuse",
     shortLabel: "SF",
     tint: "#ff5eea",
+    levelField: "shortFuseLevel",
     maxLevel: MAX_SHORT_FUSE_LEVEL,
+    drop: {
+      poolSlots: [9, 21],
+      demolitionComboEligible: true,
+    },
+    asset: {
+      path: "/Assets/UiLayouts/power-short-fuse-v2.png",
+    },
   },
-};
+});
 
-export const SKILL_POWER_UP_TYPES: readonly SkillPowerUpType[] = [
+export const POWER_UP_TYPES: readonly PowerUpType[] = deepFreeze([
   "bomb-up",
   "flame-up",
   "speed-up",
@@ -91,7 +173,9 @@ export const SKILL_POWER_UP_TYPES: readonly SkillPowerUpType[] = [
   "bomb-pass-up",
   "kick-up",
   "short-fuse-up",
-];
+]);
+
+export const SKILL_POWER_UP_TYPES: readonly SkillPowerUpType[] = POWER_UP_TYPES;
 
 const CODE_TO_LABEL: Record<string, string> = {
   ArrowUp: "UP",
@@ -107,29 +191,31 @@ export function getPowerUpDefinition(type: PowerUpType): PowerUpDefinition {
   return POWER_UP_DEFINITIONS[type];
 }
 
-export function getPowerUpLevel(player: PlayerState, type: PowerUpType): number {
-  switch (type) {
-    case "bomb-up":
-      return player.maxBombs;
-    case "flame-up":
-      return player.flameRange;
-    case "speed-up":
-      return player.speedLevel;
-    case "remote-up":
-      return player.remoteLevel;
-    case "shield-up":
-      return player.shieldCharges;
-    case "bomb-pass-up":
-      return player.bombPassLevel;
-    case "kick-up":
-      return player.kickLevel;
-    case "short-fuse-up":
-      return player.shortFuseLevel;
-    default: {
-      const neverType: never = type;
-      return neverType;
+export function listPowerUpDefinitions(): readonly PowerUpDefinition[] {
+  return POWER_UP_TYPES.map(getPowerUpDefinition);
+}
+
+export function getPowerUpDropPool(): readonly PowerUpType[] {
+  const slots = new Map<number, PowerUpType>();
+  for (const definition of listPowerUpDefinitions()) {
+    for (const slot of definition.drop.poolSlots) {
+      slots.set(slot, definition.type);
     }
   }
+
+  return [...slots.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, type]) => type);
+}
+
+export function getDemolitionComboDropTypes(): readonly PowerUpType[] {
+  return listPowerUpDefinitions()
+    .filter((definition) => definition.drop.demolitionComboEligible)
+    .map((definition) => definition.type);
+}
+
+export function getPowerUpLevel(player: PlayerState, type: PowerUpType): number {
+  return player[getPowerUpDefinition(type).levelField];
 }
 
 export function isPowerUpMaxed(player: PlayerState, type: PowerUpType): boolean {
@@ -137,36 +223,9 @@ export function isPowerUpMaxed(player: PlayerState, type: PowerUpType): boolean 
 }
 
 export function applyPowerUpToPlayer(player: PlayerState, type: PowerUpType): void {
-  switch (type) {
-    case "bomb-up":
-      player.maxBombs = Math.min(MAX_BOMBS, player.maxBombs + 1);
-      break;
-    case "flame-up":
-      player.flameRange = Math.min(MAX_RANGE, player.flameRange + 1);
-      break;
-    case "speed-up":
-      player.speedLevel = Math.min(MAX_SPEED_LEVEL, player.speedLevel + 1);
-      break;
-    case "remote-up":
-      player.remoteLevel = 1;
-      break;
-    case "shield-up":
-      player.shieldCharges = Math.min(MAX_SHIELD_CHARGES, player.shieldCharges + 1);
-      break;
-    case "bomb-pass-up":
-      player.bombPassLevel = MAX_BOMB_PASS_LEVEL;
-      break;
-    case "kick-up":
-      player.kickLevel = MAX_KICK_LEVEL;
-      break;
-    case "short-fuse-up":
-      player.shortFuseLevel = Math.min(MAX_SHORT_FUSE_LEVEL, player.shortFuseLevel + 1);
-      break;
-    default: {
-      const neverType: never = type;
-      throw new Error(`Unsupported power-up type: ${neverType as string}`);
-    }
-  }
+  const definition = getPowerUpDefinition(type);
+  const levelField = definition.levelField;
+  player[levelField] = Math.min(definition.maxLevel, player[levelField] + 1);
 }
 
 export function getPowerUpPriorityScore(player: PlayerState, type: PowerUpType): number {

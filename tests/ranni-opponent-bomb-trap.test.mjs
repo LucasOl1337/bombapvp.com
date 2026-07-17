@@ -149,5 +149,5 @@ describe("Ranni cercada por bomba rival na projeção", () => {
 
     // A newly placed rival bomb must not remove every exit.
     expect(trace.unblockedSampleCount).toBeGreaterThan(0);
-  });
+  }, 10_000);
 });

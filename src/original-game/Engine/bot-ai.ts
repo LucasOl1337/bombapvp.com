@@ -5,15 +5,14 @@ import {
   TILE_SIZE,
 } from "../PersonalConfig/config";
 import type {
-  ArenaState,
   BombState,
   Direction,
-  FlameState,
   PixelCoord,
   PlayerId,
   PlayerState,
   TileCoord,
 } from "../Gameplay/types";
+import type { BotContext, BotDecision } from "./bot-contracts";
 import { tileKey } from "../Arenas/arena";
 import { getPowerUpPriorityScore, isPowerUpMaxed } from "../Gameplay/powerups";
 import {
@@ -51,50 +50,7 @@ const directionDelta: Record<Direction, TileCoord> = {
   right: { x: 1, y: 0 },
 };
 
-/**
- * BotDecision represents the action a bot should take
- */
-export interface BotDecision {
-  direction: Direction | null;
-  placeBomb: boolean;
-  detonate?: boolean;
-  useSkill?: boolean;
-  skillHeld?: boolean;
-  skillAction?: "start" | "hold" | "release" | "none";
-  requestId?: number;
-  microActionIndex?: number;
-  targetId?: PlayerId;
-  intent?: "remote-detonation" | "bomb-attack" | "attack-position" | "chase-enemy";
-}
-
-/**
- * BotContext provides all the game state information that bot AI needs
- */
-export interface BotContext {
-  players: Record<PlayerId, PlayerState>;
-  activePlayerIds: PlayerId[];
-  bombs: BombState[];
-  flames: FlameState[];
-  arena: ArenaState;
-  suddenDeathActive: boolean;
-  suddenDeathTickMs: number;
-  suddenDeathIndex: number;
-  suddenDeathPath: TileCoord[];
-  suddenDeathClosureEffects: Array<{ tile: TileCoord; elapsedMs: number; impacted: boolean }>;
-  botBombCooldownMs: number;
-  botCommittedDirection: Record<PlayerId, Direction | null>;
-  botPendingReverseDirection: Record<PlayerId, Direction | null>;
-  botPendingReverseFrames: Record<PlayerId, number>;
-  dangerMap?: Map<string, number>;
-  // Callback functions for complex GameApp operations
-  canOccupyPosition: (position: PixelCoord, tile: TileCoord) => boolean;
-  evaluateMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
-  evaluateProjectedMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
-  projectKillerBeeDashTarget: (player: PlayerState, direction: Direction) => PixelCoord;
-  canMovementOptionAdvance: (position: PixelCoord, movementOption: any) => boolean;
-  areOppositeDirections: (a: Direction, b: Direction) => boolean;
-  isPlayerOverlappingTile: (player: PlayerState, tile: TileCoord) => boolean;
-}
+export type { BotContext, BotDecision } from "./bot-contracts";
 
 /**
  * Utility: Get tile coordinates from a pixel position
@@ -627,7 +583,7 @@ function canBotPlaceBombAtTile(
   if (player.activeBombs >= player.maxBombs) {
     return false;
   }
-  if (respectCooldown && context.botBombCooldownMs > 0) {
+  if (respectCooldown && context.roomBombPlacementThrottleMs > 0) {
     return false;
   }
   if (context.bombs.some((bomb) => bomb.tile.x === bombTile.x && bomb.tile.y === bombTile.y)) {

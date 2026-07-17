@@ -14,7 +14,11 @@
     "dev:cloudflare": "npm run build && wrangler dev",
     "lab:broker": "powershell -ExecutionPolicy Bypass -File scripts/start-lab-broker.ps1",
     "lab:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-lab-tunnel.ps1",
-    "test": "vitest run --environment happy-dom",
+    "test": "npm run test:full",
+    "test:contracts": "vitest run --project=contracts-node",
+    "test:ui": "vitest run --project=contracts-ui",
+    "test:gates": "vitest run --project=gates-node --no-file-parallelism",
+    "test:full": "npm run test:contracts && npm run test:ui && npm run test:gates",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.original-game.json",
     "check": "npm run typecheck && npm run test && npm run build"
   },

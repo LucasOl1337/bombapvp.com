@@ -13,7 +13,8 @@ import { BOMB_CHARACTER_INDEX, getBombDecision } from "./bot-bomb";
 import { getBotPingoDecision } from "./bot-pingo";
 import { BOT_V2_CHARACTER_INDEX, getBotV2Decision } from "./bot-v2";
 import { BOT_V3_CHARACTER_INDEX, getBotV3Decision } from "./bot-v3";
-import type { BotDecisionPolicy } from "./game-app";
+import type { BotDecisionPolicy } from "./bot-contracts";
+import type { OfflineLaunchRequest } from "../../matches/launch-request";
 
 export type { LocalBotId } from "./bot-catalog";
 
@@ -127,15 +128,14 @@ export type OfflineBotMatchSetup = Readonly<{
 }>;
 
 export function createOfflineBotMatchSetup(
-  mode: OfflineBotMode,
-  params: URLSearchParams,
+  request: OfflineLaunchRequest,
 ): OfflineBotMatchSetup {
-  const config = OFFLINE_BOT_MODE_CONFIG[mode];
-  const requestedBot = getLocalBotById(params.get("bot"));
+  const config = OFFLINE_BOT_MODE_CONFIG[request.mode];
+  const requestedBot = getLocalBotById(request.bot);
   const fallbackBot = getLocalBotById(config.defaultBotId);
   if (!fallbackBot) throw new Error("local_bot_default_missing");
   const bot = requestedBot ?? fallbackBot;
-  const preserveNativeDefault = config.preserveNativeDefault && requestedBot === null;
+  const preserveNativeDefault = config.preserveNativeDefault && request.botSelection === "default";
   const assignments = preserveNativeDefault
     ? createLocalBotAssignments([])
     : createLocalBotAssignments(config.playerIds.map((playerId) => ({ playerId, bot })));

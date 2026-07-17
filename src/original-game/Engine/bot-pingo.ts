@@ -11,7 +11,7 @@ import type {
   TileCoord,
 } from "../Gameplay/types";
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
-import type { BotContext, BotDecision } from "./bot-ai";
+import type { BotContext, BotDecision } from "./bot-contracts";
 import { SUDDEN_DEATH_FALL_MS, SUDDEN_DEATH_TICK_MS } from "./danger-map";
 
 const ESCAPE_BUFFER_MS = 220;
@@ -222,7 +222,7 @@ function ownBombEscapeDirection(player: PlayerState, context: BotContext): Direc
 }
 
 function bombEscapeDirection(player: PlayerState, context: BotContext): Direction | null {
-  if (context.botBombCooldownMs > 0
+  if (context.roomBombPlacementThrottleMs > 0
     || player.activeBombs >= player.maxBombs
     || (player.skill.id === "ranni-ice-blink" && player.skill.phase !== "idle")
     || context.bombs.some((bomb) => key(bomb.tile) === key(player.tile))
@@ -309,138 +309,6 @@ function reachableTerrainTiles(player: PlayerState, context: BotContext): Readon
   return visited;
 }
 
-function realBodyExitsFrom(
-  player: PlayerState,
-  tile: TileCoord,
-  context: BotContext,
-): TileCoord[] {
-  const position = {
-    x: tile.x * TILE_SIZE + TILE_SIZE / 2,
-    y: tile.y * TILE_SIZE + TILE_SIZE / 2,
-  };
-  const centeredPlayer: PlayerState = { ...player, tile, position };
-  const exits = new Map<string, TileCoord>();
-  for (const step of steps) {
-    const exit = adjacentTile(tile, step, context);
-    const exitId = key(exit);
-    if (exits.has(exitId) || !isWalkable(exit, context)) {
-      continue;
-    }
-    const option = context.evaluateMovementOption(
-      centeredPlayer,
-      step.direction,
-      moveDurationMs(centeredPlayer),
-    );
-    if (context.canMovementOptionAdvance(position, option)) {
-      exits.set(exitId, exit);
-    }
-  }
-  return [...exits.values()];
-}
-
-function walkableDistance(
-  start: TileCoord,
-  target: TileCoord,
-  context: BotContext,
-  maxDistance: number,
-): number {
-  if (key(start) === key(target)) {
-    return 0;
-  }
-  const queue: Array<Readonly<{ tile: TileCoord; distance: number }>> = [
-    { tile: start, distance: 0 },
-  ];
-  const visited = new Set([key(start)]);
-  for (let cursor = 0; cursor < queue.length; cursor += 1) {
-    const current = queue[cursor];
-    if (current.distance >= maxDistance) {
-      continue;
-    }
-    for (const step of steps) {
-      const tile = adjacentTile(current.tile, step, context);
-      const tileId = key(tile);
-      if (visited.has(tileId) || !isWalkable(tile, context)) {
-        continue;
-      }
-      const nextDistance = current.distance + 1;
-      if (tileId === key(target)) {
-        return nextDistance;
-      }
-      visited.add(tileId);
-      queue.push({ tile, distance: nextDistance });
-    }
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-function isControlledPocketEntry(
-  player: PlayerState,
-  direction: Direction,
-  context: BotContext,
-): boolean {
-  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase !== "cooldown") {
-    return false;
-  }
-  const step = steps.find((candidate) => candidate.direction === direction);
-  if (!step || !canDirectionAdvance(player, player.position, direction, context)) {
-    return false;
-  }
-  const destination = adjacentTile(player.tile, step, context);
-  if (!isWalkable(destination, context)) {
-    return false;
-  }
-  const exits = realBodyExitsFrom(player, destination, context);
-  if (exits.length !== 1) {
-    return false;
-  }
-  const exit = exits[0];
-  const retreatMs = moveDurationMs(player) * 2;
-  return context.activePlayerIds.some((playerId) => {
-    const opponent = context.players[playerId];
-    if (playerId === player.id
-      || !opponent.active
-      || !opponent.alive
-      || opponent.activeBombs >= opponent.maxBombs) {
-      return false;
-    }
-    const opponentMoveMs = moveDurationMs(opponent);
-    const maxControlSteps = Math.floor(retreatMs / opponentMoveMs);
-    return Number.isFinite(walkableDistance(
-      opponent.tile,
-      exit,
-      context,
-      maxControlSteps,
-    ));
-  });
-}
-
-function avoidControlledPocketEntry(
-  player: PlayerState,
-  desired: Direction | null,
-  context: BotContext,
-  threatArrival: ReadonlyMap<string, number>,
-): Direction | null {
-  if (desired === null || !isControlledPocketEntry(player, desired, context)) {
-    return desired;
-  }
-  const moveMs = moveDurationMs(player);
-  for (const step of steps) {
-    if (step.direction === desired) {
-      continue;
-    }
-    const tile = adjacentTile(player.tile, step, context);
-    const arrival = threatArrival.get(key(tile)) ?? Number.POSITIVE_INFINITY;
-    if (!isWalkable(tile, context)
-      || arrival <= moveMs + ESCAPE_BUFFER_MS
-      || !canDirectionAdvance(player, player.position, step.direction, context)
-      || isControlledPocketEntry(player, step.direction, context)) {
-      continue;
-    }
-    return step.direction;
-  }
-  return desired;
-}
-
 function strategicDirection(
   player: PlayerState,
   context: BotContext,
@@ -490,7 +358,7 @@ function strategicDirection(
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const current = queue[cursor];
     if (isGoal(current.tile)) {
-      return avoidControlledPocketEntry(player, current.first, context, threatArrival);
+      return current.first;
     }
     for (const step of steps) {
       const tile = { x: current.tile.x + step.dx, y: current.tile.y + step.dy };

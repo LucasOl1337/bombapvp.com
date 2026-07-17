@@ -2,16 +2,18 @@ import {
   LOCAL_BOT_CATALOG,
   type LocalBotMetadata,
 } from "../original-game/Engine/bot-catalog.ts";
+import {
+  listCharacterPresentations,
+  type CharacterId as CatalogCharacterId,
+  type CharacterLocale,
+  type CharacterPresentation,
+} from "../characters/catalog.ts";
 
-export type Locale = "pt-BR" | "en";
+export type Locale = CharacterLocale;
 
 export type ExperienceId = "continuous-room" | "bot-training" | "bot-vs-bot-lab";
 
-export type CharacterId =
-  | "03a976fb-7313-4064-a477-5bb9b0760034"
-  | "6ee8baa5-3277-413b-ae0e-2659b9cc52e9"
-  | "d083c3dc-7162-4391-8628-6adde0b8d8d6"
-  | "5474c45c-2987-43e0-af2c-a6500c836881";
+export type CharacterId = CatalogCharacterId;
 
 export type Experience = Readonly<{
   id: ExperienceId;
@@ -21,14 +23,7 @@ export type Experience = Readonly<{
   journeyLabel: string;
 }>;
 
-export type Character = Readonly<{
-  id: CharacterId;
-  name: string;
-  assetPath: string;
-  accent: "blue" | "gold" | "green" | "red";
-  label: string;
-  description: string;
-}>;
+export type Character = CharacterPresentation;
 
 export type ProductCopy = Readonly<{
   launcherTitle: string;
@@ -104,47 +99,6 @@ const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
   }),
 ]);
 
-const CHARACTER_BASE = [
-  {
-    id: "03a976fb-7313-4064-a477-5bb9b0760034",
-    name: "Ranni",
-    assetPath: "/characters/ranni.png",
-    accent: "blue",
-  },
-  {
-    id: "6ee8baa5-3277-413b-ae0e-2659b9cc52e9",
-    name: "Killer Bee",
-    assetPath: "/characters/killer-bee.png",
-    accent: "gold",
-  },
-  {
-    id: "d083c3dc-7162-4391-8628-6adde0b8d8d6",
-    name: "Crocodilo Arcano",
-    assetPath: "/characters/crocodilo-arcano.png",
-    accent: "green",
-  },
-  {
-    id: "5474c45c-2987-43e0-af2c-a6500c836881",
-    name: "Nico",
-    assetPath: "/characters/nico.png",
-    accent: "red",
-  },
-] as const;
-
-const PT_CHARACTER_DESCRIPTIONS = [
-  "Combatente 01 · personagem canônico",
-  "Combatente 02 · personagem canônico",
-  "Combatente 03 · personagem canônico",
-  "Combatente 04 · personagem canônico",
-] as const;
-
-const EN_CHARACTER_DESCRIPTIONS = [
-  "Fighter 01 · canonical character",
-  "Fighter 02 · canonical character",
-  "Fighter 03 · canonical character",
-  "Fighter 04 · canonical character",
-] as const;
-
 const PT_COPY: ProductCopy = Object.freeze({
   launcherTitle: "Escolha sua experiência",
   launcherIntroduction: "Três formas claras de entrar no mesmo universo competitivo.",
@@ -208,20 +162,9 @@ export function catalogFor(locale: Locale): Readonly<{
   bots: readonly LocalBotMetadata[];
   copy: ProductCopy;
 }> {
-  const descriptions = locale === "pt-BR" ? PT_CHARACTER_DESCRIPTIONS : EN_CHARACTER_DESCRIPTIONS;
-  const characters = Object.freeze(
-    CHARACTER_BASE.map((character, index) =>
-      Object.freeze({
-        ...character,
-        label: locale === "pt-BR" ? "Personagem " + String(index + 1) : "Character " + String(index + 1),
-        description: descriptions[index] ?? "",
-      }),
-    ),
-  );
-
   return Object.freeze({
     experiences: locale === "pt-BR" ? PT_EXPERIENCES : EN_EXPERIENCES,
-    characters,
+    characters: listCharacterPresentations(locale),
     bots: LOCAL_BOT_CATALOG,
     copy: locale === "pt-BR" ? PT_COPY : EN_COPY,
   });

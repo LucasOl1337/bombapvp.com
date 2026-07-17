@@ -8,13 +8,15 @@ import {
   type Locale,
   type ProductCopy,
 } from "./catalog.ts";
-import { createLabMatchParams } from "../lab/competitors.ts";
 import {
-  DEFAULT_CONTINUOUS_BOT_ID,
-  DEFAULT_TRAINING_BOT_ID,
   type LocalBotId,
   type LocalBotMetadata,
 } from "../original-game/Engine/bot-catalog.ts";
+import {
+  OFFLINE_LAUNCH_DEFAULTS,
+  resolveLaunchRequest,
+} from "../matches/launch-request.ts";
+import { launchRequestToSearchParams } from "../matches/url-search-params.ts";
 
 export type AppScreen = "launcher" | "character-selection" | "game-launch" | "laboratory";
 
@@ -61,8 +63,8 @@ function experienceForPath(path: string): ExperienceId | null {
 
 function defaultBotForExperience(experienceId: ExperienceId | null): LocalBotId {
   return experienceId === "continuous-room"
-    ? DEFAULT_CONTINUOUS_BOT_ID
-    : DEFAULT_TRAINING_BOT_ID;
+    ? OFFLINE_LAUNCH_DEFAULTS.continuous
+    : OFFLINE_LAUNCH_DEFAULTS.training;
 }
 
 export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
@@ -153,18 +155,28 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
       return snapshot;
     }
     const mode = snapshot.activeExperience.id === "continuous-room" ? "continuous" : "training";
-    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}&bot=${encodeURIComponent(snapshot.selectedBot)}`;
+    const request = resolveLaunchRequest({
+      mode,
+      character: snapshot.selectedCharacter.id,
+      bot: snapshot.selectedBot,
+    });
+    if (!request.ok) return snapshot;
+    const currentPath = `/arena/?${launchRequestToSearchParams(request.request).toString()}`;
     return freezeSnapshot({ ...snapshot, screen: "game-launch", currentPath });
   }
 
   if (intent.type === "start-lab-match") {
     if (snapshot.screen !== "laboratory") return snapshot;
-    const query = createLabMatchParams(intent.models, intent.labels);
-    if (!query) return snapshot;
+    const request = resolveLaunchRequest(
+      intent.labels === undefined
+        ? { mode: "lab", models: intent.models }
+        : { mode: "lab", models: intent.models, labels: intent.labels },
+    );
+    if (!request.ok) return snapshot;
     return freezeSnapshot({
       ...snapshot,
       screen: "game-launch",
-      currentPath: `/arena/?${query.toString()}`,
+      currentPath: `/arena/?${launchRequestToSearchParams(request.request).toString()}`,
     });
   }
 

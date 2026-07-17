@@ -2,9 +2,11 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
-import { BOT_V3_CHARACTER_INDEX } from "../src/original-game/Engine/bot-v3.ts";
+import { BOT_V3_CHARACTER_INDEX, getBotV3Decision } from "../src/original-game/Engine/bot-v3.ts";
+import { getBotV2Decision } from "../src/original-game/Engine/bot-v2.ts";
 
 // Compatibility floor for this safety patch. Promotion still requires the
 // independent 10-consecutive-win gate documented in docs/gameplay.md.
@@ -93,8 +95,10 @@ function playMatch(matchIndex, lineup, seedPrefix = "v3-fair-match") {
     {
       roomMode: "endless",
       botPlayerIds: [1, 2, 3],
-      botV2PlayerIds: [lineup.v2],
-      botV3PlayerIds: [lineup.v3],
+      botDecisionPolicies: {
+        [lineup.v2]: getBotV2Decision,
+        [lineup.v3]: getBotV3Decision,
+      },
       botDecisionObserver: ({ playerId, decision }) => {
         if (playerId !== lineup.v3) return;
         actions.decisions += 1;
@@ -140,25 +144,48 @@ function playMatch(matchIndex, lineup, seedPrefix = "v3-fair-match") {
 }
 
 describe("bot determinístico V3", () => {
-  it("usa uma política própria, sem delegar aos algoritmos V1 ou V2", () => {
-    const source = readFileSync(new URL("../src/original-game/Engine/bot-v3.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/getBot(?:V1|V2)?Decision\s*\(/);
-    expect(source).toContain("buildThreatMap");
-    expect(source).toContain("search(");
+  it("não se autoelimina no replay mínimo fair-match-2 após a chama residual ficar letal", () => {
+    const lineup = fairRandomLineups()[2];
+    const outcome = playMatch(2, lineup);
+
+    expect(outcome.deathStats?.selfDeaths?.[lineup.v3] ?? 0).toBe(0);
   });
 
-  it("descarta a variante V3 ao sair da sessão do laboratório", () => {
+  it("usa uma política própria, sem delegar aos algoritmos V1 ou V2", () => {
+    const source = readFileSync(new URL("../src/original-game/Engine/bot-v3.ts", import.meta.url), "utf8");
+    const module = ts.createSourceFile("bot-v3.ts", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+    const dependencies = module.statements
+      .filter(ts.isImportDeclaration)
+      .map((statement) => statement.moduleSpecifier.text);
+
+    expect(dependencies).toContain("./bot-contracts");
+    expect(dependencies).not.toContain("./bot-ai");
+    expect(dependencies).not.toContain("./bot-v2");
+  });
+
+  it("encerra a política V3 ao sair da sessão do laboratório", () => {
     const game = new GameApp({}, assets(), createDefaultArenaDefinition());
+    let decisions = 0;
     game.startServerAuthoritativeMatch(
       [1, 2, 3],
       { 1: 0, 2: 0, 3: 0, 4: 0 },
-      { botPlayerIds: [1, 2, 3], botV2PlayerIds: [2], botV3PlayerIds: [3] },
+      {
+        botPlayerIds: [1, 2, 3],
+        botDecisionPolicies: { 2: getBotV2Decision, 3: getBotV3Decision },
+        botDecisionObserver: ({ playerId }) => {
+          if (playerId === 3) decisions += 1;
+        },
+      },
     );
-    expect(game.botV3ControlledPlayers).toMatchObject({ 1: false, 2: false, 3: true });
+    game.advanceServerSimulation(50);
+    expect(decisions).toBeGreaterThan(0);
 
+    const decisionsBeforeClear = decisions;
     game.clearOnlinePeer();
+    game.advanceServerSimulation(50);
 
-    expect(game.botV3ControlledPlayers).toEqual({ 1: false, 2: false, 3: false, 4: false });
+    expect(game.exportOnlineSnapshot().mode).toBe("menu");
+    expect(decisions).toBe(decisionsBeforeClear);
   });
 
   it("executa dez partidas pós-hotfix com posições aleatórias e sem autoeliminação", () => {

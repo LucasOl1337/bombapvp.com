@@ -4,6 +4,7 @@ import { getBombDecision } from "../src/original-game/Engine/bot-bomb.ts";
 import { getBotPingoDecision } from "../src/original-game/Engine/bot-pingo.ts";
 import { getBotV2Decision } from "../src/original-game/Engine/bot-v2.ts";
 import { getBotV3Decision } from "../src/original-game/Engine/bot-v3.ts";
+import { resolveLaunchRequest } from "../src/matches/launch-request.ts";
 import {
   DEFAULT_CONTINUOUS_BOT_ID,
   DEFAULT_TRAINING_BOT_ID,
@@ -18,6 +19,12 @@ import {
   getLocalBotByModel,
   LOCAL_BOTS,
 } from "../src/original-game/Engine/bot-registry.ts";
+
+function offlineRequest(mode, bot) {
+  const result = resolveLaunchRequest({ mode, character: null, bot });
+  if (!result.ok || result.request.mode === "lab") throw new Error("offline_launch_request_expected");
+  return result.request;
+}
 
 describe("registry pública dos bots locais", () => {
   it("expõe catálogo leve e defaults sem depender das policies runtime", () => {
@@ -68,8 +75,8 @@ describe("registry pública dos bots locais", () => {
     });
   });
 
-  it("parses bot=<id> e prepara training ou continuous sem alterar seus defaults", () => {
-    const training = createOfflineBotMatchSetup("training", new URLSearchParams("bot=v2"));
+  it("prepara o runtime a partir do launch request sem conhecer URLSearchParams", () => {
+    const training = createOfflineBotMatchSetup(offlineRequest("training", "v2"));
     expect(training.bot.id).toBe("v2");
     expect(training.botFill).toBe(1);
     expect(training.roomMode).toBe("classic");
@@ -77,7 +84,7 @@ describe("registry pública dos bots locais", () => {
     expect(training.options.botCharacterSelections).toEqual({ 2: 1 });
     expect(training.options.playerLabels).toEqual({ 2: "V2" });
 
-    const continuous = createOfflineBotMatchSetup("continuous", new URLSearchParams("bot=pingo"));
+    const continuous = createOfflineBotMatchSetup(offlineRequest("continuous", "pingo"));
     expect(continuous.bot.id).toBe("pingo");
     expect(continuous.botFill).toBe(3);
     expect(continuous.roomMode).toBe("endless");
@@ -89,11 +96,11 @@ describe("registry pública dos bots locais", () => {
     expect(continuous.options.botCharacterSelections).toEqual({ 2: 0, 3: 0, 4: 0 });
     expect(continuous.options.playerLabels).toEqual({ 2: "Pingo", 3: "Pingo", 4: "Pingo" });
 
-    const defaultTraining = createOfflineBotMatchSetup("training", new URLSearchParams("bot=invalid"));
+    const defaultTraining = createOfflineBotMatchSetup(offlineRequest("training", "invalid"));
     expect(defaultTraining.bot.id).toBe("bomb");
     expect(defaultTraining.options.playerLabels).toEqual({ 2: "BOMB" });
 
-    const defaultContinuous = createOfflineBotMatchSetup("continuous", new URLSearchParams());
+    const defaultContinuous = createOfflineBotMatchSetup(offlineRequest("continuous", undefined));
     expect(defaultContinuous.bot.id).toBe("v1");
     expect(defaultContinuous.options.botDecisionPolicies).toEqual({});
     expect(defaultContinuous.options.botCharacterSelections).toEqual({});
@@ -110,8 +117,8 @@ describe("registry pública dos bots locais", () => {
     };
 
     for (const id of ["bomb", "pingo", "v1", "v2", "v3"]) {
-      const training = createOfflineBotMatchSetup("training", new URLSearchParams({ bot: id }));
-      const continuous = createOfflineBotMatchSetup("continuous", new URLSearchParams({ bot: id }));
+      const training = createOfflineBotMatchSetup(offlineRequest("training", id));
+      const continuous = createOfflineBotMatchSetup(offlineRequest("continuous", id));
       expect(training.bot.id).toBe(id);
       expect(training.options.botDecisionPolicies).toEqual({ 2: expectedPolicies[id] });
       expect(continuous.bot.id).toBe(id);
