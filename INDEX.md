@@ -7,6 +7,7 @@
 | `src/app/` | Estado, catalogo e interface do launcher. |
 | `src/original-game/` | Motor original, bots, personagens e regras da arena. |
 | `docs/benchmarks/` | Experimentos datados de latencia e performance dos bots. |
+| `BOTS/DevHistory/` | Post-mortems e historico das tentativas de desenvolvimento dos bots. |
 | `public/Assets/` | Sprites, mapas, audio e demais assets do jogo. |
 | `arena/` | Documento HTML isolado da gameplay. |
 | `tests/` | Testes automatizados do launcher e das rotas. |
