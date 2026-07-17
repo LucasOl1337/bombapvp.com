@@ -344,8 +344,8 @@ function renderCharacterSelection(
       snapshot.locale === "pt-BR" ? "Bot adversário" : "Bot opponent",
     );
     ([
-      { value: "bomb", label: "Bomb v1 · Agressivo" },
-      { value: "pingo", label: "Pingo v1 · Tático" },
+      { value: "bomb", label: "Bomb v2 · Agressivo" },
+      { value: "pingo", label: "Pingo v2 · Tático" },
     ] as const).forEach(({ value, label }) => {
       const option = document.createElement("option");
       option.value = value;
@@ -511,12 +511,12 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
     const competitors = [
       {
         id: LAB_BOMB_MODEL,
-        label: isPortuguese ? "Bomb v1 · Pressão agressiva" : "Bomb v1 · Aggressive pressure",
+        label: isPortuguese ? "Bomb v2 · Pressão agressiva" : "Bomb v2 · Aggressive pressure",
         route: LAB_BOMB_MODEL,
       },
       {
         id: LAB_PINGO_MODEL,
-        label: isPortuguese ? "Pingo v1 · Caça tática" : "Pingo v1 · Tactical hunter",
+        label: isPortuguese ? "Pingo v2 · Caça tática" : "Pingo v2 · Tactical hunter",
         route: LAB_PINGO_MODEL,
       },
       {

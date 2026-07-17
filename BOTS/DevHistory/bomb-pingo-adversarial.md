@@ -104,20 +104,66 @@ O lote `development-v1-final` executou 72 partidas com novo prefixo de seeds, tr
 
 Causas: Bomb teve 19 mortes por oponente e sobreviveu 53 vezes. Pingo teve 47 mortes por oponente, cinco por sudden death e sobreviveu 20 vezes. Os dois zeraram autoeliminação.
 
+## Rodada v2 — pós-hotfix e promoção reservada
+
+Todas as métricas pré-hotfix foram descartadas. Depois de novos baselines development, os dois bots fecharam os clusters de autoeliminação revelados pela Ranni legítima. O lote final `pingo-v2-postfix-dev-d` executou 72 partidas espelhadas com hashes congelados e terminou Bomb 52–20 Pingo, sem empates e com zero self-deaths para ambos. O Pingo preservou 12/24 no `open-no-drops`, mas permaneceu claramente inferior em `standard` e `sparse-breakables`; v2 é uma promoção de segurança e comportamento, não uma alegação de força geral.
+
+### Primeiro reservado queimado
+
+A primeira suíte reservada pós-freeze terminou Bomb 53–19 Pingo. O Pingo passou com self=0 e 15/24 no open, mas o Bomb se autoeliminou em `sparse-breakables:9`, ordem `[Pingo, Bomb]`. O lote foi reprovado e queimado imediatamente, sem publicação. O replay mostrou o Bomb plantando na transição contínua entre tiles, entrando em uma célula de portal sem rota discreta e deixando a fase da Ranni expirar ainda sobrepondo a explosão própria.
+
+O Bomb passou a continuar a projeção na direção oposta à casa de explosão enquanto sua hitbox ainda a sobrepõe, mesmo quando a BFS discreta não encontra outra casa. No replay, isso completa o portal de borda, permite liberação segura e elimina o self. O caso queimado virou regressão permanente.
+
+### Segundo reservado — aprovado, depois invalidado
+
+A segunda suíte reservada usou um prefixo novo e opaco, 72 partidas espelhadas, três variantes e Ranni igual para ambos. Hashes das duas policies, do motor e do harness permaneceram idênticos antes e depois.
+
+Ela terminou Bomb 50–22 Pingo, self 0–0, e passou os gates definidos. Porém, a suíte completa executada em seguida revelou um self do Bomb em uma seed development antiga que o relatório histórico exibia sem afirmar segurança. A publicação foi interrompida. O Bomb ainda encerrava a fuga quando o tile lógico mudava, embora a hitbox continuasse cruzando a casa de explosão. A policy passou a manter fuga contínua até o corpo inteiro sair do blast, o replay virou regressão e o segundo reservado perdeu validade para promoção.
+
+### Terceiro reservado autoritativo
+
+A terceira suíte reservada usou outro prefixo novo e opaco, 72 partidas espelhadas, três variantes e Ranni igual para ambos. Hashes das duas policies, do motor e do harness permaneceram idênticos antes e depois.
+
+| Variante | Bomb | Pingo | Empates |
+| --- | ---: | ---: | ---: |
+| `standard` | 18 | 3 | 3 |
+| `open-no-drops` | 7 | 17 | 0 |
+| `sparse-breakables` | 17 | 7 | 0 |
+| **Total** | **42** | **27** | **3** |
+
+| Métrica | Bomb | Pingo |
+| --- | ---: | ---: |
+| Self-deaths | 0 | 0 |
+| Idle acumulado | 273.300 ms | 333.200 ms |
+| Stuck acumulado | 1.138.050 ms | 1.127.000 ms |
+| Maior streak preso | 2.100 ms | 25.200 ms |
+| Decisões | 100.694 | 100.689 |
+| Compute médio | 0,0515 ms | 0,0327 ms |
+| P95 | 0,1762 ms | 0,1353 ms |
+| Máximo | 1,3542 ms | 1,3347 ms |
+
+Causas: Bomb morreu 26 vezes para o oponente e uma por sudden death; Pingo morreu 36 vezes para o oponente e seis por sudden death. Nenhum dos dois se autoeliminou. O reservado aprovou a promoção comportamental de Bomb v2 e Pingo v2.
+
+### Mudanças comportamentais v2
+
+- Bomb mantém a fuga enquanto sua hitbox cruza o blast próprio mesmo após mudar de tile, navega a projeção da Ranni, entende portais wrap e libera a fase somente fora de bombas/chamas.
+- Pingo usa hitbox contínua na detonação remota, navega a fase pela posição projetada, libera cedo pagando os 8.000 ms e não abandona a abertura por power-up inalcançável.
+- Os dois preservam policies independentes e não recebem a seed do harness.
+
 ## Integração de produção
 
-- O Treino contra bots oferece um seletor explícito entre Bomb v1 e Pingo v1 antes de abrir a arena.
+- O Treino contra bots oferece um seletor explícito entre Bomb v2 e Pingo v2 antes de abrir a arena.
 - O AI Lab registra `bot-bomb` e `bot-pingo` como competidores locais independentes; Bomb × Pingo é a seleção inicial.
 - Ambos usam Ranni no Lab e a telemetria mede decisões locais, placar e causas normalmente.
 - V1, V2, V3 e perfis LLM continuam disponíveis.
 
 ## Próximo gate
 
-1. Repetir todos os baselines de Bomb e Pingo após o hotfix da Ranni.
-2. Evoluir Pingo contra as derrotas `standard` e `sparse-breakables`, preservando zero self-deaths.
-3. Evoluir Bomb contra a paridade de `open-no-drops`, preservando zero self-deaths.
-4. Gerar suite reservada somente quando ambos mostrarem força equilibrada nas três variantes.
-5. Usar o reservado apenas para promoção; qualquer correção posterior exige uma nova suite reservada.
+1. Evoluir Pingo contra as derrotas `standard` e `sparse-breakables`, preservando zero self-deaths.
+2. Evoluir Bomb contra a desvantagem de `open-no-drops`, preservando zero self-deaths.
+3. Reduzir o maior streak preso do Pingo sem sacrificar o gate de 12/24 no open.
+4. Queimar qualquer reservado que revele falha; toda correção posterior exige uma suíte opaca nova.
+5. Publicar apenas versões com focais, typecheck, suíte completa e gate reservado verdes.
 
 ## Invalidação pré-hotfix — ultimate da Ranni
 

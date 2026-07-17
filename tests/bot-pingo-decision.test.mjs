@@ -56,6 +56,7 @@ function player(id, x, y, overrides = {}) {
 function context({
   players,
   bombs = [],
+  powerUps = [],
   solid = [],
   breakable = [],
   width = 7,
@@ -66,6 +67,15 @@ function context({
   suddenDeathPath = [],
   evaluateMovementOption = (_subject, direction) => ({ direction }),
   canMovementOptionAdvance = () => true,
+  isPlayerOverlappingTile = (subject, tile) => {
+    const half = TILE_SIZE / 2;
+    const tileLeft = tile.x * TILE_SIZE;
+    const tileTop = tile.y * TILE_SIZE;
+    return subject.position.x - half < tileLeft + TILE_SIZE
+      && subject.position.x + half > tileLeft
+      && subject.position.y - half < tileTop + TILE_SIZE
+      && subject.position.y + half > tileTop;
+  },
 }) {
   const solidTiles = new Set(solid.map(({ x, y }) => tileKey(x, y)));
   const breakableTiles = new Set(breakable.map(({ x, y }) => tileKey(x, y)));
@@ -82,7 +92,7 @@ function context({
       },
       solid: solidTiles,
       breakable: breakableTiles,
-      powerUps: [],
+      powerUps,
     },
     suddenDeathActive,
     suddenDeathTickMs,
@@ -105,7 +115,7 @@ function context({
     projectKillerBeeDashTarget: (subject) => subject.position,
     canMovementOptionAdvance,
     areOppositeDirections: () => false,
-    isPlayerOverlappingTile: (subject, tile) => subject.tile.x === tile.x && subject.tile.y === tile.y,
+    isPlayerOverlappingTile,
   };
 }
 
@@ -295,6 +305,61 @@ describe("política Pingo", () => {
     expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: true });
   });
 
+  it("encerra a fase da Ranni assim que a projeção já saiu de todas as explosões", () => {
+    const pingo = player(1, 1, 2, {
+      activeBombs: 1,
+      position: { x: 60, y: 105.42 },
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 850,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 650,
+        projectedPosition: { x: 60, y: 186.67 },
+        projectedLastMoveDirection: "down",
+      },
+    });
+    const enemy = player(2, 5, 2);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      bombs: [
+        { id: 7, ownerId: 1, tile: { x: 1, y: 1 }, fuseMs: 867, ownerCanPass: false, flameRange: 2 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ useSkill: true, skillAction: "release" });
+  });
+
+  it("navega a fase pela posição projetada quando o corpo real aponta para uma rota bloqueada", () => {
+    const pingo = player(1, 6, 4, {
+      activeBombs: 1,
+      position: { x: 260.4, y: 180 },
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 500,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 1_000,
+        projectedPosition: { x: 220.81, y: 180 },
+        projectedLastMoveDirection: "left",
+      },
+    });
+    const enemy = player(2, 1, 1);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      solid: STANDARD_SOLID,
+      bombs: [
+        { id: 8, ownerId: 1, tile: { x: 4, y: 4 }, fuseMs: 500, ownerCanPass: false, flameRange: 3 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: "right", useSkill: false });
+  });
+
   it("ataca um adversário no alcance quando consegue escapar da própria explosão", () => {
     const pingo = player(1, 2, 2, { flameRange: 2 });
     const enemy = player(2, 3, 2);
@@ -347,6 +412,20 @@ describe("política Pingo", () => {
     expect(decision).toMatchObject({ direction: "down", placeBomb: false });
   });
 
+  it("ignora power-up revelado inalcançável e continua abrindo a fronteira", () => {
+    const pingo = player(1, 1, 2, { flameRange: 1 });
+    const enemy = player(2, 5, 2);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 7,
+      height: 5,
+      breakable: Array.from({ length: 5 }, (_, y) => ({ x: 3, y })),
+      powerUps: [{ tile: { x: 5, y: 0 }, revealed: true, collected: false }],
+    }));
+
+    expect(decision).toMatchObject({ direction: "right", placeBomb: false });
+  });
+
   it("detona a bomba remota mais antiga quando atinge o adversário sem atingir a si", () => {
     const pingo = player(1, 1, 1, { activeBombs: 1, remoteLevel: 1 });
     const enemy = player(2, 5, 2);
@@ -366,6 +445,25 @@ describe("política Pingo", () => {
       bombs: [
         { id: 7, ownerId: 1, tile: { x: 3, y: 2 }, fuseMs: 1_500, ownerCanPass: false, flameRange: 2 },
         { id: 8, ownerId: 2, tile: { x: 1, y: 2 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 2 },
+      ],
+    }));
+
+    expect(decision.detonate).toBe(false);
+  });
+
+  it("não detona quando o corpo ainda sobrepõe uma casa adjacente da própria chama", () => {
+    const pingo = player(1, 3, 6, {
+      activeBombs: 1,
+      remoteLevel: 1,
+      position: { x: 158.81, y: 260 },
+    });
+    const enemy = player(2, 4, 6);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      bombs: [
+        { id: 7, ownerId: 1, tile: { x: 4, y: 7 }, fuseMs: 817, ownerCanPass: false, flameRange: 1 },
       ],
     }));
 

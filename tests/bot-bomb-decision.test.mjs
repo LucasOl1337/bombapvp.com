@@ -71,7 +71,7 @@ function arena(openTiles) {
   };
 }
 
-function context(players, testArena, bombs = []) {
+function context(players, testArena, bombs = [], overrides = {}) {
   return {
     players,
     activePlayerIds: [1, 2],
@@ -95,7 +95,21 @@ function context(players, testArena, bombs = []) {
     isPlayerOverlappingTile: (candidate, tile) => (
       candidate.tile.x === tile.x && candidate.tile.y === tile.y
     ),
+    ...overrides,
   };
+}
+
+function overlapsContinuously(candidate, tile) {
+  const half = TILE_SIZE / 2;
+  const left = candidate.position.x - half;
+  const right = candidate.position.x + half;
+  const top = candidate.position.y - half;
+  const bottom = candidate.position.y + half;
+  const tileLeft = tile.x * TILE_SIZE;
+  const tileRight = tileLeft + TILE_SIZE;
+  const tileTop = tile.y * TILE_SIZE;
+  const tileBottom = tileTop + TILE_SIZE;
+  return left < tileRight && right > tileLeft && top < tileBottom && bottom > tileTop;
 }
 
 describe("política competitiva do Bomb", () => {
@@ -153,6 +167,57 @@ describe("política competitiva do Bomb", () => {
       placeBomb: true,
       targetId: 2,
       intent: "bomb-attack",
+    });
+  });
+
+  it("continua fugindo enquanto permanece no alcance da própria bomba", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, { activeBombs: 1 }),
+      2: player(2, { x: 4, y: 2 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,2", "2,2", "3,2", "4,2"]);
+    const bombs = [{
+      id: 13,
+      ownerId: 1,
+      tile: { x: 2, y: 3 },
+      fuseMs: 1_800,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toMatchObject({
+      direction: "left",
+      placeBomb: false,
+    });
+  });
+
+  it("continua fugindo depois que o tile muda mas a hitbox ainda cruza o blast próprio", () => {
+    const players = {
+      1: player(1, { x: 1, y: 2 }, {
+        position: { x: 79.75, y: 100 },
+        activeBombs: 1,
+      }),
+      2: player(2, { x: 4, y: 2 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["0,2", "1,2", "2,2", "2,3", "4,2"]);
+    const bombs = [{
+      id: 25,
+      ownerId: 1,
+      tile: { x: 2, y: 3 },
+      fuseMs: 500,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toMatchObject({
+      direction: "left",
+      placeBomb: false,
     });
   });
 
@@ -271,6 +336,152 @@ describe("política competitiva do Bomb", () => {
       direction: null,
       placeBomb: false,
       useSkill: true,
+    });
+  });
+
+  it("move a projeção da Ranni para fora do blast durante a canalização", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, {
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "channeling",
+          channelRemainingMs: 900,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 600,
+          projectedPosition: {
+            x: 2 * TILE_SIZE + TILE_SIZE / 2,
+            y: 2 * TILE_SIZE + TILE_SIZE / 2,
+          },
+          projectedLastMoveDirection: null,
+        },
+      }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["2,2", "2,3", "2,4", "5,5"]);
+    const bombs = [{
+      id: 21,
+      ownerId: 1,
+      tile: { x: 2, y: 2 },
+      fuseMs: 700,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toMatchObject({
+      direction: "down",
+      placeBomb: false,
+    });
+  });
+
+  it("continua movendo a projeção quando a hitbox ainda cruza um blast adjacente", () => {
+    const players = {
+      1: player(1, { x: 2, y: 0 }, {
+        position: { x: 100, y: 38.57 },
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "channeling",
+          channelRemainingMs: 150,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 1_350,
+          projectedPosition: { x: 100, y: 38.57 },
+          projectedLastMoveDirection: "up",
+        },
+      }),
+      2: player(2, { x: 5, y: 0 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["2,0", "2,1", "5,0"]);
+    const bombs = [{
+      id: 24,
+      ownerId: 1,
+      tile: { x: 2, y: 1 },
+      fuseMs: 500,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toMatchObject({
+      direction: "up",
+      placeBomb: false,
+    });
+  });
+
+  it("reconhece o portal de borda como rota de fuga durante a Ranni", () => {
+    const players = {
+      1: player(1, { x: 0, y: 3 }, {
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "channeling",
+          channelRemainingMs: 900,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 600,
+          projectedPosition: {
+            x: TILE_SIZE / 2,
+            y: 3 * TILE_SIZE + TILE_SIZE / 2,
+          },
+          projectedLastMoveDirection: null,
+        },
+      }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["0,3", "6,3", "5,5"]);
+    testArena.config.wrapPortals = [{ x: 0, y: 3 }, { x: 6, y: 3 }];
+    const bombs = [{
+      id: 23,
+      ownerId: 1,
+      tile: { x: 0, y: 3 },
+      fuseMs: 700,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toMatchObject({
+      direction: "left",
+      placeBomb: false,
+    });
+  });
+
+  it("libera a Ranni cedo quando a projeção já está fora de todos os blasts", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, {
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "channeling",
+          channelRemainingMs: 900,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 600,
+          projectedPosition: {
+            x: 4 * TILE_SIZE + TILE_SIZE / 2,
+            y: 2 * TILE_SIZE + TILE_SIZE / 2,
+          },
+          projectedLastMoveDirection: "right",
+        },
+      }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["2,2", "3,2", "4,2", "5,5"]);
+    const bombs = [{
+      id: 22,
+      ownerId: 1,
+      tile: { x: 2, y: 2 },
+      fuseMs: 700,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toMatchObject({
+      direction: null,
+      placeBomb: false,
+      useSkill: true,
+      skillAction: "release",
     });
   });
 });

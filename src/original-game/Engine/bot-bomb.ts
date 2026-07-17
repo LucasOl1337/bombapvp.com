@@ -1,6 +1,11 @@
 import { tileKey } from "../Arenas/arena";
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
-import { BASE_MOVE_MS, MIN_MOVE_MS, SPEED_STEP_MS } from "../PersonalConfig/config";
+import {
+  BASE_MOVE_MS,
+  MIN_MOVE_MS,
+  SPEED_STEP_MS,
+  TILE_SIZE,
+} from "../PersonalConfig/config";
 import type {
   BombState,
   Direction,
@@ -51,6 +56,24 @@ function inBounds(tile: TileCoord, context: BotContext): boolean {
     && tile.y >= 0
     && tile.x < context.arena.config.grid.width
     && tile.y < context.arena.config.grid.height;
+}
+
+function adjacentTile(
+  tile: TileCoord,
+  direction: Direction,
+  context: BotContext,
+): TileCoord {
+  const delta = DELTA[direction];
+  const adjacent = { x: tile.x + delta.x, y: tile.y + delta.y };
+  if (inBounds(adjacent, context)) return adjacent;
+  const isPortal = context.arena.config.wrapPortals.some((portal) => (
+    portal.x === tile.x && portal.y === tile.y
+  ));
+  if (!isPortal) return adjacent;
+  return {
+    x: (adjacent.x + context.arena.config.grid.width) % context.arena.config.grid.width,
+    y: (adjacent.y + context.arena.config.grid.height) % context.arena.config.grid.height,
+  };
 }
 
 function isOpen(
@@ -166,8 +189,7 @@ function safeEscapeDirection(
     if (node.steps >= 12) continue;
 
     for (const direction of DIRECTIONS) {
-      const delta = DELTA[direction];
-      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const tile = adjacentTile(node.tile, direction, context);
       const key = tileKey(tile.x, tile.y);
       if (visited.has(key) || !isOpen(tile, player.tile, context, blockedTile)) continue;
       const steps = node.steps + 1;
@@ -259,6 +281,59 @@ function triggeredBlastKeys(initialBomb: BombState, context: BotContext): Set<st
   return blast;
 }
 
+function isInsideOwnedBombBlast(player: PlayerState, context: BotContext): boolean {
+  return context.bombs.some((bomb) => (
+    bomb.ownerId === player.id
+    && blastTiles(bomb, context).some((tile) => context.isPlayerOverlappingTile(player, tile))
+  ));
+}
+
+function projectedRanniPlayer(player: PlayerState): PlayerState {
+  const position = player.skill.projectedPosition ?? player.position;
+  return {
+    ...player,
+    position,
+    tile: {
+      x: Math.floor(position.x / TILE_SIZE),
+      y: Math.floor(position.y / TILE_SIZE),
+    },
+  };
+}
+
+function isOverlappingAnyBlast(player: PlayerState, context: BotContext): boolean {
+  if (context.flames.some((flame) => context.isPlayerOverlappingTile(player, flame.tile))) {
+    return true;
+  }
+  return context.bombs.some((bomb) => (
+    blastTiles(bomb, context).some((tile) => context.isPlayerOverlappingTile(player, tile))
+  ));
+}
+
+function continuousOverlapEscapeDirection(
+  player: PlayerState,
+  context: BotContext,
+): Direction | null {
+  const blast = [
+    ...context.flames.map((flame) => flame.tile),
+    ...context.bombs.flatMap((bomb) => blastTiles(bomb, context)),
+  ].filter((tile) => context.isPlayerOverlappingTile(player, tile));
+  if (blast.length === 0) return null;
+
+  const source = blast.reduce((furthest, tile) => {
+    const dx = player.position.x - (tile.x + 0.5) * TILE_SIZE;
+    const dy = player.position.y - (tile.y + 0.5) * TILE_SIZE;
+    const distanceSquared = dx * dx + dy * dy;
+    return distanceSquared > furthest.distanceSquared
+      ? { tile, distanceSquared }
+      : furthest;
+  }, { tile: blast[0]!, distanceSquared: Number.NEGATIVE_INFINITY }).tile;
+  const dx = player.position.x - (source.x + 0.5) * TILE_SIZE;
+  const dy = player.position.y - (source.y + 0.5) * TILE_SIZE;
+  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? "left" : "right";
+  if (Math.abs(dy) > 0) return dy < 0 ? "up" : "down";
+  return null;
+}
+
 function canRemoteFinish(player: PlayerState, target: PlayerState, context: BotContext): boolean {
   if (
     player.remoteLevel <= 0
@@ -317,8 +392,7 @@ function pressureDirection(
     if (node.steps >= 14) continue;
 
     for (const direction of DIRECTIONS) {
-      const delta = DELTA[direction];
-      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const tile = adjacentTile(node.tile, direction, context);
       const key = tileKey(tile.x, tile.y);
       if (visited.has(key) || !isOpen(tile, player.tile, context)) continue;
       const steps = node.steps + 1;
@@ -360,8 +434,7 @@ function powerUpDirection(
     }
     if (node.steps >= 14) continue;
     for (const direction of DIRECTIONS) {
-      const delta = DELTA[direction];
-      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const tile = adjacentTile(node.tile, direction, context);
       const key = tileKey(tile.x, tile.y);
       if (visited.has(key) || !isOpen(tile, player.tile, context)) continue;
       const steps = node.steps + 1;
@@ -382,13 +455,43 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     .filter((enemy) => enemy.active && enemy.alive);
   const threats = threatMap(context);
   const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
+  const escapingOwnedBomb = isInsideOwnedBombBlast(player, context);
 
-  if (player.skill.phase === "channeling" || player.skill.phase === "releasing") {
+  if (player.skill.phase === "channeling") {
+    const projectedPlayer = projectedRanniPlayer(player);
+    if (
+      player.skill.castElapsedMs > 0
+      && !isOverlappingAnyBlast(projectedPlayer, context)
+    ) {
+      return {
+        direction: null,
+        placeBomb: false,
+        useSkill: true,
+        skillAction: "release",
+      };
+    }
+    const routeDirection = safeEscapeDirection(
+      projectedPlayer,
+      enemies,
+      context,
+      threats,
+    );
+    return {
+      direction: routeDirection ?? continuousOverlapEscapeDirection(projectedPlayer, context),
+      placeBomb: false,
+    };
+  }
+
+  if (player.skill.phase === "releasing") {
     return { direction: null, placeBomb: false };
   }
 
-  if (currentDanger !== undefined && currentDanger <= REACTION_WINDOW_MS) {
-    const direction = safeEscapeDirection(player, enemies, context, threats);
+  if (
+    escapingOwnedBomb
+    || (currentDanger !== undefined && currentDanger <= REACTION_WINDOW_MS)
+  ) {
+    const direction = safeEscapeDirection(player, enemies, context, threats)
+      ?? continuousOverlapEscapeDirection(player, context);
     if (
       direction === null
       && player.skill.id === "ranni-ice-blink"

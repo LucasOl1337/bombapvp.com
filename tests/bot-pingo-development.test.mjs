@@ -65,3 +65,29 @@ describe("Pingo nas falhas do lote development-v0-final", () => {
     }
   }, 30_000);
 });
+
+describe("Pingo nas autoeliminações pós-hotfix da Ranni", () => {
+  it("não detona enquanto a hitbox ainda sobrepõe a explosão no standard dev-b", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v2-postfix-dev-b:standard:1",
+      arenaVariant: "standard",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+  }, 30_000);
+
+  it("encerra a fase numa projeção segura antes da própria explosão no sparse dev-c", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v2-postfix-dev-c:sparse-breakables:4",
+      arenaVariant: "sparse-breakables",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+  }, 30_000);
+});

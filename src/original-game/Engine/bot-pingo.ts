@@ -232,7 +232,11 @@ function shouldDetonateRemote(player: PlayerState, context: BotContext): boolean
     return false;
   }
   const immediateBlast = chainedBlastTiles(oldestOwnedBomb, context);
-  if (immediateBlast.has(key(player.tile))) {
+  const overlapsOwnBlast = [...immediateBlast].some((tileId) => {
+    const [x, y] = tileId.split(",").map(Number);
+    return context.isPlayerOverlappingTile(player, { x, y });
+  });
+  if (overlapsOwnBlast) {
     return false;
   }
   return context.activePlayerIds.some((playerId) => {
@@ -248,18 +252,11 @@ function distance(a: TileCoord, b: TileCoord): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-function hasTerrainRouteToOpponent(
-  player: PlayerState,
-  opponents: ReadonlyArray<TileCoord>,
-  context: BotContext,
-): boolean {
+function reachableTerrainTiles(player: PlayerState, context: BotContext): ReadonlySet<string> {
   const queue = [player.tile];
   const visited = new Set([key(player.tile)]);
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const current = queue[cursor];
-    if (opponents.some((opponent) => distance(current, opponent) <= 1)) {
-      return true;
-    }
     for (const step of steps) {
       const tile = { x: current.x + step.dx, y: current.y + step.dy };
       const tileId = key(tile);
@@ -273,7 +270,7 @@ function hasTerrainRouteToOpponent(
       queue.push(tile);
     }
   }
-  return false;
+  return visited;
 }
 
 function strategicDirection(
@@ -281,9 +278,6 @@ function strategicDirection(
   context: BotContext,
   threatArrival: ReadonlyMap<string, number>,
 ): Direction | null {
-  const powerUps = context.arena.powerUps
-    .filter((powerUp) => powerUp.revealed && !powerUp.collected)
-    .map((powerUp) => powerUp.tile);
   const opponents = context.activePlayerIds
     .filter((playerId) => playerId !== player.id)
     .map((playerId) => context.players[playerId])
@@ -293,7 +287,16 @@ function strategicDirection(
     return null;
   }
 
-  const hasOpponentRoute = hasTerrainRouteToOpponent(player, opponents, context);
+  const reachableTerrain = reachableTerrainTiles(player, context);
+  const powerUps = context.arena.powerUps
+    .filter((powerUp) => powerUp.revealed
+      && !powerUp.collected
+      && reachableTerrain.has(key(powerUp.tile)))
+    .map((powerUp) => powerUp.tile);
+  const hasOpponentRoute = [...reachableTerrain].some((tileId) => {
+    const [x, y] = tileId.split(",").map(Number);
+    return opponents.some((opponent) => distance({ x, y }, opponent) <= 1);
+  });
   const isGoal = powerUps.length > 0
     ? (tile: TileCoord) => powerUps.some((powerUp) => key(powerUp) === key(tile))
     : hasOpponentRoute
@@ -431,6 +434,74 @@ function shouldStartEmergencyPhase(
   return escaping === null || cannotClearCurrentTile;
 }
 
+function isPositionOutsideAllBlasts(
+  player: PlayerState,
+  position: Readonly<{ x: number; y: number }>,
+  context: BotContext,
+): boolean {
+  const projectedPlayer: PlayerState = {
+    ...player,
+    position,
+  };
+  if (context.flames.some((flame) => context.isPlayerOverlappingTile(projectedPlayer, flame.tile))) {
+    return false;
+  }
+  return context.bombs.every((bomb) => (
+    blastTiles(bomb, context).every((tile) => (
+      !context.isPlayerOverlappingTile(projectedPlayer, tile)
+    ))
+  ));
+}
+
+function shouldReleaseEmergencyPhase(player: PlayerState, context: BotContext): boolean {
+  return player.skill.id === "ranni-ice-blink"
+    && player.skill.phase === "channeling"
+    && player.skill.projectedPosition !== null
+    && isPositionOutsideAllBlasts(player, player.skill.projectedPosition, context);
+}
+
+function channelEscapeDirection(player: PlayerState, context: BotContext): Direction | null {
+  const projectedPosition = player.skill.projectedPosition;
+  if (player.skill.phase !== "channeling" || projectedPosition === null) {
+    return null;
+  }
+  const start = {
+    x: Math.floor(projectedPosition.x / TILE_SIZE),
+    y: Math.floor(projectedPosition.y / TILE_SIZE),
+  };
+  const queue: Array<Readonly<{ tile: TileCoord; first: Direction }>> = [];
+  const visited = new Set([key(start)]);
+  for (const step of steps) {
+    const tile = { x: start.x + step.dx, y: start.y + step.dy };
+    const tileId = key(tile);
+    if (visited.has(tileId) || !isWalkable(tile, context)) {
+      continue;
+    }
+    visited.add(tileId);
+    queue.push({ tile, first: step.direction });
+  }
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor];
+    const center = {
+      x: current.tile.x * TILE_SIZE + TILE_SIZE / 2,
+      y: current.tile.y * TILE_SIZE + TILE_SIZE / 2,
+    };
+    if (isPositionOutsideAllBlasts(player, center, context)) {
+      return current.first;
+    }
+    for (const step of steps) {
+      const tile = { x: current.tile.x + step.dx, y: current.tile.y + step.dy };
+      const tileId = key(tile);
+      if (visited.has(tileId) || !isWalkable(tile, context)) {
+        continue;
+      }
+      visited.add(tileId);
+      queue.push({ tile, first: current.first });
+    }
+  }
+  return null;
+}
+
 export function getBotPingoDecision(player: PlayerState, context: BotContext): BotDecision {
   const threatArrival = buildThreatArrival(context);
   const plannedEscape = escapeDirection(player, context, threatArrival);
@@ -440,16 +511,21 @@ export function getBotPingoDecision(player: PlayerState, context: BotContext): B
     threatArrival.has(key(player.tile)),
     context,
   );
-  const useSkill = shouldStartEmergencyPhase(player, threatArrival, escaping);
+  const releaseSkill = shouldReleaseEmergencyPhase(player, context);
+  const useSkill = releaseSkill || shouldStartEmergencyPhase(player, threatArrival, escaping);
   const detonate = !useSkill && shouldDetonateRemote(player, context);
   const attackEscape = escaping === null && !useSkill && !detonate
     ? bombEscapeDirection(player, context)
     : null;
   const placeBomb = attackEscape !== null;
+  const direction = player.skill.phase === "channeling"
+    ? releaseSkill ? null : channelEscapeDirection(player, context)
+    : escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival);
   return {
-    direction: escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival),
+    direction,
     placeBomb,
     detonate,
     useSkill,
+    skillAction: releaseSkill ? "release" : undefined,
   };
 }
