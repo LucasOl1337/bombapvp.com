@@ -133,6 +133,7 @@ import {
   computeCrocodiloSurgeTiles,
   CROCODILO_SKILL_CHANNEL_MS,
   CROCODILO_SKILL_RELEASE_MS,
+  RANNI_SKILL_CHANNEL_MS,
 } from "../ultimate/skill-system";
 import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
 import {
@@ -153,6 +154,8 @@ const KICK_SLIDE_MAX_TILES = 3;
 const KICK_FUSE_PENALTY_MS_PER_TILE = 250;
 const KICK_FUSE_MIN_MS = 450;
 const KICK_IMPACT_FEEDBACK_MS = 220;
+const RANNI_BLINK_FEEDBACK_MS = 800;
+const RANNI_PROJECTION_MIN_DISTANCE_PX = 1;
 const EXPLOSION_SCREEN_SHAKE_MS = 160;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_PX = 4;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_MAX_PX = 6;
@@ -413,6 +416,40 @@ interface ChainReactionFeedback {
   elapsedMs: number;
 }
 
+interface RanniBlinkFeedback {
+  kind: "blocked" | "failed";
+  position: PixelCoord;
+  elapsedMs: number;
+}
+
+export interface RanniProjectionFeedbackGeometry {
+  originX: number;
+  originY: number;
+  targetX: number;
+  targetY: number;
+  distancePx: number;
+  hasDisplacement: boolean;
+  blocked: boolean;
+}
+
+export function buildRanniProjectionFeedbackGeometry(
+  origin: PixelCoord,
+  target: PixelCoord,
+  attemptedDirection: boolean,
+): RanniProjectionFeedbackGeometry {
+  const distancePx = Math.hypot(target.x - origin.x, target.y - origin.y);
+  const hasDisplacement = distancePx >= RANNI_PROJECTION_MIN_DISTANCE_PX;
+  return {
+    originX: origin.x,
+    originY: origin.y,
+    targetX: target.x,
+    targetY: target.y,
+    distancePx,
+    hasDisplacement,
+    blocked: attemptedDirection && !hasDisplacement,
+  };
+}
+
 export interface ExplosionFeedbackCell {
   x: number;
   y: number;
@@ -587,6 +624,7 @@ export class GameApp {
   private crateBreakAnimations: CrateBreakAnimation[] = [];
   private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
   private chainReactionFeedback: ChainReactionFeedback[] = [];
+  private ranniBlinkFeedback: Record<PlayerId, RanniBlinkFeedback | null> = createPlayerRecord(() => null);
   private readonly prefersReducedMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1951,7 +1989,51 @@ export class GameApp {
     skillHeld: boolean,
     deltaMs: number,
   ): boolean {
-    return skill_updatePlayerSkillChannel(player, desiredDirection, skillPressed, skillHeld, deltaMs, this.createSkillContext());
+    const wasRanniChanneling = (
+      player.skill.id === "ranni-ice-blink"
+      && player.skill.phase === "channeling"
+    );
+    const origin = wasRanniChanneling ? { ...player.position } : null;
+    const projectedBefore = wasRanniChanneling
+      ? { ...(player.skill.projectedPosition ?? player.position) }
+      : null;
+    const handled = skill_updatePlayerSkillChannel(
+      player,
+      desiredDirection,
+      skillPressed,
+      skillHeld,
+      deltaMs,
+      this.createSkillContext(),
+    );
+
+    if (!wasRanniChanneling || !origin || !projectedBefore) {
+      return handled;
+    }
+
+    if (player.skill.phase !== "channeling") {
+      const outcome = buildRanniProjectionFeedbackGeometry(origin, player.position, Boolean(desiredDirection));
+      this.ranniBlinkFeedback[player.id] = outcome.hasDisplacement
+        ? null
+        : {
+            kind: "failed",
+            position: { ...player.position },
+            elapsedMs: 0,
+          };
+      return handled;
+    }
+
+    if (desiredDirection) {
+      const projectedAfter = player.skill.projectedPosition ?? projectedBefore;
+      const step = buildRanniProjectionFeedbackGeometry(projectedBefore, projectedAfter, true);
+      this.ranniBlinkFeedback[player.id] = step.blocked
+        ? {
+            kind: "blocked",
+            position: { ...projectedAfter },
+            elapsedMs: 0,
+          }
+        : null;
+    }
+    return handled;
   }
 
   private isPlayerImmuneDuringSkillChannel(player: PlayerState): boolean {
@@ -2223,6 +2305,7 @@ export class GameApp {
     this.magicBeams = [];
     this.crateBreakAnimations = [];
     this.chainReactionFeedback = [];
+    this.ranniBlinkFeedback = createPlayerRecord(() => null);
     this.screenShakeMs = 0;
     this.screenShakeAmplitudePx = 0;
     this.powerUpRevealStartedAtMs.clear();
@@ -3308,6 +3391,17 @@ export class GameApp {
       ));
     }
 
+    for (const playerId of this.activePlayerIds) {
+      const feedback = this.ranniBlinkFeedback[playerId];
+      if (!feedback) {
+        continue;
+      }
+      feedback.elapsedMs += deltaMs;
+      if (feedback.elapsedMs >= RANNI_BLINK_FEEDBACK_MS) {
+        this.ranniBlinkFeedback[playerId] = null;
+      }
+    }
+
     if (this.magicBeams.length > 0) {
       for (const beam of this.magicBeams) {
         beam.remainingMs -= deltaMs;
@@ -4383,6 +4477,14 @@ export class GameApp {
       return { label: "DOWN", tone: "muted", critical: false, dangerEtaMs: null };
     }
     if (player.skill.phase === "channeling") {
+      if (this.ranniBlinkFeedback[playerId]?.kind === "blocked") {
+        return {
+          label: this.language === "pt" ? "BLOQUEADO" : "BLOCKED",
+          tone: "danger",
+          critical: true,
+          dangerEtaMs: null,
+        };
+      }
       return { label: "ICE", tone: "success", critical: false, dangerEtaMs: null };
     }
     if (player.flameGuardMs > 0) {
@@ -5430,7 +5532,18 @@ export class GameApp {
   }
 
   private drawPlayerSkillPreview(player: PlayerState): void {
-    if (!player.active || !player.alive || player.skill.phase !== "channeling") {
+    if (!player.active) {
+      return;
+    }
+    const ranniFeedback = this.ranniBlinkFeedback[player.id];
+    if (ranniFeedback) {
+      this.drawRanniBlinkFeedback(ranniFeedback);
+    }
+    if (!player.alive || player.skill.phase !== "channeling") {
+      return;
+    }
+    if (player.skill.id === "ranni-ice-blink") {
+      this.drawRanniBlinkPreview(player);
       return;
     }
     if (player.skill.id === "nico-arcane-beam") {
@@ -5440,6 +5553,96 @@ export class GameApp {
     if (player.skill.id === "crocodilo-emerald-surge") {
       this.drawCrocodiloSurgePreview(player);
     }
+  }
+
+  private drawRanniBlinkPreview(player: PlayerState): void {
+    const target = player.skill.projectedPosition ?? player.position;
+    const geometry = buildRanniProjectionFeedbackGeometry(player.position, target, false);
+    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / RANNI_SKILL_CHANNEL_MS));
+    const pulse = this.prefersReducedMotion
+      ? 0.72
+      : 0.66 + Math.sin(this.animationClockMs / 95) * 0.12;
+    const targetRadius = TILE_SIZE * (0.23 + chargeProgress * 0.04);
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.lineCap = "round";
+    this.ctx.lineJoin = "round";
+
+    if (geometry.hasDisplacement) {
+      if (!this.prefersReducedMotion) {
+        this.ctx.setLineDash([5, 5]);
+        this.ctx.lineDashOffset = -(this.animationClockMs / 55) % 10;
+      }
+      this.ctx.strokeStyle = `rgba(143, 224, 255, ${0.28 + chargeProgress * 0.28})`;
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.moveTo(geometry.originX, geometry.originY);
+      this.ctx.lineTo(geometry.targetX, geometry.targetY);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+    }
+
+    this.ctx.fillStyle = `rgba(117, 211, 255, ${0.1 + chargeProgress * 0.12})`;
+    this.ctx.beginPath();
+    this.ctx.arc(geometry.targetX, geometry.targetY, targetRadius, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.strokeStyle = `rgba(226, 249, 255, ${pulse})`;
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+
+    this.ctx.translate(geometry.targetX, geometry.targetY);
+    if (!this.prefersReducedMotion) {
+      this.ctx.rotate(Math.PI * 0.25 + this.animationClockMs / 1_400);
+    } else {
+      this.ctx.rotate(Math.PI * 0.25);
+    }
+    const diamondRadius = TILE_SIZE * 0.13;
+    this.ctx.strokeStyle = `rgba(179, 235, 255, ${0.45 + chargeProgress * 0.3})`;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.strokeRect(-diamondRadius, -diamondRadius, diamondRadius * 2, diamondRadius * 2);
+    this.ctx.restore();
+  }
+
+  private drawRanniBlinkFeedback(feedback: RanniBlinkFeedback): void {
+    const progress = Math.max(0, Math.min(1, feedback.elapsedMs / RANNI_BLINK_FEEDBACK_MS));
+    const alpha = Math.max(0, 1 - progress);
+    const isFailed = feedback.kind === "failed";
+    const radius = this.prefersReducedMotion
+      ? TILE_SIZE * 0.28
+      : TILE_SIZE * (0.24 + progress * (isFailed ? 0.22 : 0.08));
+    const color = isFailed ? "255, 102, 118" : "255, 184, 92";
+    const label = feedback.kind === "failed"
+      ? (this.language === "pt" ? "SEM SALTO" : "NO BLINK")
+      : (this.language === "pt" ? "BLOQUEADO" : "BLOCKED");
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.strokeStyle = `rgba(${color}, ${0.45 + alpha * 0.45})`;
+    this.ctx.lineWidth = isFailed ? 3 : 2;
+    this.ctx.beginPath();
+    this.ctx.arc(feedback.position.x, feedback.position.y, radius, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    const crossRadius = Math.max(6, radius * 0.52);
+    this.ctx.beginPath();
+    this.ctx.moveTo(feedback.position.x - crossRadius, feedback.position.y - crossRadius);
+    this.ctx.lineTo(feedback.position.x + crossRadius, feedback.position.y + crossRadius);
+    this.ctx.moveTo(feedback.position.x + crossRadius, feedback.position.y - crossRadius);
+    this.ctx.lineTo(feedback.position.x - crossRadius, feedback.position.y + crossRadius);
+    this.ctx.stroke();
+    this.ctx.restore();
+
+    this.ctx.save();
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "bottom";
+    this.ctx.font = "700 7px Inter";
+    this.ctx.lineWidth = 3;
+    this.ctx.strokeStyle = `rgba(16, 12, 24, ${0.78 * alpha})`;
+    this.ctx.strokeText(label, feedback.position.x, feedback.position.y - radius - 4);
+    this.ctx.fillStyle = `rgba(${color}, ${alpha})`;
+    this.ctx.fillText(label, feedback.position.x, feedback.position.y - radius - 4);
+    this.ctx.restore();
   }
 
   private drawNicoBeamPreview(player: PlayerState): void {
