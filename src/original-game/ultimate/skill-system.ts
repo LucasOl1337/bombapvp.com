@@ -87,7 +87,9 @@ export {
 export {
   RANNI_SKILL_CHANNEL_MS,
   finishRanniBlink,
+  grantRanniProjectedBombEgress,
   isRanniImmuneDuringChannel,
+  retainOverlappingRanniProjectedBombEgress,
   startRanniIceBlink,
   updateRanniIceBlinkChannel,
 } from "../Characters/CustomMechanics/ranni-skill";

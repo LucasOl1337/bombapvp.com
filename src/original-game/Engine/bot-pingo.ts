@@ -42,6 +42,27 @@ function isInside(tile: TileCoord, context: BotContext): boolean {
     && tile.y < context.arena.config.grid.height;
 }
 
+function adjacentTile(
+  tile: TileCoord,
+  step: Readonly<{ dx: number; dy: number }>,
+  context: BotContext,
+): TileCoord {
+  const adjacent = { x: tile.x + step.dx, y: tile.y + step.dy };
+  if (isInside(adjacent, context)) {
+    return adjacent;
+  }
+  const isPortal = context.arena.config.wrapPortals.some((portal) => (
+    portal.x === tile.x && portal.y === tile.y
+  ));
+  if (!isPortal) {
+    return adjacent;
+  }
+  return {
+    x: (adjacent.x + context.arena.config.grid.width) % context.arena.config.grid.width,
+    y: (adjacent.y + context.arena.config.grid.height) % context.arena.config.grid.height,
+  };
+}
+
 function isWalkable(tile: TileCoord, context: BotContext): boolean {
   const tileId = key(tile);
   return isInside(tile, context)
@@ -418,6 +439,59 @@ function alignThreatenedMovementToTileCenter(
   return desired;
 }
 
+function canDirectionAdvance(
+  player: PlayerState,
+  position: Readonly<{ x: number; y: number }>,
+  direction: Direction,
+  context: BotContext,
+): boolean {
+  const option = context.evaluateMovementOption(player, direction, 1_000 / 60);
+  return context.canMovementOptionAdvance(position, option);
+}
+
+function canProjectedDirectionAdvance(
+  player: PlayerState,
+  position: Readonly<{ x: number; y: number }>,
+  direction: Direction,
+  context: BotContext,
+): boolean {
+  const option = context.evaluateProjectedMovementOption(player, direction, 1_000 / 60);
+  return context.canMovementOptionAdvance(position, option);
+}
+
+function executableThreatenedDirection(
+  player: PlayerState,
+  desired: Direction | null,
+  threatened: boolean,
+  context: BotContext,
+  threatArrival: ReadonlyMap<string, number>,
+): Direction | null {
+  if (!threatened || desired === null
+    || canDirectionAdvance(player, player.position, desired, context)) {
+    return desired;
+  }
+  const moveMs = moveDurationMs(player);
+  let best: Readonly<{ direction: Direction; arrival: number }> | null = null;
+  for (const step of steps) {
+    if (step.direction === desired
+      || !canDirectionAdvance(player, player.position, step.direction, context)) {
+      continue;
+    }
+    const tile = { x: player.tile.x + step.dx, y: player.tile.y + step.dy };
+    if (!isWalkable(tile, context)) {
+      continue;
+    }
+    const arrival = threatArrival.get(key(tile)) ?? Number.POSITIVE_INFINITY;
+    if (arrival <= moveMs + ESCAPE_BUFFER_MS) {
+      continue;
+    }
+    if (best === null || arrival > best.arrival) {
+      best = { direction: step.direction, arrival };
+    }
+  }
+  return best?.direction ?? desired;
+}
+
 function shouldStartEmergencyPhase(
   player: PlayerState,
   threatArrival: ReadonlyMap<string, number>,
@@ -453,11 +527,41 @@ function isPositionOutsideAllBlasts(
   ));
 }
 
+function isPositionCentered(position: Readonly<{ x: number; y: number }>): boolean {
+  const tileX = Math.floor(position.x / TILE_SIZE);
+  const tileY = Math.floor(position.y / TILE_SIZE);
+  const centerX = tileX * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = tileY * TILE_SIZE + TILE_SIZE / 2;
+  return Math.abs(position.x - centerX) <= TURN_CENTER_TOLERANCE_PX
+    && Math.abs(position.y - centerY) <= TURN_CENTER_TOLERANCE_PX;
+}
+
 function shouldReleaseEmergencyPhase(player: PlayerState, context: BotContext): boolean {
   return player.skill.id === "ranni-ice-blink"
     && player.skill.phase === "channeling"
     && player.skill.projectedPosition !== null
+    && (player.skill.projectedBombEgressIds?.length ?? 0) === 0
+    && isPositionCentered(player.skill.projectedPosition)
     && isPositionOutsideAllBlasts(player, player.skill.projectedPosition, context);
+}
+
+function shouldHoldPostPhaseRefuge(
+  player: PlayerState,
+  context: BotContext,
+  threatArrival: ReadonlyMap<string, number>,
+): boolean {
+  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase !== "cooldown") {
+    return false;
+  }
+  const imminentOwnedFuse = context.bombs
+    .filter((bomb) => bomb.ownerId === player.id && bomb.fuseMs <= RANNI_EMERGENCY_PHASE_WINDOW_MS)
+    .reduce((earliest, bomb) => Math.min(earliest, bomb.fuseMs), Number.POSITIVE_INFINITY);
+  if (!Number.isFinite(imminentOwnedFuse)
+    || !isPositionOutsideAllBlasts(player, player.position, context)) {
+    return false;
+  }
+  const currentArrival = threatArrival.get(key(player.tile));
+  return currentArrival === undefined || currentArrival > imminentOwnedFuse + ESCAPE_BUFFER_MS;
 }
 
 function channelEscapeDirection(player: PlayerState, context: BotContext): Direction | null {
@@ -469,12 +573,25 @@ function channelEscapeDirection(player: PlayerState, context: BotContext): Direc
     x: Math.floor(projectedPosition.x / TILE_SIZE),
     y: Math.floor(projectedPosition.y / TILE_SIZE),
   };
+  const projectedPlayer: PlayerState = {
+    ...player,
+    tile: start,
+    position: projectedPosition,
+  };
+  const projectedDirection = player.skill.projectedLastMoveDirection;
+  if (!isPositionCentered(projectedPosition)
+    && projectedDirection !== null
+    && canProjectedDirectionAdvance(projectedPlayer, projectedPosition, projectedDirection, context)) {
+    return projectedDirection;
+  }
   const queue: Array<Readonly<{ tile: TileCoord; first: Direction }>> = [];
   const visited = new Set([key(start)]);
   for (const step of steps) {
-    const tile = { x: start.x + step.dx, y: start.y + step.dy };
+    const tile = adjacentTile(start, step, context);
     const tileId = key(tile);
-    if (visited.has(tileId) || !isWalkable(tile, context)) {
+    if (visited.has(tileId)
+      || !isWalkable(tile, context)
+      || !canProjectedDirectionAdvance(projectedPlayer, projectedPosition, step.direction, context)) {
       continue;
     }
     visited.add(tileId);
@@ -490,7 +607,7 @@ function channelEscapeDirection(player: PlayerState, context: BotContext): Direc
       return current.first;
     }
     for (const step of steps) {
-      const tile = { x: current.tile.x + step.dx, y: current.tile.y + step.dy };
+      const tile = adjacentTile(current.tile, step, context);
       const tileId = key(tile);
       if (visited.has(tileId) || !isWalkable(tile, context)) {
         continue;
@@ -505,22 +622,33 @@ function channelEscapeDirection(player: PlayerState, context: BotContext): Direc
 export function getBotPingoDecision(player: PlayerState, context: BotContext): BotDecision {
   const threatArrival = buildThreatArrival(context);
   const plannedEscape = escapeDirection(player, context, threatArrival);
-  const escaping = alignThreatenedMovementToTileCenter(
+  const threatened = threatArrival.has(key(player.tile));
+  const alignedEscape = alignThreatenedMovementToTileCenter(
     player,
     plannedEscape,
-    threatArrival.has(key(player.tile)),
+    threatened,
     context,
+  );
+  const escaping = executableThreatenedDirection(
+    player,
+    alignedEscape,
+    threatened,
+    context,
+    threatArrival,
   );
   const releaseSkill = shouldReleaseEmergencyPhase(player, context);
   const useSkill = releaseSkill || shouldStartEmergencyPhase(player, threatArrival, escaping);
-  const detonate = !useSkill && shouldDetonateRemote(player, context);
-  const attackEscape = escaping === null && !useSkill && !detonate
+  const holdPostPhaseRefuge = shouldHoldPostPhaseRefuge(player, context, threatArrival);
+  const detonate = !useSkill && !holdPostPhaseRefuge && shouldDetonateRemote(player, context);
+  const attackEscape = escaping === null && !useSkill && !holdPostPhaseRefuge && !detonate
     ? bombEscapeDirection(player, context)
     : null;
   const placeBomb = attackEscape !== null;
   const direction = player.skill.phase === "channeling"
     ? releaseSkill ? null : channelEscapeDirection(player, context)
-    : escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival);
+    : holdPostPhaseRefuge
+      ? null
+      : escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival);
   return {
     direction,
     placeBomb,

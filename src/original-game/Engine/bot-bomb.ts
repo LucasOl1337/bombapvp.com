@@ -26,6 +26,7 @@ const DELTA: Readonly<Record<Direction, TileCoord>> = {
 };
 const ARRIVAL_MARGIN_MS = 180;
 const REACTION_WINDOW_MS = 1_300;
+const TURN_CENTER_TOLERANCE_PX = 2;
 const POWER_UP_SCORE: Readonly<Record<PowerUpType, number>> = {
   "shield-up": 10,
   "bomb-pass-up": 9,
@@ -202,6 +203,70 @@ function safeEscapeDirection(
   return best?.firstDirection ?? null;
 }
 
+function alignThreatenedEscapeToTileCenter(
+  player: PlayerState,
+  desired: Direction,
+  context: BotContext,
+  projected = false,
+): Direction | null {
+  const centerX = player.tile.x * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = player.tile.y * TILE_SIZE + TILE_SIZE / 2;
+  const offsetX = player.position.x - centerX;
+  const offsetY = player.position.y - centerY;
+  let correction: Direction | null = null;
+
+  if (
+    (desired === "up" || desired === "down")
+    && Math.abs(offsetX) > TURN_CENTER_TOLERANCE_PX
+  ) {
+    correction = offsetX > 0 ? "left" : "right";
+  } else if (
+    (desired === "left" || desired === "right")
+    && Math.abs(offsetY) > TURN_CENTER_TOLERANCE_PX
+  ) {
+    correction = offsetY > 0 ? "up" : "down";
+  }
+
+  const canAdvance = (direction: Direction): boolean => {
+    const option = projected
+      ? context.evaluateProjectedMovementOption(player, direction, 1_000 / 60)
+      : context.evaluateMovementOption(player, direction, 1_000 / 60);
+    return context.canMovementOptionAdvance(player.position, option);
+  };
+  if (correction !== null && canAdvance(correction)) return correction;
+  return canAdvance(desired) ? desired : null;
+}
+
+function centerExitTimeMs(player: PlayerState, direction: Direction): number {
+  const centerX = player.tile.x * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = player.tile.y * TILE_SIZE + TILE_SIZE / 2;
+  const alignmentDistance = direction === "up" || direction === "down"
+    ? Math.max(0, Math.abs(player.position.x - centerX) - TURN_CENTER_TOLERANCE_PX)
+    : Math.max(0, Math.abs(player.position.y - centerY) - TURN_CENTER_TOLERANCE_PX);
+  let boundaryDistance: number;
+  switch (direction) {
+    case "up":
+      boundaryDistance = player.position.y - player.tile.y * TILE_SIZE;
+      break;
+    case "down":
+      boundaryDistance = (player.tile.y + 1) * TILE_SIZE - player.position.y;
+      break;
+    case "left":
+      boundaryDistance = player.position.x - player.tile.x * TILE_SIZE;
+      break;
+    case "right":
+      boundaryDistance = (player.tile.x + 1) * TILE_SIZE - player.position.x;
+      break;
+  }
+  return (alignmentDistance + Math.max(0, boundaryDistance)) / TILE_SIZE * moveDuration(player);
+}
+
+function hasRanniSafetyWindowForNewBomb(player: PlayerState): boolean {
+  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase === "idle") return true;
+  return player.skill.phase === "cooldown"
+    && player.skill.cooldownRemainingMs + ARRIVAL_MARGIN_MS < getBombFuseMsForPlayer(player);
+}
+
 function attackBombEscapeDirection(
   player: PlayerState,
   target: PlayerState,
@@ -212,6 +277,7 @@ function attackBombEscapeDirection(
     player.spawnProtectionMs > 0
     || target.spawnProtectionMs > 0
     || player.activeBombs >= player.maxBombs
+    || !hasRanniSafetyWindowForNewBomb(player)
     || context.botBombCooldownMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
   ) return null;
@@ -238,6 +304,7 @@ function breakableBombEscapeDirection(
   if (
     player.spawnProtectionMs > 0
     || player.activeBombs >= player.maxBombs
+    || !hasRanniSafetyWindowForNewBomb(player)
     || context.botBombCooldownMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
   ) return null;
@@ -461,6 +528,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     const projectedPlayer = projectedRanniPlayer(player);
     if (
       player.skill.castElapsedMs > 0
+      && (player.skill.projectedBombEgressIds?.length ?? 0) === 0
       && !isOverlappingAnyBlast(projectedPlayer, context)
     ) {
       return {
@@ -476,8 +544,11 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
       context,
       threats,
     );
+    const direction = routeDirection
+      ? alignThreatenedEscapeToTileCenter(projectedPlayer, routeDirection, context, true)
+      : continuousOverlapEscapeDirection(projectedPlayer, context);
     return {
-      direction: routeDirection ?? continuousOverlapEscapeDirection(projectedPlayer, context),
+      direction,
       placeBomb: false,
     };
   }
@@ -490,8 +561,20 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     escapingOwnedBomb
     || (currentDanger !== undefined && currentDanger <= REACTION_WINDOW_MS)
   ) {
-    const direction = safeEscapeDirection(player, enemies, context, threats)
-      ?? continuousOverlapEscapeDirection(player, context);
+    const routeDirection = safeEscapeDirection(player, enemies, context, threats);
+    const direction = routeDirection
+      ? alignThreatenedEscapeToTileCenter(player, routeDirection, context)
+      : continuousOverlapEscapeDirection(player, context);
+    const physicalEscapeDirection = routeDirection ?? direction;
+    if (
+      physicalEscapeDirection !== null
+      && currentDanger !== undefined
+      && currentDanger <= centerExitTimeMs(player, physicalEscapeDirection) + ARRIVAL_MARGIN_MS
+      && player.skill.id === "ranni-ice-blink"
+      && player.skill.phase === "idle"
+    ) {
+      return { direction: null, placeBomb: false, useSkill: true };
+    }
     if (
       direction === null
       && player.skill.id === "ranni-ice-blink"

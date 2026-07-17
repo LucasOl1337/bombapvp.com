@@ -41,6 +41,26 @@ const SELF_DEATH_REPLAYS = [
     seed: "bomb-pingo-development-v1-final:sparse-breakables:8",
     spawnOrder: ["Bomb", "Pingo"],
   },
+  {
+    arenaVariant: "standard",
+    seed: "pingo-v3-dev-b:standard:0",
+    spawnOrder: ["Bomb", "Pingo"],
+  },
+  {
+    arenaVariant: "standard",
+    seed: "pingo-v3-dev-b:standard:9",
+    spawnOrder: ["Pingo", "Bomb"],
+  },
+  {
+    arenaVariant: "open-no-drops",
+    seed: "pingo-v3-dev-b:open-no-drops:10",
+    spawnOrder: ["Bomb", "Pingo"],
+  },
+  {
+    arenaVariant: "sparse-breakables",
+    seed: "pingo-v3-dev-b:sparse-breakables:8",
+    spawnOrder: ["Pingo", "Bomb"],
+  },
 ];
 
 describe("regressões development do Bomb", () => {

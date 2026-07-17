@@ -48,6 +48,7 @@ function player(id, x, y, overrides = {}) {
       castElapsedMs: 0,
       projectedPosition: null,
       projectedLastMoveDirection: null,
+      projectedBombEgressIds: [],
     },
     ...overrides,
   };
@@ -61,11 +62,13 @@ function context({
   breakable = [],
   width = 7,
   height = 5,
+  wrapPortals = [],
   suddenDeathActive = false,
   suddenDeathTickMs = 0,
   suddenDeathIndex = 0,
   suddenDeathPath = [],
   evaluateMovementOption = (_subject, direction) => ({ direction }),
+  evaluateProjectedMovementOption = evaluateMovementOption,
   canMovementOptionAdvance = () => true,
   isPlayerOverlappingTile = (subject, tile) => {
     const half = TILE_SIZE / 2;
@@ -87,7 +90,7 @@ function context({
     arena: {
       config: {
         grid: { width, height },
-        wrapPortals: [],
+        wrapPortals,
         suddenDeathPath: [],
       },
       solid: solidTiles,
@@ -112,11 +115,55 @@ function context({
       && !breakableTiles.has(tileKey(tile.x, tile.y))
     ),
     evaluateMovementOption,
+    evaluateProjectedMovementOption,
     projectKillerBeeDashTarget: (subject) => subject.position,
     canMovementOptionAdvance,
     areOppositeDirections: () => false,
     isPlayerOverlappingTile,
   };
+}
+
+function projectedBombEgressDecision({
+  egressIds,
+  projectedPosition = { x: 220, y: 39.17 },
+  projectedLastMoveDirection = "up",
+  solid = [{ x: 4, y: 0 }, { x: 6, y: 0 }, { x: 5, y: 1 }],
+  wrapPortals = [{ x: 5, y: 0 }],
+}) {
+  const pingo = player(1, 5, 0, {
+    skill: {
+      id: "ranni-ice-blink",
+      phase: "channeling",
+      channelRemainingMs: 900,
+      cooldownRemainingMs: 0,
+      castElapsedMs: 600,
+      projectedPosition,
+      projectedLastMoveDirection,
+      projectedBombEgressIds: egressIds,
+    },
+  });
+  const enemy = player(2, 9, 7);
+  return getBotPingoDecision(pingo, context({
+    players: { 1: pingo, 2: enemy },
+    width: 11,
+    height: 9,
+    wrapPortals,
+    solid,
+    bombs: [
+      { id: 22, ownerId: 2, tile: { x: 5, y: 0 }, fuseMs: 600, ownerCanPass: false, flameRange: 1 },
+    ],
+    evaluateMovementOption: (_subject, direction) => ({ direction, projected: false }),
+    evaluateProjectedMovementOption: (subject, direction) => ({
+      direction,
+      projected: true,
+      egressIds: subject.skill.projectedBombEgressIds,
+    }),
+    canMovementOptionAdvance: (_position, option) => (
+      option.projected
+      && option.direction === projectedLastMoveDirection
+      && option.egressIds.includes(22)
+    ),
+  }));
 }
 
 describe("política Pingo", () => {
@@ -315,7 +362,7 @@ describe("política Pingo", () => {
         channelRemainingMs: 850,
         cooldownRemainingMs: 0,
         castElapsedMs: 650,
-        projectedPosition: { x: 60, y: 186.67 },
+        projectedPosition: { x: 60, y: 180 },
         projectedLastMoveDirection: "down",
       },
     });
@@ -330,6 +377,78 @@ describe("política Pingo", () => {
     }));
 
     expect(decision).toMatchObject({ useSkill: true, skillAction: "release" });
+  });
+
+  it("não libera a Ranni sobre a fronteira entre duas casas", () => {
+    const pingo = player(1, 0, 3, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 400,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 1_100,
+        projectedPosition: { x: 38.75, y: 140 },
+        projectedLastMoveDirection: "left",
+      },
+    });
+    const enemy = player(2, 9, 3);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+    }));
+
+    expect(decision).toMatchObject({ useSkill: false });
+    expect(decision.skillAction).toBeUndefined();
+  });
+
+  it("não libera a Ranni enquanto a projeção ainda usa egress de bomba", () => {
+    const pingo = player(1, 5, 1, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 950,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 550,
+        projectedPosition: { x: 220, y: 340.83 },
+        projectedLastMoveDirection: "up",
+        projectedBombEgressIds: [22],
+      },
+    });
+    const enemy = player(2, 9, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      bombs: [
+        { id: 22, ownerId: 2, tile: { x: 5, y: 0 }, fuseMs: 1_533, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ useSkill: false });
+    expect(decision.skillAction).toBeUndefined();
+  });
+
+  it("mantém o sentido projetado até centralizar a nova casa", () => {
+    const pingo = player(1, 0, 3, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 500,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 1_000,
+        projectedPosition: { x: 40.83, y: 140 },
+        projectedLastMoveDirection: "right",
+      },
+    });
+    const enemy = player(2, 9, 3);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+    }));
+
+    expect(decision).toMatchObject({ direction: "right", useSkill: false });
   });
 
   it("navega a fase pela posição projetada quando o corpo real aponta para uma rota bloqueada", () => {
@@ -358,6 +477,170 @@ describe("política Pingo", () => {
     }));
 
     expect(decision).toMatchObject({ direction: "right", useSkill: false });
+  });
+
+  it("descarta o primeiro passo da Ranni quando a projeção não consegue avançar", () => {
+    const pingo = player(1, 2, 2, {
+      activeBombs: 1,
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 900,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 600,
+        projectedPosition: { x: 100, y: 100 },
+        projectedLastMoveDirection: "up",
+      },
+    });
+    const enemy = player(2, 5, 2);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      bombs: [
+        { id: 20, ownerId: 2, tile: { x: 2, y: 1 }, fuseMs: 800, ownerCanPass: false, flameRange: 1 },
+      ],
+      canMovementOptionAdvance: (_position, option) => option.direction !== "left",
+    }));
+
+    expect(decision).toMatchObject({ direction: "down", useSkill: false });
+  });
+
+  it("atravessa o portal de borda quando é a única fuga projetada da Ranni", () => {
+    const pingo = player(1, 5, 1, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 900,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 600,
+        projectedPosition: { x: 220, y: 39.17 },
+        projectedLastMoveDirection: "up",
+      },
+    });
+    const enemy = player(2, 9, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      wrapPortals: [{ x: 5, y: 0 }],
+      solid: [{ x: 4, y: 0 }, { x: 6, y: 0 }, { x: 5, y: 1 }],
+      bombs: [
+        { id: 22, ownerId: 2, tile: { x: 5, y: 0 }, fuseMs: 600, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: "up", useSkill: false });
+  });
+
+  it("usa o entitlement exato para sair da bomba criada sobre a projeção", () => {
+    const pingo = player(1, 5, 0, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "channeling",
+        channelRemainingMs: 900,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 600,
+        projectedPosition: { x: 220, y: 39.17 },
+        projectedLastMoveDirection: "up",
+        projectedBombEgressIds: [22],
+      },
+    });
+    const enemy = player(2, 9, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      wrapPortals: [{ x: 5, y: 0 }],
+      solid: [{ x: 4, y: 0 }, { x: 6, y: 0 }, { x: 5, y: 1 }],
+      bombs: [
+        { id: 22, ownerId: 2, tile: { x: 5, y: 0 }, fuseMs: 600, ownerCanPass: false, flameRange: 1 },
+      ],
+      evaluateMovementOption: (_subject, direction) => ({ direction, projected: false }),
+      evaluateProjectedMovementOption: (subject, direction) => ({
+        direction,
+        projected: true,
+        egressIds: subject.skill.projectedBombEgressIds,
+      }),
+      canMovementOptionAdvance: (_position, option) => (
+        option.projected
+        && option.direction === "up"
+        && option.egressIds.includes(22)
+      ),
+    }));
+
+    expect(decision).toMatchObject({ direction: "up", useSkill: false });
+  });
+
+  it("não usa o entitlement de outro bomb ID", () => {
+    const decision = projectedBombEgressDecision({ egressIds: [99] });
+
+    expect(decision).toMatchObject({ direction: null, useSkill: false });
+  });
+
+  it("não readquire entitlement apenas porque a projeção ainda sobrepõe a bomba", () => {
+    const decision = projectedBombEgressDecision({ egressIds: [] });
+
+    expect(decision).toMatchObject({ direction: null, useSkill: false });
+  });
+
+  it("não reentra na bomba depois que o entitlement foi limpo", () => {
+    const decision = projectedBombEgressDecision({
+      egressIds: [],
+      projectedPosition: { x: 220, y: 60.83 },
+      projectedLastMoveDirection: "up",
+      solid: [{ x: 4, y: 1 }, { x: 6, y: 1 }, { x: 5, y: 2 }],
+      wrapPortals: [],
+    });
+
+    expect(decision).toMatchObject({ direction: null, useSkill: false });
+  });
+
+  it("troca uma fuga discreta bloqueada por outra direção executável", () => {
+    const pingo = player(1, 1, 3, {
+      position: { x: 60, y: 140 },
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 5_000,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+      },
+    });
+    const enemy = player(2, 5, 3);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      bombs: [
+        { id: 21, ownerId: 2, tile: { x: 0, y: 3 }, fuseMs: 700, ownerCanPass: false, flameRange: 1 },
+      ],
+      canMovementOptionAdvance: (_position, option) => option.direction === "right",
+    }));
+
+    expect(decision).toMatchObject({ direction: "right", placeBomb: false, useSkill: false });
+  });
+
+  it("mantém o refúgio seguro da Ranni até a própria bomba iminente explodir", () => {
+    const pingo = player(1, 2, 2, {
+      activeBombs: 1,
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 8_000,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+      },
+    });
+    const enemy = player(2, 5, 2);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      bombs: [
+        { id: 14, ownerId: 1, tile: { x: 3, y: 1 }, fuseMs: 700, ownerCanPass: false, flameRange: 3 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
   });
 
   it("ataca um adversário no alcance quando consegue escapar da própria explosão", () => {

@@ -89,6 +89,7 @@ export interface BotContext {
   // Callback functions for complex GameApp operations
   canOccupyPosition: (position: PixelCoord, tile: TileCoord) => boolean;
   evaluateMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
+  evaluateProjectedMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
   projectKillerBeeDashTarget: (player: PlayerState, direction: Direction) => PixelCoord;
   canMovementOptionAdvance: (position: PixelCoord, movementOption: any) => boolean;
   areOppositeDirections: (a: Direction, b: Direction) => boolean;

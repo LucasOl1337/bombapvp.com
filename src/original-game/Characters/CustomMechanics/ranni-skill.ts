@@ -4,7 +4,12 @@ import type {
 } from "../../Gameplay/types";
 import type { SkillContext } from "../../ultimate/shared";
 import { RANNI_SKILL_COOLDOWN_MS } from "../../ultimate/skill-registry";
-import { simulateProjectedMovement } from "../../ultimate/shared";
+import {
+  retainOverlappingRanniProjectedBombEgress,
+  simulateProjectedMovement,
+} from "../../ultimate/shared";
+
+export { retainOverlappingRanniProjectedBombEgress } from "../../ultimate/shared";
 
 export {
   RANNI_CHARACTER_ID,
@@ -13,12 +18,24 @@ export {
 
 export const RANNI_SKILL_CHANNEL_MS = 1_500;
 
+export function grantRanniProjectedBombEgress(player: PlayerState, bombId: number): void {
+  if (
+    player.skill.id !== "ranni-ice-blink"
+    || player.skill.phase !== "channeling"
+    || player.skill.projectedBombEgressIds?.includes(bombId)
+  ) {
+    return;
+  }
+  player.skill.projectedBombEgressIds = [...(player.skill.projectedBombEgressIds ?? []), bombId];
+}
+
 export function startRanniIceBlink(player: PlayerState): void {
   player.skill.phase = "channeling";
   player.skill.channelRemainingMs = RANNI_SKILL_CHANNEL_MS;
   player.skill.castElapsedMs = 0;
   player.skill.projectedPosition = { ...player.position };
   player.skill.projectedLastMoveDirection = player.lastMoveDirection;
+  player.skill.projectedBombEgressIds = [];
   player.velocity.x = 0;
   player.velocity.y = 0;
 }
@@ -45,6 +62,15 @@ export function updateRanniIceBlinkChannel(
   if (!player.skill.projectedPosition) {
     player.skill.projectedPosition = { ...player.position };
   }
+  const overlappingBombIds = (player.skill.projectedBombEgressIds ?? []).filter((bombId) => {
+    const bomb = context.bombs.find((item) => item.id === bombId);
+    return Boolean(
+      bomb
+      && player.skill.projectedPosition
+      && context.isPositionOverlappingTile(player.skill.projectedPosition, bomb.tile)
+    );
+  });
+  retainOverlappingRanniProjectedBombEgress(player, overlappingBombIds);
   if (desiredDirection) {
     const simulated = simulateProjectedMovement(
       player,
@@ -56,6 +82,7 @@ export function updateRanniIceBlinkChannel(
     );
     player.skill.projectedPosition = simulated.position;
     player.skill.projectedLastMoveDirection = simulated.lastMoveDirection;
+    player.skill.projectedBombEgressIds = simulated.projectedBombEgressIds;
     player.direction = simulated.direction;
   }
 
@@ -89,6 +116,7 @@ export function finishRanniBlink(player: PlayerState, context: SkillContext): vo
   player.skill.castElapsedMs = 0;
   player.skill.projectedPosition = null;
   player.skill.projectedLastMoveDirection = null;
+  player.skill.projectedBombEgressIds = [];
 }
 
 export function isRanniImmuneDuringChannel(player: PlayerState): boolean {

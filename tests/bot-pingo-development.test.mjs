@@ -91,3 +91,47 @@ describe("Pingo nas autoeliminações pós-hotfix da Ranni", () => {
     expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
   }, 30_000);
 });
+
+describe("Pingo contra a fuga contínua do Bomb v3", () => {
+  it.each([
+    ["pingo-v3-dev-b:standard:8", { x: 1, y: 7 }],
+    ["pingo-v3-dev-b:standard:9", { x: 9, y: 7 }],
+  ])("não se autoelimina no replay %s", (seed, expectedSpawn) => {
+    const outcome = playAdversarialMatch({
+      seed,
+      arenaVariant: "standard",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Bomb", "Pingo"],
+    });
+
+    expect(outcome.spawnTiles.Pingo).toEqual(expectedSpawn);
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+  }, 30_000);
+
+  it("rompe a oscilação da projeção Ranni no choke sparse dev-c", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v3-dev-c:sparse-breakables:6",
+      arenaVariant: "sparse-breakables",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+    expect(outcome.durationMs).toBeGreaterThan(7_750);
+  }, 30_000);
+
+  it("sai da bomba rival criada sobre a projeção Ranni no open dev-c", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v3-dev-c:open-no-drops:10",
+      arenaVariant: "open-no-drops",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Bomb", "Pingo"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+    expect(outcome.durationMs).toBeGreaterThan(4_450);
+  }, 30_000);
+});

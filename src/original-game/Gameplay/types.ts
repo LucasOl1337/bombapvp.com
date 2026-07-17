@@ -68,6 +68,7 @@ export interface PlayerSkillState {
   castElapsedMs: number;
   projectedPosition: PixelCoord | null;
   projectedLastMoveDirection: Direction | null;
+  projectedBombEgressIds?: number[];
 }
 
 export interface BombState {

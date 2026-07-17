@@ -134,6 +134,7 @@ import {
   CROCODILO_SKILL_CHANNEL_MS,
   CROCODILO_SKILL_RELEASE_MS,
   RANNI_SKILL_CHANNEL_MS,
+  grantRanniProjectedBombEgress,
 } from "../ultimate/skill-system";
 import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
 import {
@@ -801,6 +802,15 @@ export class GameApp {
       dangerMap,
       canOccupyPosition: (_pos, _tile) => true,
       evaluateMovementOption: (player, dir, dt) => this.evaluateMovementOption(player, dir, dt),
+      evaluateProjectedMovementOption: (player, dir, dt) => {
+        const projectedBombEgressIds = (
+          player.skill.id === "ranni-ice-blink"
+          && player.skill.phase === "channeling"
+        )
+          ? player.skill.projectedBombEgressIds ?? []
+          : [];
+        return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds);
+      },
       projectKillerBeeDashTarget: (player, dir) => computeKillerBeeDashTarget(player, dir, this.createSkillContext()),
       canMovementOptionAdvance: (pos, opt) => this.canMovementOptionAdvance(pos, opt),
       areOppositeDirections: (a, b) => this.areOppositeDirections(a, b),
@@ -821,8 +831,13 @@ export class GameApp {
       getTileFromPosition: (pos) => this.getTileFromPosition(pos),
       normalizeArenaPosition: (pos) => this.normalizeArenaPosition(pos),
       getWrappedDelta: (target, current, size) => this.getWrappedDelta(target, current, size),
-      resolveMovementDirection: (player, dir, dt) => this.resolveMovementDirection(player, dir, dt),
-      movePlayerSimulated: (player, dir, dt) => this.movePlayerSimulated(player, dir, dt),
+      resolveMovementDirection: (player, dir, dt, ignoredBombIds) => (
+        this.resolveMovementDirection(player, dir, dt, ignoredBombIds)
+      ),
+      movePlayerSimulated: (player, dir, dt, ignoredBombIds) => (
+        this.movePlayerSimulated(player, dir, dt, ignoredBombIds)
+      ),
+      isPositionOverlappingTile: (position, tile) => this.isProjectedPositionOverlappingTile(position, tile),
       clonePlayerState: (player) => this.clonePlayerState(player),
       tryAbsorbInstantHit: (player, attackerId) => this.tryAbsorbInstantHit(player, attackerId),
       breakCrateAtKey: (key) => this.breakCrateAtKey(key),
@@ -1665,6 +1680,7 @@ export class GameApp {
       skill: {
         ...skill,
         projectedPosition: skill.projectedPosition ? { ...skill.projectedPosition } : null,
+        projectedBombEgressIds: [...(skill.projectedBombEgressIds ?? [])],
       },
     };
   }
@@ -2796,8 +2812,13 @@ export class GameApp {
     );
   }
 
-  private resolveMovementDirection(player: PlayerState, desiredDirection: Direction, deltaMs: number): Direction {
-    const desiredOption = this.evaluateMovementOption(player, desiredDirection, deltaMs);
+  private resolveMovementDirection(
+    player: PlayerState,
+    desiredDirection: Direction,
+    deltaMs: number,
+    ignoredBombIds: readonly number[] = [],
+  ): Direction {
+    const desiredOption = this.evaluateMovementOption(player, desiredDirection, deltaMs, ignoredBombIds);
     const desiredCanMove = this.canMovementOptionAdvance(player.position, desiredOption);
 
     const lastDirection = player.lastMoveDirection;
@@ -2809,13 +2830,18 @@ export class GameApp {
       return desiredDirection;
     }
 
-    const continueOption = this.evaluateMovementOption(player, lastDirection, deltaMs);
+    const continueOption = this.evaluateMovementOption(player, lastDirection, deltaMs, ignoredBombIds);
     const continueAdvances = this.canMovementOptionAdvance(player.position, continueOption);
 
     return continueAdvances ? lastDirection : desiredDirection;
   }
 
-  private evaluateMovementOption(player: PlayerState, direction: Direction, deltaMs: number): MovementOption {
+  private evaluateMovementOption(
+    player: PlayerState,
+    direction: Direction,
+    deltaMs: number,
+    ignoredBombIds: readonly number[] = [],
+  ): MovementOption {
     const delta = directionDelta[direction];
     const step = this.getMoveSpeed(player) * (deltaMs / 1000);
     const horizontal = delta.x !== 0;
@@ -2862,9 +2888,9 @@ export class GameApp {
       combinedMove,
       laneOnlyMove,
       forwardOnlyMove,
-      combinedFree: this.canOccupyPosition(player, combinedMove),
-      laneOnlyFree: this.canOccupyPosition(player, laneOnlyMove),
-      forwardOnlyFree: this.canOccupyPosition(player, forwardOnlyMove),
+      combinedFree: this.canOccupyPosition(player, combinedMove, ignoredBombIds),
+      laneOnlyFree: this.canOccupyPosition(player, laneOnlyMove, ignoredBombIds),
+      forwardOnlyFree: this.canOccupyPosition(player, forwardOnlyMove, ignoredBombIds),
     };
   }
 
@@ -2872,13 +2898,24 @@ export class GameApp {
     this.movePlayerInternal(player, direction, deltaMs, true);
   }
 
-  private movePlayerSimulated(player: PlayerState, direction: Direction, deltaMs: number): void {
-    this.movePlayerInternal(player, direction, deltaMs, false);
+  private movePlayerSimulated(
+    player: PlayerState,
+    direction: Direction,
+    deltaMs: number,
+    ignoredBombIds: readonly number[] = [],
+  ): void {
+    this.movePlayerInternal(player, direction, deltaMs, false, ignoredBombIds);
   }
 
-  private movePlayerInternal(player: PlayerState, direction: Direction, deltaMs: number, allowBombPush: boolean): void {
+  private movePlayerInternal(
+    player: PlayerState,
+    direction: Direction,
+    deltaMs: number,
+    allowBombPush: boolean,
+    ignoredBombIds: readonly number[] = [],
+  ): void {
     const start = { ...player.position };
-    let option = this.evaluateMovementOption(player, direction, deltaMs);
+    let option = this.evaluateMovementOption(player, direction, deltaMs, ignoredBombIds);
 
     if (allowBombPush && !option.combinedFree && !option.forwardOnlyFree && option.canAdvanceForward) {
       const pushed = this.tryPushBomb(player, direction);
@@ -3023,7 +3060,11 @@ export class GameApp {
     return false;
   }
 
-  private canOccupyPosition(player: PlayerState, position: PixelCoord): boolean {
+  private canOccupyPosition(
+    player: PlayerState,
+    position: PixelCoord,
+    ignoredBombIds: readonly number[] = [],
+  ): boolean {
     const wrapped = this.normalizeArenaPosition(position);
     const left = wrapped.x - PLAYER_HITBOX_HALF;
     const right = wrapped.x + PLAYER_HITBOX_HALF;
@@ -3037,7 +3078,7 @@ export class GameApp {
 
     for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
       for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
-        if (this.isTileBlockedForPlayer(player, tileX, tileY)) {
+        if (this.isTileBlockedForPlayer(player, tileX, tileY, ignoredBombIds)) {
           return false;
         }
       }
@@ -3046,7 +3087,12 @@ export class GameApp {
     return true;
   }
 
-  private isTileBlockedForPlayer(player: PlayerState, tileX: number, tileY: number): boolean {
+  private isTileBlockedForPlayer(
+    player: PlayerState,
+    tileX: number,
+    tileY: number,
+    ignoredBombIds: readonly number[] = [],
+  ): boolean {
     const normalized = this.normalizeTile({ x: tileX, y: tileY });
     const key = tileKey(normalized.x, normalized.y);
     if (this.arena.solid.has(key) || this.arena.breakable.has(key)) {
@@ -3058,6 +3104,9 @@ export class GameApp {
         continue;
       }
       if (player.bombPassLevel > 0) {
+        continue;
+      }
+      if (ignoredBombIds.includes(bomb.id)) {
         continue;
       }
       if (bomb.ownerId === player.id && bomb.ownerCanPass) {
@@ -3114,6 +3163,14 @@ export class GameApp {
     return left < tileRight && right > tileLeft && top < tileBottom && bottom > tileTop;
   }
 
+  private isProjectedPositionOverlappingTile(position: PixelCoord, tile: TileCoord): boolean {
+    const tileCenter = this.getTileCenter(tile);
+    const deltaX = Math.abs(this.getWrappedDelta(position.x, tileCenter.x, this.getArenaPixelWidth()));
+    const deltaY = Math.abs(this.getWrappedDelta(position.y, tileCenter.y, this.getArenaPixelHeight()));
+    return deltaX < PLAYER_HITBOX_HALF + TILE_SIZE * 0.5
+      && deltaY < PLAYER_HITBOX_HALF + TILE_SIZE * 0.5;
+  }
+
   private placeBomb(player: PlayerState, playAudio = true): boolean {
     if (!player.alive || player.activeBombs >= player.maxBombs) {
       return false;
@@ -3125,14 +3182,26 @@ export class GameApp {
       return false;
     }
 
-    this.bombs.push({
+    const bomb: BombState = {
       id: this.nextBombId,
       ownerId: player.id,
       tile: { ...tile },
       fuseMs: getBombFuseMsForPlayer(player),
       ownerCanPass: true,
       flameRange: player.flameRange,
-    });
+    };
+    this.bombs.push(bomb);
+    for (const activePlayerId of this.activePlayerIds) {
+      const activePlayer = this.players[activePlayerId];
+      if (
+        activePlayer.skill.id === "ranni-ice-blink"
+        && activePlayer.skill.phase === "channeling"
+        && activePlayer.skill.projectedPosition
+        && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)
+      ) {
+        grantRanniProjectedBombEgress(activePlayer, bomb.id);
+      }
+    }
     this.cachedBotDangerMap = null;
     this.nextBombId += 1;
     player.activeBombs += 1;
