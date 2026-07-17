@@ -232,6 +232,9 @@ const POWER_UP_REVEAL_HALO_END_RADIUS = 26;
 const FLAME_DISSIPATE_TAIL_MS = 120;
 const CHAIN_REACTION_FEEDBACK_MS = 260;
 const EXPLOSION_FEEDBACK_INSET_PX = 1;
+const PLAYER_FLAME_OCCLUSION_INSET_PX = 3;
+const PLAYER_FLAME_OCCLUSION_CORNER_PX = 10;
+const PLAYER_FLAME_OCCLUSION_DEATH_WINDOW_MS = FLAME_DURATION_MS;
 const SPAWN_PROTECTION_MS = 2200;
 const PERFECT_START_WINDOW_MS = 320;
 const PERFECT_START_BOOST_MS = 640;
@@ -467,6 +470,73 @@ export interface ExplosionFeedbackConnector {
   toX: number;
   toY: number;
   style: NonNullable<FlameState["style"]>;
+}
+
+export interface PlayerFlameOcclusionIndicator {
+  playerId: PlayerId;
+  ownerId: PlayerId | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cornerLength: number;
+  style: NonNullable<FlameState["style"]>;
+  alpha: number;
+}
+
+export interface PlayerFlameOcclusionElimination {
+  playerId: PlayerId;
+  startedAtMs: number;
+}
+
+export function buildPlayerFlameOcclusionIndicators(
+  flames: readonly Pick<FlameState, "tile" | "style" | "remainingMs" | "ownerId">[],
+  players: readonly Pick<PlayerState, "id" | "tile" | "active" | "alive">[],
+  eliminations: readonly PlayerFlameOcclusionElimination[],
+  animationClockMs: number,
+  prefersReducedMotion: boolean,
+): PlayerFlameOcclusionIndicator[] {
+  const recentlyEliminated = new Set(
+    eliminations
+      .filter(({ startedAtMs }) => {
+        const elapsedMs = animationClockMs - startedAtMs;
+        return elapsedMs >= 0 && elapsedMs <= PLAYER_FLAME_OCCLUSION_DEATH_WINDOW_MS;
+      })
+      .map(({ playerId }) => playerId),
+  );
+  const activeFlames = new Map(
+    flames
+      .filter((flame) => flame.remainingMs > 0)
+      .map((flame) => [tileKey(flame.tile.x, flame.tile.y), flame]),
+  );
+  const pulse = prefersReducedMotion
+    ? 0.5
+    : 0.5 + Math.sin(animationClockMs / 120) * 0.5;
+  const baseAlpha = 0.74 + pulse * 0.22;
+
+  return players.flatMap((player) => {
+    if (!player.active || (!player.alive && !recentlyEliminated.has(player.id))) {
+      return [];
+    }
+    const flame = activeFlames.get(tileKey(player.tile.x, player.tile.y));
+    if (!flame) {
+      return [];
+    }
+    const fade = Math.min(1, flame.remainingMs / FLAME_DISSIPATE_TAIL_MS);
+    return [{
+      playerId: player.id,
+      ownerId: flame.ownerId,
+      x: player.tile.x * TILE_SIZE + PLAYER_FLAME_OCCLUSION_INSET_PX,
+      y: player.tile.y * TILE_SIZE + PLAYER_FLAME_OCCLUSION_INSET_PX,
+      width: TILE_SIZE - PLAYER_FLAME_OCCLUSION_INSET_PX * 2,
+      height: TILE_SIZE - PLAYER_FLAME_OCCLUSION_INSET_PX * 2,
+      cornerLength: PLAYER_FLAME_OCCLUSION_CORNER_PX,
+      style: flame.style ?? "normal",
+      alpha: prefersReducedMotion
+        ? baseAlpha
+        : Math.round(baseAlpha * fade * 1_000) / 1_000,
+    }];
+  });
 }
 
 export function buildExplosionFeedbackGeometry(
@@ -5016,6 +5086,8 @@ export class GameApp {
       this.drawPlayer(this.players[id]);
     }
 
+    this.drawPlayerFlameOcclusionIndicators();
+
     for (const effect of this.suddenDeathClosureEffects) {
       this.drawSuddenDeathClosureEffect(effect);
     }
@@ -5685,6 +5757,65 @@ export class GameApp {
       this.ctx.lineWidth = 2;
       this.ctx.beginPath();
       this.ctx.arc(toX, toY, this.prefersReducedMotion ? 9 : 6 + progress * 10, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
+  }
+
+  private drawPlayerFlameOcclusionIndicators(): void {
+    const indicators = buildPlayerFlameOcclusionIndicators(
+      this.flames,
+      ALL_PLAYER_IDS.map((playerId) => this.players[playerId]),
+      ALL_PLAYER_IDS.flatMap((playerId) => {
+        const deathAnimation = this.playerDeathAnimations[playerId];
+        return deathAnimation
+          ? [{ playerId, startedAtMs: deathAnimation.startedAtMs }]
+          : [];
+      }),
+      this.animationClockMs,
+      this.prefersReducedMotion,
+    );
+    if (indicators.length === 0) {
+      return;
+    }
+
+    const traceCorners = (indicator: PlayerFlameOcclusionIndicator): void => {
+      const { x, y, width, height, cornerLength } = indicator;
+      const right = x + width;
+      const bottom = y + height;
+      this.ctx.beginPath();
+      this.ctx.moveTo(x + cornerLength, y);
+      this.ctx.lineTo(x, y);
+      this.ctx.lineTo(x, y + cornerLength);
+      this.ctx.moveTo(right - cornerLength, y);
+      this.ctx.lineTo(right, y);
+      this.ctx.lineTo(right, y + cornerLength);
+      this.ctx.moveTo(x, bottom - cornerLength);
+      this.ctx.lineTo(x, bottom);
+      this.ctx.lineTo(x + cornerLength, bottom);
+      this.ctx.moveTo(right - cornerLength, bottom);
+      this.ctx.lineTo(right, bottom);
+      this.ctx.lineTo(right, bottom - cornerLength);
+    };
+
+    this.ctx.save();
+    this.ctx.lineCap = "square";
+    this.ctx.lineJoin = "miter";
+    for (const indicator of indicators) {
+      const toxic = indicator.style === "toxic";
+      this.ctx.globalAlpha = indicator.alpha;
+      this.ctx.shadowBlur = 0;
+      this.ctx.shadowColor = "transparent";
+      this.ctx.strokeStyle = "rgba(8, 8, 16, 0.9)";
+      this.ctx.lineWidth = 5;
+      traceCorners(indicator);
+      this.ctx.stroke();
+
+      this.ctx.strokeStyle = toxic ? "#baffd3" : "#fff0a6";
+      this.ctx.shadowColor = toxic ? "rgba(54, 255, 151, 0.95)" : "rgba(255, 76, 28, 0.95)";
+      this.ctx.shadowBlur = 6;
+      this.ctx.lineWidth = 2;
+      traceCorners(indicator);
       this.ctx.stroke();
     }
     this.ctx.restore();
