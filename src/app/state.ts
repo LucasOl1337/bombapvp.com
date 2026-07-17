@@ -11,6 +11,7 @@ import {
 import { createLabMatchParams } from "../lab/competitors.ts";
 
 export type AppScreen = "launcher" | "character-selection" | "game-launch" | "laboratory";
+export type TrainingBotId = "bomb" | "pingo";
 
 export type AppSnapshot = Readonly<{
   brand: "Bomba PvP";
@@ -22,11 +23,13 @@ export type AppSnapshot = Readonly<{
   copy: ProductCopy;
   activeExperience: Experience | null;
   selectedCharacter: Character | null;
+  selectedTrainingBot: TrainingBotId;
 }>;
 
 export type AppIntent =
   | Readonly<{ type: "open-experience"; experienceId: ExperienceId }>
   | Readonly<{ type: "select-character"; characterId: CharacterId }>
+  | Readonly<{ type: "select-training-bot"; botId: TrainingBotId }>
   | Readonly<{ type: "confirm-character" }>
   | Readonly<{ type: "start-lab-match"; models: readonly string[]; labels?: readonly string[] }>
   | Readonly<{ type: "back-to-selection" }>
@@ -66,6 +69,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
       ...catalog,
       activeExperience,
       selectedCharacter: null,
+      selectedTrainingBot: "bomb",
     });
   }
 
@@ -78,6 +82,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
       ...catalog,
       activeExperience,
       selectedCharacter: null,
+      selectedTrainingBot: "bomb",
     });
   }
 
@@ -89,6 +94,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
     ...catalog,
     activeExperience: null,
     selectedCharacter: null,
+    selectedTrainingBot: "bomb",
   });
 }
 
@@ -116,6 +122,15 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
     return freezeSnapshot({ ...snapshot, selectedCharacter });
   }
 
+  if (intent.type === "select-training-bot") {
+    if (
+      snapshot.screen !== "character-selection"
+      || snapshot.activeExperience?.id !== "bot-training"
+      || snapshot.selectedTrainingBot === intent.botId
+    ) return snapshot;
+    return freezeSnapshot({ ...snapshot, selectedTrainingBot: intent.botId });
+  }
+
   if (intent.type === "confirm-character") {
     if (
       snapshot.screen !== "character-selection" ||
@@ -125,7 +140,8 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
       return snapshot;
     }
     const mode = snapshot.activeExperience.id === "continuous-room" ? "continuous" : "training";
-    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}`;
+    const bot = mode === "training" ? `&bot=${snapshot.selectedTrainingBot}` : "";
+    const currentPath = `/arena/?mode=${mode}&character=${encodeURIComponent(snapshot.selectedCharacter.id)}${bot}`;
     return freezeSnapshot({ ...snapshot, screen: "game-launch", currentPath });
   }
 

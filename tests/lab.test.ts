@@ -4,6 +4,8 @@ import type { LabClient } from "../src/lab/client.ts";
 import { buildLabObservation, startLabController } from "../src/lab/controller.ts";
 import {
   createLabMatchParams,
+  LAB_BOMB_MODEL,
+  LAB_PINGO_MODEL,
   LAB_V1_MODEL,
   LAB_V2_MODEL,
   LAB_V3_MODEL,
@@ -113,6 +115,16 @@ describe("Laboratorio 9Router", () => {
       { playerId: 1, model: LAB_V3_MODEL, kind: "v3", label: "V3" },
       { playerId: 2, model: LAB_V2_MODEL, kind: "v2", label: "V2" },
       { playerId: 3, model: LAB_V1_MODEL, kind: "v1", label: "V1" },
+    ]);
+  });
+
+  it("reconhece Bomb e Pingo como policies locais independentes", () => {
+    const params = createLabMatchParams([LAB_BOMB_MODEL, LAB_PINGO_MODEL], ["falso", "falso"]);
+
+    expect(params?.toString()).toBe("mode=lab&model1=bot-bomb&model2=bot-pingo");
+    expect(parseLabMatchCompetitors(params!)).toEqual([
+      { playerId: 1, model: LAB_BOMB_MODEL, kind: "bomb", label: "Bomb" },
+      { playerId: 2, model: LAB_PINGO_MODEL, kind: "pingo", label: "Pingo" },
     ]);
   });
 

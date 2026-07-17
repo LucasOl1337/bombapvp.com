@@ -1,8 +1,10 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
 import {
+  LAB_BOMB_MODEL,
   LAB_MAX_COMPETITORS,
   LAB_MIN_COMPETITORS,
+  LAB_PINGO_MODEL,
   LAB_V1_MODEL,
   LAB_V2_MODEL,
   LAB_V3_MODEL,
@@ -328,7 +330,38 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  confirmation.append(selectionSummary, confirm);
+  if (snapshot.activeExperience?.id === "bot-training") {
+    const opponentField = element(document, "label", "training-bot-field");
+    const opponentLabel = element(
+      document,
+      "span",
+      "training-bot-field__label",
+      snapshot.locale === "pt-BR" ? "BOT ADVERSÁRIO" : "BOT OPPONENT",
+    );
+    const opponent = document.createElement("select");
+    opponent.setAttribute(
+      "aria-label",
+      snapshot.locale === "pt-BR" ? "Bot adversário" : "Bot opponent",
+    );
+    ([
+      { value: "bomb", label: "Bomb v1 · Agressivo" },
+      { value: "pingo", label: "Pingo v1 · Tático" },
+    ] as const).forEach(({ value, label }) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      opponent.append(option);
+    });
+    opponent.value = snapshot.selectedTrainingBot;
+    opponent.addEventListener("change", () => dispatch({
+      type: "select-training-bot",
+      botId: opponent.value === "pingo" ? "pingo" : "bomb",
+    }));
+    opponentField.append(opponentLabel, opponent);
+    confirmation.append(selectionSummary, opponentField, confirm);
+  } else {
+    confirmation.append(selectionSummary, confirm);
+  }
 
   region.append(navigation, intro, characterGrid, confirmation);
   return region;
@@ -461,18 +494,31 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
       "p",
       "laboratory__note",
       isPortuguese
-        ? "V1, V2 e V3 rodam localmente. O V3 usa planejamento de fase e zonas de explosão; credenciais de LLM ficam somente no backend."
-        : "V1, V2, and V3 run locally. V3 plans ice phases and blast zones; LLM credentials stay on the backend.",
+        ? "Bomb, Pingo, V1, V2 e V3 rodam localmente; credenciais de LLM ficam somente no backend."
+        : "Bomb, Pingo, V1, V2, and V3 run locally; LLM credentials stay on the backend.",
     ),
     start,
   );
 
   const populate = (profiles: LabModelProfile[]): void => {
     const llmProfiles = profiles.filter(({ route }) => (
-      route !== LAB_V1_MODEL && route !== LAB_V2_MODEL && route !== LAB_V3_MODEL
+      route !== LAB_BOMB_MODEL
+      && route !== LAB_PINGO_MODEL
+      && route !== LAB_V1_MODEL
+      && route !== LAB_V2_MODEL
+      && route !== LAB_V3_MODEL
     ));
     const competitors = [
-      ...llmProfiles,
+      {
+        id: LAB_BOMB_MODEL,
+        label: isPortuguese ? "Bomb v1 · Pressão agressiva" : "Bomb v1 · Aggressive pressure",
+        route: LAB_BOMB_MODEL,
+      },
+      {
+        id: LAB_PINGO_MODEL,
+        label: isPortuguese ? "Pingo v1 · Caça tática" : "Pingo v1 · Tactical hunter",
+        route: LAB_PINGO_MODEL,
+      },
       {
         id: LAB_V3_MODEL,
         label: isPortuguese ? "V3 · Bombardeiro de fase" : "V3 · Phase bomber",
@@ -488,14 +534,16 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
         label: isPortuguese ? "V1 · Bot determinístico" : "V1 · Deterministic bot",
         route: LAB_V1_MODEL,
       },
+      ...llmProfiles,
     ];
     for (const [index, select] of modelSelects.entries()) {
       select.replaceChildren(...competitors.map((profile) => {
         const option = document.createElement("option");
         option.value = profile.route;
         option.textContent = profile.label;
-        option.dataset.labLabel = profile.route === LAB_V1_MODEL
-          ? "V1"
+        option.dataset.labLabel = profile.route === LAB_BOMB_MODEL
+          ? "Bomb"
+          : profile.route === LAB_PINGO_MODEL ? "Pingo" : profile.route === LAB_V1_MODEL ? "V1"
           : profile.route === LAB_V2_MODEL ? "V2" : profile.route === LAB_V3_MODEL ? "V3" : profile.label;
         return option;
       }));
@@ -505,21 +553,21 @@ function renderLaboratory(document: Document, snapshot: AppSnapshot, dispatch: D
     updateVisibleSlots();
     start.disabled = false;
     status.textContent = isPortuguese
-      ? `V1, V2 e V3 locais + ${llmProfiles.length} perfis autorizados do 9Router.`
-      : `Local V1, V2, and V3 + ${llmProfiles.length} approved 9Router profiles.`;
+      ? `Bomb, Pingo, V1, V2 e V3 locais + ${llmProfiles.length} perfis autorizados do 9Router.`
+      : `Local Bomb, Pingo, V1, V2, and V3 + ${llmProfiles.length} approved 9Router profiles.`;
   };
 
   populate([]);
   status.textContent = isPortuguese
-    ? "V1, V2 e V3 disponíveis. Consultando modelos do 9Router…"
-    : "V1, V2, and V3 are available. Checking 9Router models…";
+    ? "Bomb, Pingo, V1, V2 e V3 disponíveis. Consultando modelos do 9Router…"
+    : "Bomb, Pingo, V1, V2, and V3 are available. Checking 9Router models…";
 
   void createLabClient().listProfiles().then((profiles) => {
     populate(profiles);
   }).catch(() => {
     status.textContent = isPortuguese
-      ? "V1, V2 e V3 disponíveis. O laboratório não conseguiu alcançar o 9Router."
-      : "V1, V2, and V3 are available. The lab could not reach 9Router.";
+      ? "Bomb, Pingo, V1, V2 e V3 disponíveis. O laboratório não conseguiu alcançar o 9Router."
+      : "Bomb, Pingo, V1, V2, and V3 are available. The lab could not reach 9Router.";
   });
 
   form.addEventListener("submit", (event) => {

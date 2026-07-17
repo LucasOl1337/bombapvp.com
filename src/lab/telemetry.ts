@@ -31,7 +31,7 @@ export type LabTelemetryEvent =
 export type LabTelemetryPlayerReport = Readonly<{
   playerId: PlayerId;
   label: string;
-  kind: "v1" | "v2" | "v3" | "llm";
+  kind: "v1" | "v2" | "v3" | "bomb" | "pingo" | "llm";
   status: LabTelemetryStatus;
   timing: Readonly<{
     kind: "compute" | "round-trip";
@@ -94,7 +94,7 @@ export type LabTelemetryReport = Readonly<{
 type Competitor = Readonly<{
   playerId: PlayerId;
   label: string;
-  kind: "v1" | "v2" | "v3" | "llm";
+  kind: "v1" | "v2" | "v3" | "bomb" | "pingo" | "llm";
 }>;
 
 type PlayerAccumulator = {

@@ -171,6 +171,8 @@ export type BotDecisionMeasurement = Readonly<{
   computeMs: number;
 }>;
 
+export type BotDecisionPolicy = (player: PlayerState, context: BotContext) => BotDecision;
+
 declare global {
   interface Window {
     render_game_to_text?: () => string;
@@ -510,6 +512,7 @@ export class GameApp {
   private botControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botV2ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
   private botV3ControlledPlayers: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
+  private botDecisionPolicies: Partial<Record<PlayerId, BotDecisionPolicy>> = {};
   private botEnabled = false;
   private botDecisionObserver: ((measurement: BotDecisionMeasurement) => void) | null = null;
   private botBombCooldownMs = 0;
@@ -731,6 +734,7 @@ export class GameApp {
     this.botControlledPlayers = createBooleanPlayerRecord(false);
     this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
     this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
+    this.botDecisionPolicies = {};
     this.botEnabled = false;
     this.botDecisionObserver = null;
     this.menuReady = createBooleanPlayerRecord(false);
@@ -769,6 +773,7 @@ export class GameApp {
     this.matchResultCooldownMs = 0;
     this.localBotFill = 0;
     this.botDecisionObserver = null;
+    this.botDecisionPolicies = {};
     this.setBotPlayers(config.botPlayerIds ?? []);
     this.applyEndlessStats(null);
 
@@ -1031,6 +1036,7 @@ export class GameApp {
       this.botControlledPlayers = createBooleanPlayerRecord(false);
       this.botV2ControlledPlayers = createBooleanPlayerRecord(false);
       this.botV3ControlledPlayers = createBooleanPlayerRecord(false);
+      this.botDecisionPolicies = {};
       this.botEnabled = false;
     }
     this.resetRound(false);
@@ -1149,6 +1155,7 @@ export class GameApp {
     this.botControlledPlayers[playerId] = false;
     this.botV2ControlledPlayers[playerId] = false;
     this.botV3ControlledPlayers[playerId] = false;
+    delete this.botDecisionPolicies[playerId];
     this.activePlayerIds = this.activePlayerIds.filter((id) => id !== playerId);
     if (this.mode === "match" && !this.roundOutcome) {
       this.evaluateRoundState();
@@ -1254,11 +1261,19 @@ export class GameApp {
     return { volume: this.soundManager.getVolume(), muted: this.soundManager.isMuted() };
   }
 
-  public startOfflineBotMatch(botFill = 3, mode: LobbyMode = "classic"): void {
+  public startOfflineBotMatch(
+    botFill = 3,
+    mode: LobbyMode = "classic",
+    options: {
+      botDecisionPolicies?: Partial<Record<PlayerId, BotDecisionPolicy>>;
+      botCharacterSelections?: Partial<Record<PlayerId, number>>;
+      playerLabels?: Partial<Record<PlayerId, string>>;
+    } = {},
+  ): void {
     if (this.onlineSession) {
       return;
     }
-    this.customPlayerLabels = createPlayerRecord(() => null);
+    this.customPlayerLabels = createPlayerRecord((playerId) => options.playerLabels?.[playerId] ?? null);
     this.onlineRoomMode = mode;
     this.mode = "menu";
     this.paused = false;
@@ -1268,7 +1283,19 @@ export class GameApp {
     this.endlessRoundWins = createNumberPlayerRecord(0);
     this.endlessDeathStats = createEndlessDeathStats();
     this.botDecisionObserver = null;
+    this.botDecisionPolicies = { ...options.botDecisionPolicies };
     this.applyOfflineBotFill(botFill, false);
+    for (const playerId of this.activePlayerIds) {
+      const characterIndex = options.botCharacterSelections?.[playerId];
+      if (!this.isBotControlled(playerId) || characterIndex === undefined) continue;
+      const normalizedIndex = this.wrapCharacterIndex(characterIndex);
+      this.selectedCharacterIndex[playerId] = normalizedIndex;
+      this.pendingCharacterIndex[playerId] = normalizedIndex;
+      this.characterLocked[playerId] = true;
+      this.characterMenuOpen[playerId] = false;
+    }
+    this.syncPlayerLabels();
+    this.primeCharacterSprites();
     this.startMatch();
   }
 
@@ -1584,6 +1611,7 @@ export class GameApp {
       botPlayerIds?: PlayerId[];
       botV2PlayerIds?: PlayerId[];
       botV3PlayerIds?: PlayerId[];
+      botDecisionPolicies?: Partial<Record<PlayerId, BotDecisionPolicy>>;
       botDecisionObserver?: (measurement: BotDecisionMeasurement) => void;
       endlessStats?: OnlineEndlessStats | null;
       playerLabels?: Record<PlayerId, string>;
@@ -1618,6 +1646,7 @@ export class GameApp {
     this.characterMenuOpen = createBooleanPlayerRecord(false);
     this.localBotFill = 0;
     this.botDecisionObserver = options.botDecisionObserver ?? null;
+    this.botDecisionPolicies = { ...options.botDecisionPolicies };
     this.setBotPlayers(
       options.botPlayerIds ?? [],
       options.botV2PlayerIds ?? [],
@@ -2153,7 +2182,8 @@ export class GameApp {
   private createPlayers(): Record<PlayerId, PlayerState> {
     const players = createPlayerRecord((playerId) => {
       const spawn = this.getPlayerSpawn(playerId);
-      const name = this.isBotControlled(playerId) ? "BOT" : `P${playerId}`;
+      const name = this.customPlayerLabels[playerId]
+        || (this.isBotControlled(playerId) ? "BOT" : `P${playerId}`);
       return this.createPlayer(playerId, name, spawn.tile, spawn.direction, this.activePlayerIds.includes(playerId));
     });
     this.visualPlayerPositions = createPlayerRecord((playerId) => this.getPlayerPixelPositionFromState(players[playerId]));
@@ -2162,9 +2192,8 @@ export class GameApp {
 
   private syncPlayerLabels(): void {
     for (const playerId of ALL_PLAYER_IDS) {
-      this.players[playerId].name = this.isBotControlled(playerId)
-        ? "BOT"
-        : (this.customPlayerLabels[playerId] || `P${playerId}`);
+      this.players[playerId].name = this.customPlayerLabels[playerId]
+        || (this.isBotControlled(playerId) ? "BOT" : `P${playerId}`);
     }
   }
 
@@ -2262,7 +2291,8 @@ export class GameApp {
   }
 
   private getPlayerSlotLabel(playerId: PlayerId): string {
-    return this.isBotControlled(playerId) ? "BOT" : `P${playerId}`;
+    return this.customPlayerLabels[playerId]
+      || (this.isBotControlled(playerId) ? "BOT" : `P${playerId}`);
   }
 
   private shortenCharacterName(name: string, maxLength = 30): string {
@@ -2443,11 +2473,14 @@ export class GameApp {
   private getBotDecision(player: PlayerState): BotDecision {
     const startedAtMs = monotonicNow();
     const context = this.createBotContext(this.getSharedBotDangerMap());
-    const decision = this.botV3ControlledPlayers[player.id]
-      ? botAI_getBotV3Decision(player, context)
-      : this.botV2ControlledPlayers[player.id]
-        ? botAI_getBotV2Decision(player, context)
-        : botAI_getBotDecision(player, context);
+    const injectedPolicy = this.botDecisionPolicies[player.id];
+    const decision = injectedPolicy
+      ? injectedPolicy(player, context)
+      : this.botV3ControlledPlayers[player.id]
+        ? botAI_getBotV3Decision(player, context)
+        : this.botV2ControlledPlayers[player.id]
+          ? botAI_getBotV2Decision(player, context)
+          : botAI_getBotDecision(player, context);
     this.botDecisionObserver?.({
       playerId: player.id,
       decision,

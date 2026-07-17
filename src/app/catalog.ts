@@ -161,7 +161,7 @@ const PT_COPY: ProductCopy = Object.freeze({
   readyMessage: "Seu personagem e destino estão definidos. A entrada na arena será liberada quando esta experiência estiver pronta.",
   labKicker: "OBSERVAÇÃO COMPETITIVA",
   labTitle: "Laboratório Bot vs Bot",
-  labIntroduction: "Compare de dois a quatro competidores, combinando os bots determinísticos V1, V2 e V3 com modelos do 9Router.",
+  labIntroduction: "Compare de dois a quatro competidores, combinando Bomb, Pingo e os bots V1, V2 e V3 com modelos do 9Router.",
   footerLabel: "UM PRODUTO · TRÊS EXPERIÊNCIAS",
   languageLabel: "English",
 });
@@ -187,7 +187,7 @@ const EN_COPY: ProductCopy = Object.freeze({
   readyMessage: "Your character and destination are set. Arena entry will open when this experience is ready.",
   labKicker: "COMPETITIVE OBSERVATION",
   labTitle: "Bot vs Bot Lab",
-  labIntroduction: "Compare two to four competitors by combining deterministic V1, V2, and V3 bots with 9Router models.",
+  labIntroduction: "Compare two to four competitors by combining Bomb, Pingo, V1, V2, and V3 with 9Router models.",
   footerLabel: "ONE PRODUCT · THREE EXPERIENCES",
   languageLabel: "Português",
 });

@@ -1,0 +1,452 @@
+import { tileKey } from "../Arenas/arena";
+import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
+import { BASE_MOVE_MS, MIN_MOVE_MS, SPEED_STEP_MS } from "../PersonalConfig/config";
+import type {
+  BombState,
+  Direction,
+  PlayerState,
+  PowerUpType,
+  TileCoord,
+} from "../Gameplay/types";
+import type { BotContext, BotDecision } from "./bot-ai";
+
+export const BOMB_CHARACTER_INDEX = 0;
+
+const DIRECTIONS: readonly Direction[] = ["up", "left", "down", "right"];
+const DELTA: Readonly<Record<Direction, TileCoord>> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+};
+const ARRIVAL_MARGIN_MS = 180;
+const REACTION_WINDOW_MS = 1_300;
+const POWER_UP_SCORE: Readonly<Record<PowerUpType, number>> = {
+  "shield-up": 10,
+  "bomb-pass-up": 9,
+  "speed-up": 8,
+  "flame-up": 7,
+  "bomb-up": 6,
+  "remote-up": 5,
+  "kick-up": 4,
+  "short-fuse-up": 3,
+};
+
+type RouteNode = Readonly<{
+  tile: TileCoord;
+  firstDirection: Direction | null;
+  steps: number;
+}>;
+
+function moveDuration(player: PlayerState): number {
+  return Math.max(MIN_MOVE_MS, BASE_MOVE_MS - player.speedLevel * SPEED_STEP_MS);
+}
+
+function distance(left: TileCoord, right: TileCoord): number {
+  return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+}
+
+function inBounds(tile: TileCoord, context: BotContext): boolean {
+  return tile.x >= 0
+    && tile.y >= 0
+    && tile.x < context.arena.config.grid.width
+    && tile.y < context.arena.config.grid.height;
+}
+
+function isOpen(
+  tile: TileCoord,
+  origin: TileCoord,
+  context: BotContext,
+  blockedTile?: TileCoord,
+): boolean {
+  if (!inBounds(tile, context)) return false;
+  const key = tileKey(tile.x, tile.y);
+  if (context.arena.solid.has(key) || context.arena.breakable.has(key)) return false;
+  if (
+    blockedTile
+    && tile.x === blockedTile.x
+    && tile.y === blockedTile.y
+    && (tile.x !== origin.x || tile.y !== origin.y)
+  ) return false;
+  return !context.bombs.some((bomb) => (
+    bomb.tile.x === tile.x
+    && bomb.tile.y === tile.y
+    && (tile.x !== origin.x || tile.y !== origin.y)
+  ));
+}
+
+function blastTiles(
+  bomb: Pick<BombState, "tile" | "flameRange">,
+  context: BotContext,
+): TileCoord[] {
+  const tiles: TileCoord[] = [{ ...bomb.tile }];
+  for (const direction of DIRECTIONS) {
+    const delta = DELTA[direction];
+    for (let step = 1; step <= bomb.flameRange; step += 1) {
+      const tile = {
+        x: bomb.tile.x + delta.x * step,
+        y: bomb.tile.y + delta.y * step,
+      };
+      if (!inBounds(tile, context)) break;
+      const key = tileKey(tile.x, tile.y);
+      if (context.arena.solid.has(key)) break;
+      tiles.push(tile);
+      if (context.arena.breakable.has(key)) break;
+    }
+  }
+  return tiles;
+}
+
+function threatMap(
+  context: BotContext,
+  extraBomb?: Pick<BombState, "tile" | "flameRange" | "fuseMs">,
+): Map<string, number> {
+  const bombs = context.bombs.map((bomb) => ({
+    tile: bomb.tile,
+    flameRange: bomb.flameRange,
+    fuseMs: bomb.fuseMs,
+  }));
+  if (extraBomb) bombs.push({ ...extraBomb });
+
+  for (let pass = 0; pass < bombs.length; pass += 1) {
+    let changed = false;
+    for (const source of bombs) {
+      const blast = new Set(blastTiles(source, context).map((tile) => tileKey(tile.x, tile.y)));
+      for (const target of bombs) {
+        if (source === target || !blast.has(tileKey(target.tile.x, target.tile.y))) continue;
+        if (target.fuseMs > source.fuseMs) {
+          target.fuseMs = source.fuseMs;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+
+  const threats = new Map<string, number>();
+  for (const bomb of bombs) {
+    for (const tile of blastTiles(bomb, context)) {
+      const key = tileKey(tile.x, tile.y);
+      threats.set(key, Math.min(threats.get(key) ?? Number.POSITIVE_INFINITY, bomb.fuseMs));
+    }
+  }
+  for (const flame of context.flames) threats.set(tileKey(flame.tile.x, flame.tile.y), 0);
+  for (const effect of context.suddenDeathClosureEffects) {
+    threats.set(tileKey(effect.tile.x, effect.tile.y), 0);
+  }
+  return threats;
+}
+
+function safeEscapeDirection(
+  player: PlayerState,
+  enemies: readonly PlayerState[],
+  context: BotContext,
+  threats: ReadonlyMap<string, number>,
+  blockedTile?: TileCoord,
+): Direction | null {
+  const queue: RouteNode[] = [{ tile: player.tile, firstDirection: null, steps: 0 }];
+  const visited = new Set([tileKey(player.tile.x, player.tile.y)]);
+  const stepMs = moveDuration(player);
+  let best: RouteNode | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const node = queue[cursor]!;
+    const dangerEta = threats.get(tileKey(node.tile.x, node.tile.y));
+    const enemyDistance = enemies.length === 0
+      ? 0
+      : Math.min(...enemies.map((enemy) => distance(node.tile, enemy.tile)));
+    if (dangerEta === undefined) {
+      const score = enemyDistance * 100 - node.steps;
+      if (score > bestScore) {
+        best = node;
+        bestScore = score;
+      }
+    }
+    if (node.steps >= 12) continue;
+
+    for (const direction of DIRECTIONS) {
+      const delta = DELTA[direction];
+      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const key = tileKey(tile.x, tile.y);
+      if (visited.has(key) || !isOpen(tile, player.tile, context, blockedTile)) continue;
+      const steps = node.steps + 1;
+      const eta = threats.get(key);
+      if (eta !== undefined && eta <= steps * stepMs + ARRIVAL_MARGIN_MS) continue;
+      visited.add(key);
+      queue.push({ tile, firstDirection: node.firstDirection ?? direction, steps });
+    }
+  }
+  return best?.firstDirection ?? null;
+}
+
+function attackBombEscapeDirection(
+  player: PlayerState,
+  target: PlayerState,
+  enemies: readonly PlayerState[],
+  context: BotContext,
+): Direction | null {
+  if (
+    player.spawnProtectionMs > 0
+    || target.spawnProtectionMs > 0
+    || player.activeBombs >= player.maxBombs
+    || context.botBombCooldownMs > 0
+    || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
+  ) return null;
+
+  const projectedBomb = {
+    tile: player.tile,
+    flameRange: player.flameRange,
+    fuseMs: getBombFuseMsForPlayer(player),
+  };
+  const projectedBlast = new Set(
+    blastTiles(projectedBomb, context).map((tile) => tileKey(tile.x, tile.y)),
+  );
+  if (!projectedBlast.has(tileKey(target.tile.x, target.tile.y))) return null;
+
+  const projectedThreats = threatMap(context, projectedBomb);
+  return safeEscapeDirection(player, enemies, context, projectedThreats, player.tile);
+}
+
+function breakableBombEscapeDirection(
+  player: PlayerState,
+  enemies: readonly PlayerState[],
+  context: BotContext,
+): Direction | null {
+  if (
+    player.spawnProtectionMs > 0
+    || player.activeBombs >= player.maxBombs
+    || context.botBombCooldownMs > 0
+    || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
+  ) return null;
+  const adjacentBreakable = DIRECTIONS.some((direction) => {
+    const delta = DELTA[direction];
+    return context.arena.breakable.has(tileKey(
+      player.tile.x + delta.x,
+      player.tile.y + delta.y,
+    ));
+  });
+  if (!adjacentBreakable) return null;
+  const projectedBomb = {
+    tile: player.tile,
+    flameRange: player.flameRange,
+    fuseMs: getBombFuseMsForPlayer(player),
+  };
+  return safeEscapeDirection(
+    player,
+    enemies,
+    context,
+    threatMap(context, projectedBomb),
+    player.tile,
+  );
+}
+
+function triggeredBlastKeys(initialBomb: BombState, context: BotContext): Set<string> {
+  const pending = [initialBomb];
+  const triggered = new Set<number>();
+  const blast = new Set<string>();
+  while (pending.length > 0) {
+    const bomb = pending.pop();
+    if (!bomb || triggered.has(bomb.id)) continue;
+    triggered.add(bomb.id);
+    for (const tile of blastTiles(bomb, context)) blast.add(tileKey(tile.x, tile.y));
+    for (const candidate of context.bombs) {
+      if (!triggered.has(candidate.id) && blast.has(tileKey(candidate.tile.x, candidate.tile.y))) {
+        pending.push(candidate);
+      }
+    }
+  }
+  return blast;
+}
+
+function canRemoteFinish(player: PlayerState, target: PlayerState, context: BotContext): boolean {
+  if (
+    player.remoteLevel <= 0
+    || target.spawnProtectionMs > 0
+    || target.flameGuardMs > 0
+  ) return false;
+  const playerKey = tileKey(player.tile.x, player.tile.y);
+  const targetKey = tileKey(target.tile.x, target.tile.y);
+  return context.bombs.some((bomb) => {
+    if (bomb.ownerId !== player.id) return false;
+    const blast = triggeredBlastKeys(bomb, context);
+    return blast.has(targetKey) && !blast.has(playerKey);
+  });
+}
+
+function hasClearAttackLine(
+  from: TileCoord,
+  target: TileCoord,
+  range: number,
+  context: BotContext,
+): boolean {
+  const targetDistance = distance(from, target);
+  if (targetDistance === 0 || targetDistance > range) return false;
+  if (from.x !== target.x && from.y !== target.y) return false;
+  const dx = Math.sign(target.x - from.x);
+  const dy = Math.sign(target.y - from.y);
+  for (let step = 1; step < targetDistance; step += 1) {
+    const key = tileKey(from.x + dx * step, from.y + dy * step);
+    if (context.arena.solid.has(key) || context.arena.breakable.has(key)) return false;
+  }
+  return true;
+}
+
+function pressureDirection(
+  player: PlayerState,
+  target: PlayerState,
+  context: BotContext,
+  threats: ReadonlyMap<string, number>,
+): Direction | null {
+  const queue: RouteNode[] = [{ tile: player.tile, firstDirection: null, steps: 0 }];
+  const visited = new Set([tileKey(player.tile.x, player.tile.y)]);
+  const stepMs = moveDuration(player);
+  let best = queue[0]!;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const node = queue[cursor]!;
+    const attackPosition = hasClearAttackLine(node.tile, target.tile, player.flameRange, context);
+    const score = (attackPosition ? 100_000 : 0)
+      - distance(node.tile, target.tile) * 1_000
+      - node.steps * 5;
+    if (score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+    if (node.steps >= 14) continue;
+
+    for (const direction of DIRECTIONS) {
+      const delta = DELTA[direction];
+      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const key = tileKey(tile.x, tile.y);
+      if (visited.has(key) || !isOpen(tile, player.tile, context)) continue;
+      const steps = node.steps + 1;
+      const eta = threats.get(key);
+      if (eta !== undefined && eta <= steps * stepMs + ARRIVAL_MARGIN_MS) continue;
+      visited.add(key);
+      queue.push({ tile, firstDirection: node.firstDirection ?? direction, steps });
+    }
+  }
+  return best.firstDirection;
+}
+
+function powerUpDirection(
+  player: PlayerState,
+  context: BotContext,
+  threats: ReadonlyMap<string, number>,
+): Direction | null {
+  const visible = new Map(
+    context.arena.powerUps
+      .filter((powerUp) => powerUp.revealed && !powerUp.collected)
+      .map((powerUp) => [tileKey(powerUp.tile.x, powerUp.tile.y), powerUp]),
+  );
+  if (visible.size === 0) return null;
+  const queue: RouteNode[] = [{ tile: player.tile, firstDirection: null, steps: 0 }];
+  const visited = new Set([tileKey(player.tile.x, player.tile.y)]);
+  const stepMs = moveDuration(player);
+  let best: RouteNode | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const node = queue[cursor]!;
+    const powerUp = visible.get(tileKey(node.tile.x, node.tile.y));
+    if (powerUp) {
+      const score = POWER_UP_SCORE[powerUp.type] * 10_000 - node.steps;
+      if (score > bestScore) {
+        best = node;
+        bestScore = score;
+      }
+    }
+    if (node.steps >= 14) continue;
+    for (const direction of DIRECTIONS) {
+      const delta = DELTA[direction];
+      const tile = { x: node.tile.x + delta.x, y: node.tile.y + delta.y };
+      const key = tileKey(tile.x, tile.y);
+      if (visited.has(key) || !isOpen(tile, player.tile, context)) continue;
+      const steps = node.steps + 1;
+      const eta = threats.get(key);
+      if (eta !== undefined && eta <= steps * stepMs + ARRIVAL_MARGIN_MS) continue;
+      visited.add(key);
+      queue.push({ tile, firstDirection: node.firstDirection ?? direction, steps });
+    }
+  }
+  return best?.firstDirection ?? null;
+}
+
+/** Independent deterministic policy owned by the Bomb training session. */
+export function getBombDecision(player: PlayerState, context: BotContext): BotDecision {
+  const enemies = context.activePlayerIds
+    .filter((id) => id !== player.id)
+    .map((id) => context.players[id])
+    .filter((enemy) => enemy.active && enemy.alive);
+  const threats = threatMap(context);
+  const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
+
+  if (player.skill.phase === "channeling" || player.skill.phase === "releasing") {
+    return { direction: null, placeBomb: false };
+  }
+
+  if (currentDanger !== undefined && currentDanger <= REACTION_WINDOW_MS) {
+    const direction = safeEscapeDirection(player, enemies, context, threats);
+    if (
+      direction === null
+      && player.skill.id === "ranni-ice-blink"
+      && player.skill.phase === "idle"
+    ) {
+      return { direction: null, placeBomb: false, useSkill: true };
+    }
+    return {
+      direction,
+      placeBomb: false,
+    };
+  }
+
+  const target = [...enemies].sort((left, right) => (
+    distance(player.tile, left.tile) - distance(player.tile, right.tile)
+    || left.id - right.id
+  ))[0];
+  if (target && canRemoteFinish(player, target, context)) {
+    return {
+      direction: null,
+      placeBomb: false,
+      detonate: true,
+      targetId: target.id,
+      intent: "remote-detonation",
+    };
+  }
+  const attackEscapeDirection = target
+    ? attackBombEscapeDirection(player, target, enemies, context)
+    : null;
+  if (target && attackEscapeDirection) {
+    return {
+      direction: attackEscapeDirection,
+      placeBomb: true,
+      targetId: target.id,
+      intent: "bomb-attack",
+    };
+  }
+  const pickupDirection = powerUpDirection(player, context, threats);
+  if (pickupDirection) {
+    return { direction: pickupDirection, placeBomb: false, targetId: target?.id };
+  }
+  const breakableEscapeDirection = breakableBombEscapeDirection(player, enemies, context);
+  if (breakableEscapeDirection) {
+    return {
+      direction: breakableEscapeDirection,
+      placeBomb: true,
+      targetId: target?.id,
+    };
+  }
+
+  if (target) {
+    return {
+      direction: pressureDirection(player, target, context, threats),
+      placeBomb: false,
+      targetId: target.id,
+      intent: "attack-position",
+    };
+  }
+
+  return { direction: null, placeBomb: false };
+}

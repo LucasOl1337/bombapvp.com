@@ -993,6 +993,33 @@ a.brand__language:hover {
   text-transform: uppercase;
 }
 
+.training-bot-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 15rem);
+}
+
+.training-bot-field__label {
+  color: var(--ember-soft);
+  font-family: var(--display);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+.training-bot-field select {
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--ink);
+  background: var(--night);
+}
+
+.training-bot-field select:focus-visible {
+  border-color: var(--ember);
+}
+
 .action--confirm {
   min-width: 15rem;
 }

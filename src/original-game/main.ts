@@ -1,9 +1,11 @@
 import "./original-game.css";
 import { loadGameAssets } from "./Engine/assets";
-import { GameApp } from "./Engine/game-app";
+import { GameApp, type BotDecisionPolicy } from "./Engine/game-app";
 import { createLabClient } from "../lab/client";
 import { startLabController } from "../lab/controller";
 import { parseLabMatchCompetitors } from "../lab/competitors";
+import { BOMB_CHARACTER_INDEX, getBombDecision } from "./Engine/bot-bomb";
+import { getBotPingoDecision } from "./Engine/bot-pingo";
 import { BOT_V2_CHARACTER_INDEX } from "./Engine/bot-v2";
 import { BOT_V3_CHARACTER_INDEX } from "./Engine/bot-v3";
 import { createLabTelemetry, type LabTelemetryReport } from "../lab/telemetry";
@@ -67,6 +69,7 @@ async function bootOriginalGame(): Promise<void> {
     const botV3PlayerIds = competitors
       .filter(({ kind }) => kind === "v3")
       .map(({ playerId }) => playerId);
+    const botDecisionPolicies: Partial<Record<PlayerId, BotDecisionPolicy>> = {};
     const characterSelections: Record<PlayerId, number> = { 1: 0, 2: 1, 3: 2, 4: 3 };
     const playerLabels: Record<PlayerId, string> = { 1: "", 2: "", 3: "", 4: "" };
     competitors.forEach(({ playerId, label }) => {
@@ -74,6 +77,16 @@ async function bootOriginalGame(): Promise<void> {
     });
     for (const playerId of botV2PlayerIds) characterSelections[playerId] = BOT_V2_CHARACTER_INDEX;
     for (const playerId of botV3PlayerIds) characterSelections[playerId] = BOT_V3_CHARACTER_INDEX;
+    competitors.forEach(({ playerId, kind }) => {
+      if (kind === "bomb") {
+        characterSelections[playerId] = BOMB_CHARACTER_INDEX;
+        botDecisionPolicies[playerId] = getBombDecision;
+      }
+      if (kind === "pingo") {
+        characterSelections[playerId] = BOMB_CHARACTER_INDEX;
+        botDecisionPolicies[playerId] = getBotPingoDecision;
+      }
+    });
 
     game.startServerAuthoritativeMatch(
       activePlayerIds,
@@ -83,6 +96,7 @@ async function bootOriginalGame(): Promise<void> {
         botPlayerIds,
         botV2PlayerIds,
         botV3PlayerIds,
+        botDecisionPolicies,
         playerLabels,
         hideNativeHud: true,
         showWorldPlayerLabels: true,
@@ -143,7 +157,19 @@ async function bootOriginalGame(): Promise<void> {
     return;
   }
 
-  game.startOfflineBotMatch(mode === "training" ? 1 : 3, mode === "training" ? "classic" : "endless");
+  if (mode === "training") {
+    const trainingBot = params.get("bot") === "pingo" ? "pingo" : "bomb";
+    const policy = trainingBot === "pingo" ? getBotPingoDecision : getBombDecision;
+    const label = trainingBot === "pingo" ? "PINGO" : "BOMB";
+    game.startOfflineBotMatch(1, "classic", {
+      botDecisionPolicies: { 2: policy },
+      botCharacterSelections: { 2: BOMB_CHARACTER_INDEX },
+      playerLabels: { 2: label },
+    });
+    return;
+  }
+
+  game.startOfflineBotMatch(3, "endless");
 }
 
 void bootOriginalGame().catch((error: unknown) => {

@@ -111,12 +111,17 @@ describe("Bomba PvP app", () => {
     expect(app.getSnapshot()).toMatchObject({
       screen: "character-selection",
       activeExperience: { id: "bot-training" },
+      selectedTrainingBot: "bomb",
     });
+    const opponent = view.getByRole("combobox", { name: "Bot adversário" }) as HTMLSelectElement;
+    expect(opponent.value).toBe("bomb");
+    fireEvent.change(opponent, { target: { value: "pingo" } });
+    expect(app.getSnapshot().selectedTrainingBot).toBe("pingo");
     fireEvent.click(view.getByRole("button", { name: "Nico, Escolher" }));
     fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=training&character=5474c45c-2987-43e0-af2c-a6500c836881",
+      currentPath: "/arena/?mode=training&character=5474c45c-2987-43e0-af2c-a6500c836881&bot=pingo",
       selectedCharacter: { name: "Nico" },
     });
     expect(view.getByText("Nico · Treino contra bots")).toBeTruthy();
@@ -136,12 +141,12 @@ describe("Bomba PvP app", () => {
     expect(view.getByRole("region", { name: "Laboratório Bot vs Bot" })).toBeTruthy();
 
     const start = await view.findByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
-    await view.findByText("V1, V2 e V3 locais + 2 perfis autorizados do 9Router.");
+    await view.findByText("Bomb, Pingo, V1, V2 e V3 locais + 2 perfis autorizados do 9Router.");
     await vi.waitFor(() => expect(start.disabled).toBe(false));
     fireEvent.click(start);
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5",
+      currentPath: "/arena/?mode=lab&model1=bot-bomb&model2=bot-pingo",
     });
   });
 
@@ -151,7 +156,7 @@ describe("Bomba PvP app", () => {
     const view = within(root);
 
     const playerCount = view.getByRole("combobox", { name: "Quantidade de jogadores" });
-    await view.findByText("V1, V2 e V3 locais + 2 perfis autorizados do 9Router.");
+    await view.findByText("Bomb, Pingo, V1, V2 e V3 locais + 2 perfis autorizados do 9Router.");
     fireEvent.change(playerCount, { target: { value: "4" } });
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
@@ -161,7 +166,7 @@ describe("Bomba PvP app", () => {
 
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=lab&model1=cx%2Fgpt-5.6-sol&label1=GPT+5.6+Sol&model2=cc%2Fclaude-fable-5&label2=Claude+Fable+5&model3=bot-v3&model4=bot-v2",
+      currentPath: "/arena/?mode=lab&model1=bot-bomb&model2=bot-pingo&model3=bot-v3&model4=bot-v2",
     });
   });
 
@@ -174,7 +179,9 @@ describe("Bomba PvP app", () => {
     const view = within(root);
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
-    await view.findByText("V1, V2 e V3 disponíveis. O laboratório não conseguiu alcançar o 9Router.");
+    await view.findByText("Bomb, Pingo, V1, V2 e V3 disponíveis. O laboratório não conseguiu alcançar o 9Router.");
+    expect(root.querySelectorAll('option[value="bot-bomb"]')).toHaveLength(4);
+    expect(root.querySelectorAll('option[value="bot-pingo"]')).toHaveLength(4);
     expect(root.querySelectorAll('option[value="bot-v1"]')).toHaveLength(4);
     expect(root.querySelectorAll('option[value="bot-v2"]')).toHaveLength(4);
     expect(root.querySelectorAll('option[value="bot-v3"]')).toHaveLength(4);
@@ -182,7 +189,7 @@ describe("Bomba PvP app", () => {
     fireEvent.click(start);
 
     expect(app.getSnapshot().currentPath).toBe(
-      "/arena/?mode=lab&model1=bot-v3&model2=bot-v2",
+      "/arena/?mode=lab&model1=bot-bomb&model2=bot-pingo",
     );
   });
 
@@ -194,11 +201,11 @@ describe("Bomba PvP app", () => {
 
     const start = view.getByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
     expect(start.disabled).toBe(false);
-    expect(view.getByText("V1, V2 e V3 disponíveis. Consultando modelos do 9Router…")).toBeTruthy();
+    expect(view.getByText("Bomb, Pingo, V1, V2 e V3 disponíveis. Consultando modelos do 9Router…")).toBeTruthy();
     fireEvent.click(start);
 
     expect(app.getSnapshot().currentPath).toBe(
-      "/arena/?mode=lab&model1=bot-v3&model2=bot-v2",
+      "/arena/?mode=lab&model1=bot-bomb&model2=bot-pingo",
     );
   });
 
