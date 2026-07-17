@@ -226,6 +226,8 @@ const POWER_UP_REVEAL_HALO_MS = 260;
 const POWER_UP_REVEAL_HALO_START_RADIUS = 12;
 const POWER_UP_REVEAL_HALO_END_RADIUS = 26;
 const FLAME_DISSIPATE_TAIL_MS = 120;
+const CHAIN_REACTION_FEEDBACK_MS = 260;
+const EXPLOSION_FEEDBACK_INSET_PX = 1;
 const SPAWN_PROTECTION_MS = 2200;
 const PERFECT_START_WINDOW_MS = 320;
 const PERFECT_START_BOOST_MS = 640;
@@ -405,6 +407,68 @@ interface BombKickImpactFeedback {
   elapsedMs: number;
 }
 
+interface ChainReactionFeedback {
+  fromTile: TileCoord;
+  toTile: TileCoord;
+  elapsedMs: number;
+}
+
+export interface ExplosionFeedbackCell {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  style: NonNullable<FlameState["style"]>;
+  remainingMs: number;
+}
+
+export interface ExplosionFeedbackConnector {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  style: NonNullable<FlameState["style"]>;
+}
+
+export function buildExplosionFeedbackGeometry(
+  flames: readonly Pick<FlameState, "tile" | "style" | "remainingMs">[],
+): { cells: ExplosionFeedbackCell[]; connectors: ExplosionFeedbackConnector[] } {
+  const normalized = flames.map((flame) => ({
+    ...flame,
+    style: flame.style ?? "normal",
+  }));
+  const byTile = new Map(normalized.map((flame) => [tileKey(flame.tile.x, flame.tile.y), flame]));
+  const connectors: ExplosionFeedbackConnector[] = [];
+
+  for (const flame of normalized) {
+    for (const delta of [directionDelta.right, directionDelta.down]) {
+      const neighbor = byTile.get(tileKey(flame.tile.x + delta.x, flame.tile.y + delta.y));
+      if (!neighbor || neighbor.style !== flame.style) {
+        continue;
+      }
+      connectors.push({
+        fromX: flame.tile.x * TILE_SIZE + TILE_SIZE / 2,
+        fromY: flame.tile.y * TILE_SIZE + TILE_SIZE / 2,
+        toX: neighbor.tile.x * TILE_SIZE + TILE_SIZE / 2,
+        toY: neighbor.tile.y * TILE_SIZE + TILE_SIZE / 2,
+        style: flame.style,
+      });
+    }
+  }
+
+  return {
+    cells: normalized.map((flame) => ({
+      x: flame.tile.x * TILE_SIZE + EXPLOSION_FEEDBACK_INSET_PX,
+      y: flame.tile.y * TILE_SIZE + EXPLOSION_FEEDBACK_INSET_PX,
+      width: TILE_SIZE - EXPLOSION_FEEDBACK_INSET_PX * 2,
+      height: TILE_SIZE - EXPLOSION_FEEDBACK_INSET_PX * 2,
+      style: flame.style,
+      remainingMs: flame.remainingMs,
+    })),
+    connectors,
+  };
+}
+
 interface PowerUpPickupNotice {
   playerId: PlayerId;
   type: SkillPowerUpType;
@@ -522,6 +586,10 @@ export class GameApp {
   private animationClockMs = 0;
   private crateBreakAnimations: CrateBreakAnimation[] = [];
   private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
+  private chainReactionFeedback: ChainReactionFeedback[] = [];
+  private readonly prefersReducedMotion = typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   /** Presentation-only camera impact; not part of online simulation snapshots. */
   private screenShakeMs = 0;
   private screenShakeAmplitudePx = 0;
@@ -2154,6 +2222,7 @@ export class GameApp {
     this.flames = [];
     this.magicBeams = [];
     this.crateBreakAnimations = [];
+    this.chainReactionFeedback = [];
     this.screenShakeMs = 0;
     this.screenShakeAmplitudePx = 0;
     this.powerUpRevealStartedAtMs.clear();
@@ -3051,7 +3120,7 @@ export class GameApp {
         }
 
         flameTiles.add(key);
-        this.armBombAtTile({ x, y }, queue);
+        this.armBombAtTile({ x, y }, queue, bomb.tile);
 
         if (this.breakCrateAtKey(key)) {
           brokenCrateKeys.push(key);
@@ -3095,10 +3164,17 @@ export class GameApp {
     };
   }
 
-  private armBombAtTile(tile: TileCoord, queue?: number[]): void {
+  private armBombAtTile(tile: TileCoord, queue?: number[], sourceTile?: TileCoord): void {
     const bomb = this.bombs.find((item) => item.tile.x === tile.x && item.tile.y === tile.y);
     if (!bomb) {
       return;
+    }
+    if (sourceTile && bomb.fuseMs > 0) {
+      this.chainReactionFeedback.push({
+        fromTile: { ...sourceTile },
+        toTile: { ...bomb.tile },
+        elapsedMs: 0,
+      });
     }
     bomb.fuseMs = 0;
     if (queue && !queue.includes(bomb.id)) {
@@ -3220,6 +3296,15 @@ export class GameApp {
       this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => (
         effect.elapsedMs < KICK_IMPACT_FEEDBACK_MS
         && this.bombs.some((bomb) => bomb.id === effect.bombId)
+      ));
+    }
+
+    if (this.chainReactionFeedback.length > 0) {
+      for (const effect of this.chainReactionFeedback) {
+        effect.elapsedMs += deltaMs;
+      }
+      this.chainReactionFeedback = this.chainReactionFeedback.filter((effect) => (
+        effect.elapsedMs < CHAIN_REACTION_FEEDBACK_MS
       ));
     }
 
@@ -4522,6 +4607,8 @@ export class GameApp {
       this.drawBomb(bomb);
     }
 
+    this.drawExplosionFeedback();
+
     for (const flame of this.flames) {
       this.drawFlame(flame);
     }
@@ -5142,6 +5229,73 @@ export class GameApp {
     this.ctx.fill();
     this.ctx.strokeStyle = "#f2dfba";
     this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  private drawExplosionFeedback(): void {
+    const geometry = buildExplosionFeedbackGeometry(this.flames);
+    if (geometry.cells.length === 0 && this.chainReactionFeedback.length === 0) {
+      return;
+    }
+
+    this.ctx.save();
+    for (const cell of geometry.cells) {
+      const alpha = Math.min(1, Math.max(0, cell.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
+      const toxic = cell.style === "toxic";
+      this.ctx.fillStyle = toxic
+        ? `rgba(54, 255, 151, ${0.1 + alpha * 0.08})`
+        : `rgba(255, 76, 28, ${0.11 + alpha * 0.09})`;
+      this.ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+      this.ctx.strokeStyle = toxic
+        ? `rgba(152, 255, 197, ${0.32 + alpha * 0.26})`
+        : `rgba(255, 197, 82, ${0.34 + alpha * 0.28})`;
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1);
+    }
+
+    this.ctx.lineCap = "round";
+    this.ctx.globalCompositeOperation = "lighter";
+    for (const connector of geometry.connectors) {
+      const toxic = connector.style === "toxic";
+      this.ctx.strokeStyle = toxic ? "rgba(90, 255, 165, 0.25)" : "rgba(255, 108, 38, 0.28)";
+      this.ctx.lineWidth = 10;
+      this.ctx.beginPath();
+      this.ctx.moveTo(connector.fromX, connector.fromY);
+      this.ctx.lineTo(connector.toX, connector.toY);
+      this.ctx.stroke();
+      this.ctx.strokeStyle = toxic ? "rgba(192, 255, 213, 0.62)" : "rgba(255, 226, 126, 0.68)";
+      this.ctx.lineWidth = 1.5;
+      this.ctx.stroke();
+    }
+
+    for (const effect of this.chainReactionFeedback) {
+      const progress = Math.min(1, effect.elapsedMs / CHAIN_REACTION_FEEDBACK_MS);
+      const alpha = 1 - progress;
+      const fromX = effect.fromTile.x * TILE_SIZE + TILE_SIZE / 2;
+      const fromY = effect.fromTile.y * TILE_SIZE + TILE_SIZE / 2;
+      const toX = effect.toTile.x * TILE_SIZE + TILE_SIZE / 2;
+      const toY = effect.toTile.y * TILE_SIZE + TILE_SIZE / 2;
+      this.ctx.strokeStyle = `rgba(255, 244, 168, ${0.88 * alpha})`;
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.moveTo(fromX, fromY);
+      this.ctx.lineTo(toX, toY);
+      this.ctx.stroke();
+
+      const travel = this.prefersReducedMotion ? 0.5 : 0.18 + progress * 0.82;
+      const sparkX = fromX + (toX - fromX) * travel;
+      const sparkY = fromY + (toY - fromY) * travel;
+      this.ctx.fillStyle = `rgba(255, 255, 220, ${alpha})`;
+      this.ctx.beginPath();
+      this.ctx.arc(sparkX, sparkY, 2.5, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      this.ctx.strokeStyle = `rgba(255, 132, 38, ${0.72 * alpha})`;
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(toX, toY, this.prefersReducedMotion ? 9 : 6 + progress * 10, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
     this.ctx.restore();
   }
 
