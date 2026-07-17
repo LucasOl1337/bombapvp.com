@@ -1,5 +1,5 @@
 import { tileKey } from "../Arenas/arena";
-import { BASE_MOVE_MS, MIN_MOVE_MS, SPEED_STEP_MS } from "../PersonalConfig/config";
+import { BASE_MOVE_MS, MIN_MOVE_MS, SPEED_STEP_MS, TILE_SIZE } from "../PersonalConfig/config";
 import type {
   BombState,
   Direction,
@@ -20,6 +20,7 @@ const DELTA: Record<Direction, TileCoord> = {
 };
 const DANGER_REACTION_MS = 1_200;
 const ARRIVAL_MARGIN_MS = 220;
+const PROJECTED_MOVEMENT_STEP_MS = 1_000 / 60;
 
 type SearchNode = Readonly<{
   tile: TileCoord;
@@ -187,6 +188,36 @@ function escapeDirection(
   });
 }
 
+function projectedEscapeDirection(
+  player: PlayerState,
+  enemies: readonly PlayerState[],
+  threats: ReadonlyMap<string, number>,
+  context: BotContext,
+): Direction | null {
+  const projectedPosition = player.skill.projectedPosition;
+  if (!projectedPosition) return null;
+  const projectedPlayer: PlayerState = {
+    ...player,
+    tile: {
+      x: Math.floor(projectedPosition.x / TILE_SIZE),
+      y: Math.floor(projectedPosition.y / TILE_SIZE),
+    },
+    position: { ...projectedPosition },
+  };
+  const projectedTileKey = tileKey(projectedPlayer.tile.x, projectedPlayer.tile.y);
+  const hasOwnedBombThreat = context.bombs.some((bomb) => (
+    bomb.ownerId === player.id
+    && bomb.fuseMs <= player.skill.channelRemainingMs + DANGER_REACTION_MS
+    && blastTiles(bomb, context).some((tile) => tileKey(tile.x, tile.y) === projectedTileKey)
+  ));
+  if (!hasOwnedBombThreat) return null;
+
+  const direction = escapeDirection(projectedPlayer, enemies, threats, context);
+  if (!direction) return null;
+  const option = context.evaluateProjectedMovementOption(projectedPlayer, direction, PROJECTED_MOVEMENT_STEP_MS);
+  return context.canMovementOptionAdvance(projectedPosition, option) ? direction : null;
+}
+
 function hasClearAttackLine(from: TileCoord, target: TileCoord, range: number, context: BotContext): boolean {
   if (from.x !== target.x && from.y !== target.y) return false;
   if (distance(from, target) > range) return false;
@@ -299,12 +330,16 @@ export function getBotV3Decision(player: PlayerState, context: BotContext): BotD
   const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
   const remoteThreat = hasRemoteBombThreat(player, context);
 
-  if (player.skill.phase === "channeling" || player.skill.phase === "releasing") {
+  if (player.skill.phase === "channeling") {
     return {
-      direction: null,
+      direction: projectedEscapeDirection(player, enemies, threats, context),
       placeBomb: false,
       targetId: target?.id,
     };
+  }
+
+  if (player.skill.phase === "releasing") {
+    return { direction: null, placeBomb: false, targetId: target?.id };
   }
 
   const threatened = currentDanger !== undefined && currentDanger <= DANGER_REACTION_MS;

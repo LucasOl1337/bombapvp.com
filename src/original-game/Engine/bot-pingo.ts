@@ -12,7 +12,7 @@ import type {
 } from "../Gameplay/types";
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
 import type { BotContext, BotDecision } from "./bot-ai";
-import { SUDDEN_DEATH_TICK_MS } from "./danger-map";
+import { SUDDEN_DEATH_FALL_MS, SUDDEN_DEATH_TICK_MS } from "./danger-map";
 
 const ESCAPE_BUFFER_MS = 220;
 const RANNI_EMERGENCY_PHASE_WINDOW_MS = 1_300;
@@ -117,6 +117,13 @@ function buildThreatArrival(context: BotContext): Map<string, number> {
     for (const tile of blastTiles(bomb, context)) {
       const tileId = key(tile);
       arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, fuseMs));
+    }
+  }
+  for (const effect of context.suddenDeathClosureEffects) {
+    if (!effect.impacted) {
+      const tileId = key(effect.tile);
+      const closureMs = Math.max(0, SUDDEN_DEATH_FALL_MS - effect.elapsedMs);
+      arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, closureMs));
     }
   }
   if (context.suddenDeathActive) {
@@ -383,7 +390,7 @@ function escapeDirection(
       return current.first;
     }
     for (const step of steps) {
-      const tile = { x: current.tile.x + step.dx, y: current.tile.y + step.dy };
+      const tile = adjacentTile(current.tile, step, context);
       const tileId = key(tile);
       if (visited.has(tileId) || !isWalkable(tile, context)) {
         continue;

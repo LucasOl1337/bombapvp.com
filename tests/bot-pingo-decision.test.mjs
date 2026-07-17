@@ -67,6 +67,7 @@ function context({
   suddenDeathTickMs = 0,
   suddenDeathIndex = 0,
   suddenDeathPath = [],
+  suddenDeathClosureEffects = [],
   evaluateMovementOption = (_subject, direction) => ({ direction }),
   evaluateProjectedMovementOption = evaluateMovementOption,
   canMovementOptionAdvance = () => true,
@@ -101,7 +102,7 @@ function context({
     suddenDeathTickMs,
     suddenDeathIndex,
     suddenDeathPath,
-    suddenDeathClosureEffects: [],
+    suddenDeathClosureEffects,
     botBombCooldownMs: 0,
     botCommittedDirection: { 1: null, 2: null, 3: null, 4: null },
     botPendingReverseDirection: { 1: null, 2: null, 3: null, 4: null },
@@ -352,6 +353,36 @@ describe("política Pingo", () => {
     expect(decision).toMatchObject({ direction: "up", placeBomb: false, useSkill: true });
   });
 
+  it("se afasta de uma casa do sudden death que já começou a cair", () => {
+    const pingo = player(1, 6, 2, {
+      position: { x: 260, y: 96.81 },
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 7_500,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+      },
+    });
+    const enemy = player(2, 6, 0);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      solid: [{ x: 5, y: 2 }, { x: 7, y: 2 }],
+      suddenDeathActive: true,
+      suddenDeathIndex: 1,
+      suddenDeathPath: [{ x: 7, y: 1 }],
+      suddenDeathClosureEffects: [
+        { tile: { x: 6, y: 1 }, elapsedMs: 0, impacted: false },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: "down", placeBomb: false });
+  });
+
   it("encerra a fase da Ranni assim que a projeção já saiu de todas as explosões", () => {
     const pingo = player(1, 1, 2, {
       activeBombs: 1,
@@ -529,6 +560,93 @@ describe("política Pingo", () => {
     }));
 
     expect(decision).toMatchObject({ direction: "up", useSkill: false });
+  });
+
+  it("atravessa o portal inferior quando é a única fuga corporal da explosão", () => {
+    const pingo = player(1, 5, 8, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 5_000,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      wrapPortals: [{ x: 5, y: 0 }, { x: 5, y: 8 }],
+      solid: [{ x: 4, y: 8 }, { x: 6, y: 8 }],
+      bombs: [
+        { id: 23, ownerId: 2, tile: { x: 5, y: 7 }, fuseMs: 1_000, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: "down", placeBomb: false, useSkill: false });
+  });
+
+  it("não sai da arena quando a borda ameaçada não é um portal", () => {
+    const pingo = player(1, 5, 8, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 5_000,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      solid: [{ x: 4, y: 8 }, { x: 6, y: 8 }],
+      bombs: [
+        { id: 23, ownerId: 2, tile: { x: 5, y: 7 }, fuseMs: 1_000, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("não atravessa o portal quando o destino também está ameaçado e sem saída", () => {
+    const pingo = player(1, 5, 8, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 5_000,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 7);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      width: 11,
+      height: 9,
+      wrapPortals: [{ x: 5, y: 0 }, { x: 5, y: 8 }],
+      solid: [
+        { x: 4, y: 8 }, { x: 6, y: 8 },
+        { x: 4, y: 0 }, { x: 6, y: 0 },
+      ],
+      bombs: [
+        { id: 23, ownerId: 2, tile: { x: 5, y: 7 }, fuseMs: 1_000, ownerCanPass: false, flameRange: 1 },
+        { id: 24, ownerId: 2, tile: { x: 5, y: 1 }, fuseMs: 1_000, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
   });
 
   it("usa o entitlement exato para sair da bomba criada sobre a projeção", () => {

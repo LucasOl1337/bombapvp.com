@@ -401,6 +401,29 @@ function continuousOverlapEscapeDirection(
   return null;
 }
 
+function overlappingEnemyExitDirection(
+  player: PlayerState,
+  enemies: readonly PlayerState[],
+  context: BotContext,
+): Direction | null {
+  const enemy = enemies.find((candidate) => (
+    context.isPlayerOverlappingTile(player, candidate.tile)
+  ));
+  if (!enemy) return null;
+
+  const centerX = (enemy.tile.x + 0.5) * TILE_SIZE;
+  const centerY = (enemy.tile.y + 0.5) * TILE_SIZE;
+  const dx = player.position.x - centerX;
+  const dy = player.position.y - centerY;
+  const preferred: Direction[] = Math.abs(dx) >= Math.abs(dy)
+    ? [dx >= 0 ? "right" : "left", dy >= 0 ? "down" : "up"]
+    : [dy >= 0 ? "down" : "up", dx >= 0 ? "right" : "left"];
+  return preferred.find((direction) => {
+    const option = context.evaluateMovementOption(player, direction, 1_000 / 60);
+    return context.canMovementOptionAdvance(player.position, option);
+  }) ?? null;
+}
+
 function canRemoteFinish(player: PlayerState, target: PlayerState, context: BotContext): boolean {
   if (
     player.remoteLevel <= 0
@@ -577,6 +600,8 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     }
     if (
       direction === null
+      && currentDanger !== undefined
+      && currentDanger <= REACTION_WINDOW_MS
       && player.skill.id === "ranni-ice-blink"
       && player.skill.phase === "idle"
     ) {
@@ -584,6 +609,14 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     }
     return {
       direction,
+      placeBomb: false,
+    };
+  }
+
+  const enemyExitDirection = overlappingEnemyExitDirection(player, enemies, context);
+  if (enemyExitDirection) {
+    return {
+      direction: enemyExitDirection,
       placeBomb: false,
     };
   }

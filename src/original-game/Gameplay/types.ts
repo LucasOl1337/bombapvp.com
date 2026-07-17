@@ -77,6 +77,7 @@ export interface BombState {
   tile: TileCoord;
   fuseMs: number;
   ownerCanPass: boolean;
+  bodyEgressPlayerIds?: PlayerId[];
   flameRange: number;
 }
 

@@ -6,6 +6,10 @@ import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
 import { BOT_V3_CHARACTER_INDEX } from "../src/original-game/Engine/bot-v3.ts";
 
+// Compatibility floor for this safety patch. Promotion still requires the
+// independent 10-consecutive-win gate documented in docs/gameplay.md.
+const DEPLOYED_BASELINE_V3_WINS = 1;
+
 function assets() {
   return {
     players: {},
@@ -65,12 +69,12 @@ function fairRandomLineups() {
   return lineups;
 }
 
-function playMatch(matchIndex, lineup) {
+function playMatch(matchIndex, lineup, seedPrefix = "v3-fair-match") {
   const baseArena = createDefaultArenaDefinition();
   const arena = {
     ...baseArena,
     tiles: { ...baseArena.tiles, breakable: [] },
-    randomSeed: `v3-fair-match-${matchIndex}`,
+    randomSeed: `${seedPrefix}-${matchIndex}`,
   };
   const game = new GameApp({}, assets(), arena);
   const actions = { decisions: 0, skills: 0, bombs: 0 };
@@ -183,6 +187,21 @@ describe("bot determinístico V3", () => {
       })),
     }, null, 2));
     expect(outcomes).toHaveLength(10);
+    expect(outcomes.filter(({ winner, lineup }) => winner === lineup.v3).length)
+      .toBeGreaterThanOrEqual(DEPLOYED_BASELINE_V3_WINS);
+    expect(outcomes.every(({ deathStats, lineup }) => (
+      (deathStats?.selfDeaths?.[lineup.v3] ?? 0) === 0
+    ))).toBe(true);
+  }, 60_000);
+
+  it("generaliza a segurança para dez seeds não usadas no hotfix", () => {
+    const outcomes = fairRandomLineups().map((lineup, index) => (
+      playMatch(index, lineup, "stone-v3-generalization")
+    ));
+
+    expect(outcomes).toHaveLength(10);
+    expect(outcomes.filter(({ winner, lineup }) => winner === lineup.v3).length)
+      .toBeGreaterThanOrEqual(DEPLOYED_BASELINE_V3_WINS);
     expect(outcomes.every(({ deathStats, lineup }) => (
       (deathStats?.selfDeaths?.[lineup.v3] ?? 0) === 0
     ))).toBe(true);

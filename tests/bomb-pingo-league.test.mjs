@@ -72,5 +72,7 @@ describe("liga adversarial Bomb vs Pingo", () => {
     }
     expect(outcomes.every((outcome) => outcome.metrics.Bomb.decisions > 0)).toBe(true);
     expect(outcomes.every((outcome) => outcome.metrics.Pingo.decisions > 0)).toBe(true);
+    expect(summary.Bomb.selfDeaths).toBe(0);
+    expect(summary.Pingo.selfDeaths).toBe(0);
   }, 120_000);
 });

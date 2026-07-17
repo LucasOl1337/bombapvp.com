@@ -435,6 +435,40 @@ describe("política competitiva do Bomb", () => {
     });
   });
 
+  it("não inicia a Ranni cedo demais quando a projeção imóvel terminaria antes da bomba", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, {
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "idle",
+          channelRemainingMs: 0,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 0,
+          projectedPosition: null,
+          projectedLastMoveDirection: null,
+          projectedBombEgressIds: [],
+        },
+      }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["2,2", "5,5"]);
+    const bombs = [{
+      id: 20,
+      ownerId: 1,
+      tile: { x: 2, y: 2 },
+      fuseMs: 1_900,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toEqual({
+      direction: null,
+      placeBomb: false,
+    });
+  });
+
   it("usa a Ranni quando o fuse vence antes de o centro sair da célula letal", () => {
     const players = {
       1: player(1, { x: 3, y: 3 }, {
@@ -731,6 +765,27 @@ describe("política competitiva do Bomb", () => {
 
     expect(getBombDecision(players[1], context(players, testArena, bombs))).not.toMatchObject({
       skillAction: "release",
+    });
+  });
+
+  it("continua saindo enquanto o corpo ainda sobrepõe a casa do adversário", () => {
+    const players = {
+      1: player(1, { x: 2, y: 1 }, {
+        position: { x: 81.63, y: 60 },
+      }),
+      2: player(2, { x: 1, y: 1 }, {
+        position: { x: 60, y: 41.88 },
+      }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,1", "2,1", "3,1"]);
+
+    expect(getBombDecision(players[1], context(players, testArena, [], {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toMatchObject({
+      direction: "right",
+      placeBomb: false,
     });
   });
 });

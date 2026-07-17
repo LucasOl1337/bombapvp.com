@@ -93,6 +93,19 @@ describe("Pingo nas autoeliminações pós-hotfix da Ranni", () => {
 });
 
 describe("Pingo contra a fuga contínua do Bomb v3", () => {
+  it("não fica preso numa casa adjacente que já começou a fechar no sudden death", () => {
+    const outcome = playAdversarialMatch({
+      seed: "bomb-pingo-post-egress-dev-a:standard:7",
+      arenaVariant: "standard",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+    expect(outcome.metrics.Pingo.longestStuckMs).toBeLessThan(5_000);
+  }, 30_000);
+
   it.each([
     ["pingo-v3-dev-b:standard:8", { x: 1, y: 7 }],
     ["pingo-v3-dev-b:standard:9", { x: 9, y: 7 }],
@@ -133,5 +146,33 @@ describe("Pingo contra a fuga contínua do Bomb v3", () => {
 
     expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
     expect(outcome.durationMs).toBeGreaterThan(4_450);
+  }, 30_000);
+});
+
+describe("Pingo nas falhas development após body-egress", () => {
+  it("usa o portal inferior para escapar da bomba rival no open", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v3-body-egress-dev-a:open-no-drops:1",
+      arenaVariant: "open-no-drops",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+    expect(outcome.durationMs).toBeGreaterThan(24_000);
+  }, 30_000);
+
+  it("preserva a vitória segura no choke sparse separado", () => {
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v3-body-egress-dev-a:sparse-breakables:5",
+      arenaVariant: "sparse-breakables",
+      characterIndex: 0,
+      policies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+    expect(outcome.winner).toBe("Pingo");
   }, 30_000);
 });
