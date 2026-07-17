@@ -9,9 +9,124 @@ import {
   LAB_V2_MODEL,
   LAB_V3_MODEL,
 } from "../lab/competitors.ts";
+import { mountArenaField } from "./arena-field.ts";
 
 type Dispatch = (intent: AppIntent) => void;
 type CharacterSnapshot = AppSnapshot["characters"][number];
+
+type LandingCopy = Readonly<{
+  navArena: string;
+  navFighters: string;
+  navLab: string;
+  heroTitle: string;
+  heroBody: string;
+  heroPrimary: string;
+  heroSecondary: string;
+  modesTitle: string;
+  mechanicsTitle: string;
+  mechanics: readonly Readonly<{ number: string; title: string; body: string }>[];
+  upgradesLabel: string;
+  upgrades: readonly string[];
+  fightersTitle: string;
+  fighterSkills: readonly Readonly<{ skill: string; body: string }>[];
+  labTitle: string;
+  labBody: string;
+  labSupport: string;
+  labViews: readonly Readonly<{ name: string; body: string }>[];
+  telemetry: readonly string[];
+  labAction: string;
+  closingTitle: string;
+  closingBody: string;
+  closingPrimary: string;
+  closingSecondary: string;
+  scrollLabel: string;
+}>;
+
+function landingCopy(locale: AppSnapshot["locale"]): LandingCopy {
+  if (locale === "en") {
+    return {
+      navArena: "Arena",
+      navFighters: "Fighters",
+      navLab: "Lab",
+      heroTitle: "Every bomb redraws the arena.",
+      heroBody: "A game of confrontation, routes, and timing. Break cover. Open a path. Survive the closing walls.",
+      heroPrimary: "Enter the arena",
+      heroSecondary: "See how it works",
+      modesTitle: "Three doors. One arena.",
+      mechanicsTitle: "The arena changes before you do.",
+      mechanics: [
+        { number: "01", title: "Detonate", body: "Plant bombs and control the timing of the blast." },
+        { number: "02", title: "Break through", body: "Destroy crates, reveal upgrades, and open new routes." },
+        { number: "03", title: "Survive", body: "When sudden death closes the map, space becomes advantage." },
+      ],
+      upgradesLabel: "Tactical upgrades",
+      upgrades: ["More bombs", "Flame", "Speed", "Shield", "Remote", "Kick", "Short fuse", "Bomb pass"],
+      fightersTitle: "Four bodies. Four ways to break the map.",
+      fighterSkills: [
+        { skill: "Ice blink", body: "Project a route and reappear at its endpoint." },
+        { skill: "Wing dash", body: "Cross up to three tiles in one advance." },
+        { skill: "Emerald surge", body: "Break crates and ignite all four axes." },
+        { skill: "Arcane beam", body: "Charge and fire in a straight line across the arena." },
+      ],
+      labTitle: "The fight can also be observed.",
+      labBody: "In the lab, two to four competitors enter the same authoritative GameApp. Mix Bomb, Pingo, V1, V2, V3, and approved 9Router models.",
+      labSupport: "Model credentials stay in the backend. Bomb, Pingo, V1, V2, and V3 run locally.",
+      labViews: [
+        { name: "Arena", body: "A full view of the live field." },
+        { name: "Split", body: "Two cameras side by side." },
+        { name: "Data", body: "Decision and system telemetry." },
+      ],
+      telemetry: ["Last action", "LLM/s", "Motor/s", "Safe", "Latency", "Tokens", "Kills", "Wins", "Deaths"],
+      labAction: "Configure a duel",
+      closingTitle: "The arena is already moving.",
+      closingBody: "Choose your entry. The map handles the rest.",
+      closingPrimary: "Play now",
+      closingSecondary: "Train against bots",
+      scrollLabel: "Scroll",
+    };
+  }
+
+  return {
+    navArena: "Arena",
+    navFighters: "Combatentes",
+    navLab: "Lab",
+    heroTitle: "Cada bomba redesenha a arena.",
+    heroBody: "Um jogo de confronto, rota e tempo. Destrua a cobertura. Abra caminho. Sobreviva ao fechamento.",
+    heroPrimary: "Entrar na arena",
+    heroSecondary: "Ver como funciona",
+    modesTitle: "Três portas. A mesma arena.",
+    mechanicsTitle: "A arena muda antes de você.",
+    mechanics: [
+      { number: "01", title: "Detone", body: "Plante bombas e controle o tempo da explosão." },
+      { number: "02", title: "Rompa", body: "Quebre caixas, revele upgrades e abra novas rotas." },
+      { number: "03", title: "Sobreviva", body: "Quando a morte súbita fecha o mapa, espaço vira vantagem." },
+    ],
+    upgradesLabel: "Upgrades táticos",
+    upgrades: ["Mais bombas", "Chama", "Velocidade", "Escudo", "Controle remoto", "Chute", "Pavio curto", "Passa-bomba"],
+    fightersTitle: "Quatro corpos. Quatro formas de quebrar o mapa.",
+    fighterSkills: [
+      { skill: "Salto glacial", body: "Projeta a rota e reaparece no ponto final." },
+      { skill: "Investida alada", body: "Cruza até três tiles em um avanço." },
+      { skill: "Surto esmeralda", body: "Rompe caixas e incendeia os quatro eixos." },
+      { skill: "Feixe arcano", body: "Carrega e dispara em linha através da arena." },
+    ],
+    labTitle: "A luta também pode ser observada.",
+    labBody: "No laboratório, de dois a quatro competidores entram na mesma GameApp autoritativa. Misture Bomb, Pingo, V1, V2, V3 e modelos autorizados do 9Router.",
+    labSupport: "Credenciais de modelos ficam no backend. Bomb, Pingo, V1, V2 e V3 rodam localmente.",
+    labViews: [
+      { name: "Arena", body: "Visão geral do campo e da ação ao vivo." },
+      { name: "Dividido", body: "Duas câmeras lado a lado." },
+      { name: "Dados", body: "Telemetria de decisões e sistema." },
+    ],
+    telemetry: ["Última ação", "LLM/s", "Motor/s", "Safe", "Latência", "Tokens", "Abates", "Vitórias", "Mortes"],
+    labAction: "Configurar um duelo",
+    closingTitle: "A arena já está em movimento.",
+    closingBody: "Escolha sua entrada. O mapa cuida do resto.",
+    closingPrimary: "Jogar agora",
+    closingSecondary: "Treinar contra bots",
+    scrollLabel: "Role",
+  };
+}
 
 function element<K extends keyof HTMLElementTagNameMap>(
   document: Document,
@@ -119,6 +234,19 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
   );
   home.append(mark, copy);
 
+  const navigation = element(document, "nav", "brand__navigation");
+  navigation.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Navegação principal" : "Primary navigation");
+  const pageCopy = landingCopy(snapshot.locale);
+  ([
+    { label: pageCopy.navArena, href: "#arena" },
+    { label: pageCopy.navFighters, href: "#combatentes" },
+    { label: pageCopy.navLab, href: "#laboratorio" },
+  ] as const).forEach(({ label, href }) => {
+    const link = element(document, "a", "brand__navigation-link", label);
+    link.href = href;
+    navigation.append(link);
+  });
+
   const languages = element(document, "div", "brand__languages");
   languages.setAttribute("role", "group");
   languages.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Idioma" : "Language");
@@ -140,7 +268,9 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
     languages.append(link);
   });
 
-  header.append(productHeading, home, languages);
+  header.append(productHeading, home);
+  if (snapshot.screen === "launcher") header.append(navigation);
+  header.append(languages);
   return header;
 }
 
@@ -174,53 +304,268 @@ function renderRosterPanel(document: Document, snapshot: AppSnapshot): HTMLEleme
 }
 
 function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
-  const region = element(document, "section", "experience-region");
+  const copy = landingCopy(snapshot.locale);
+  const region = element(document, "section", "landing");
   region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
+  region.append(element(document, "h2", "sr-only", snapshot.copy.launcherTitle));
 
-  const hero = element(document, "div", "launcher-hero");
-  const intro = element(document, "header", "page-intro page-intro--launcher");
-  intro.append(
-    element(document, "p", "page-intro__kicker", snapshot.copy.launcherKicker),
-    element(document, "h2", "page-intro__title", snapshot.copy.launcherTitle),
-    element(document, "p", "page-intro__description", snapshot.copy.launcherIntroduction),
+  const hero = element(document, "section", "landing-hero");
+  hero.id = "arena";
+  hero.setAttribute("aria-labelledby", "landing-hero-title");
+  const heroMedia = element(document, "div", "landing-hero__media");
+  const heroImage = document.createElement("img");
+  heroImage.src = "/Assets/marketing/hero-match-control-v2.webp";
+  heroImage.alt = "";
+  heroImage.width = 1920;
+  heroImage.height = 1080;
+  heroImage.decoding = "async";
+  heroImage.fetchPriority = "high";
+  heroImage.draggable = false;
+  const field = document.createElement("canvas");
+  field.className = "landing-hero__field";
+  field.setAttribute("aria-hidden", "true");
+  heroMedia.append(heroImage, field);
+
+  const heroCopy = element(document, "div", "landing-hero__copy");
+  const dossier = element(document, "span", "landing-hero__dossier", "B–01 / " + (snapshot.locale === "pt-BR" ? "MAPA INSTÁVEL" : "UNSTABLE MAP"));
+  dossier.setAttribute("aria-hidden", "true");
+  const heroTitle = element(document, "h2", "landing-display landing-hero__title", copy.heroTitle);
+  heroTitle.id = "landing-hero-title";
+  const heroBody = element(document, "p", "landing-hero__body", copy.heroBody);
+  const heroActions = element(document, "div", "landing-actions landing-hero__actions");
+  const heroPrimary = button(
+    document,
+    copy.heroPrimary,
+    "landing-button landing-button--primary",
+    { type: "open-experience", experienceId: "continuous-room" },
+    dispatch,
   );
-  hero.append(intro, renderRosterPanel(document, snapshot));
+  addArrow(document, heroPrimary);
+  const heroSecondary = element(document, "a", "landing-text-link", copy.heroSecondary);
+  heroSecondary.href = "#como-funciona";
+  heroSecondary.append(element(document, "span", "landing-text-link__arrow", "↓"));
+  heroCopy.append(dossier, heroTitle, heroBody, heroActions);
+  heroActions.append(heroPrimary, heroSecondary);
 
-  const grid = element(document, "div", "experience-grid");
+  const scroll = element(document, "a", "landing-hero__scroll", copy.scrollLabel);
+  scroll.href = "#experiencias";
+  scroll.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Rolar para as experiências" : "Scroll to experiences");
+  hero.append(heroMedia, heroCopy, scroll);
+  hero.addEventListener("pointermove", (event) => {
+    if (!(event instanceof PointerEvent)) return;
+    const bounds = hero.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    hero.style.setProperty("--pointer-x", String((event.clientX - bounds.left) / bounds.width));
+    hero.style.setProperty("--pointer-y", String((event.clientY - bounds.top) / bounds.height));
+  }, { passive: true });
+  mountArenaField(field);
+
+  const modes = element(document, "section", "landing-modes landing-section");
+  modes.id = "experiencias";
+  modes.setAttribute("aria-labelledby", "landing-modes-title");
+  const modesHeading = element(document, "h2", "landing-display landing-section__title landing-modes__title", copy.modesTitle);
+  modesHeading.id = "landing-modes-title";
+  const modeList = element(document, "div", "landing-modes__list");
   snapshot.experiences.forEach((experience, index) => {
-    const article = element(
-      document,
-      "article",
-      "experience-card experience-card--" + String(index + 1),
-    );
+    const article = element(document, "article", "landing-mode landing-mode--" + String(index + 1));
     article.dataset.experience = experience.id;
-    article.style.setProperty("--reveal-delay", `${340 + index * 90}ms`);
-    const number = element(
-      document,
-      "span",
-      "experience-card__number",
-      String(index + 1).padStart(2, "0"),
-    );
+    const number = element(document, "span", "landing-mode__number", String(index + 1).padStart(2, "0"));
     number.setAttribute("aria-hidden", "true");
-    const meta = element(document, "div", "experience-card__meta");
-    meta.append(element(document, "p", "experience-card__journey", experience.journeyLabel), number);
-    const copy = element(document, "div", "experience-card__copy");
-    copy.append(
-      element(document, "h3", "experience-card__name", experience.name),
-      element(document, "p", "experience-card__description", experience.description),
+    const content = element(document, "div", "landing-mode__content");
+    content.append(
+      element(document, "p", "landing-mode__journey", experience.journeyLabel),
+      element(document, "h3", "landing-mode__name", experience.name),
+      element(document, "p", "landing-mode__description", experience.description),
     );
     const action = button(
       document,
       experience.actionLabel,
-      "action action--card",
+      "landing-mode__action",
       { type: "open-experience", experienceId: experience.id },
       dispatch,
     );
     addArrow(document, action);
-    article.append(meta, copy, action);
-    grid.append(article);
+    article.append(number, content, action);
+    modeList.append(article);
   });
-  region.append(hero, grid);
+  modes.append(modesHeading, modeList);
+
+  const mechanics = element(document, "section", "landing-mechanics landing-section");
+  mechanics.id = "como-funciona";
+  mechanics.setAttribute("aria-labelledby", "landing-mechanics-title");
+  const mechanicsHeading = element(document, "h2", "landing-display landing-section__title", copy.mechanicsTitle);
+  mechanicsHeading.id = "landing-mechanics-title";
+  const route = element(document, "div", "landing-mechanics__route");
+  copy.mechanics.forEach((item) => {
+    const step = element(document, "article", "landing-mechanic");
+    const visual = element(document, "div", "landing-mechanic__visual");
+    visual.setAttribute("aria-hidden", "true");
+    const text = element(document, "div", "landing-mechanic__copy");
+    text.append(
+      element(document, "span", "landing-mechanic__number", item.number),
+      element(document, "h3", "landing-mechanic__title", item.title),
+      element(document, "p", "landing-mechanic__body", item.body),
+    );
+    step.append(visual, text);
+    route.append(step);
+  });
+
+  const upgradeAssets = [
+    "power-bomb.png",
+    "power-flame.png",
+    "power-speed.png",
+    "power-shield.png",
+    "power-remote.png",
+    "power-kick.png",
+    "power-short-fuse-v2.png",
+    "power-bomb-pass.png",
+  ] as const;
+  const upgrades = element(document, "div", "landing-upgrades");
+  upgrades.append(element(document, "p", "landing-upgrades__label", copy.upgradesLabel));
+  const upgradeList = element(document, "ul", "landing-upgrades__list");
+  copy.upgrades.forEach((upgrade, index) => {
+    const item = element(document, "li", "landing-upgrade");
+    const icon = document.createElement("img");
+    icon.src = "/Assets/UiLayouts/" + upgradeAssets[index];
+    icon.alt = "";
+    icon.width = 42;
+    icon.height = 42;
+    icon.loading = "lazy";
+    item.append(icon, element(document, "span", "landing-upgrade__name", upgrade));
+    upgradeList.append(item);
+  });
+  upgrades.append(upgradeList);
+  mechanics.append(mechanicsHeading, route, upgrades);
+
+  const fighters = element(document, "aside", "landing-fighters landing-section");
+  fighters.id = "combatentes";
+  fighters.setAttribute("aria-label", snapshot.copy.charactersLabel);
+  const fightersHeading = element(document, "h2", "landing-display landing-section__title landing-fighters__title", copy.fightersTitle);
+  const fighterList = element(document, "div", "landing-fighters__list");
+  snapshot.characters.forEach((character, index) => {
+    const skill = copy.fighterSkills[index];
+    if (!skill) return;
+    const article = element(document, "article", "landing-fighter landing-fighter--" + character.accent);
+    article.style.setProperty("--fighter-index", String(index));
+    const image = createCharacterImage(document, character, {
+      decorative: true,
+      width: 240,
+      height: 240,
+      draggable: false,
+    });
+    image.loading = "lazy";
+    const fighterCopy = element(document, "div", "landing-fighter__copy");
+    fighterCopy.append(
+      element(document, "span", "landing-fighter__number", String(index + 1).padStart(2, "0")),
+      element(document, "h3", "landing-fighter__name", character.name),
+      element(document, "p", "landing-fighter__skill", skill.skill),
+      element(document, "p", "landing-fighter__body", skill.body),
+    );
+    article.append(image, fighterCopy);
+    fighterList.append(article);
+  });
+  fighters.append(fightersHeading, fighterList);
+
+  const lab = element(document, "section", "landing-lab landing-section");
+  lab.id = "laboratorio";
+  lab.setAttribute("aria-labelledby", "landing-lab-title");
+  const labCopy = element(document, "div", "landing-lab__copy");
+  const labHeading = element(document, "h2", "landing-display landing-section__title landing-lab__title", copy.labTitle);
+  labHeading.id = "landing-lab-title";
+  labCopy.append(
+    labHeading,
+    element(document, "p", "landing-lab__body", copy.labBody),
+    element(document, "p", "landing-lab__support", copy.labSupport),
+  );
+  const labAction = button(
+    document,
+    copy.labAction,
+    "landing-button landing-button--primary landing-lab__action",
+    { type: "open-experience", experienceId: "bot-vs-bot-lab" },
+    dispatch,
+  );
+  addArrow(document, labAction);
+  labCopy.append(labAction);
+
+  const consolePreview = element(document, "div", "landing-console");
+  consolePreview.dataset.view = "arena";
+  const consoleTabs = element(document, "div", "landing-console__tabs");
+  consoleTabs.setAttribute("role", "group");
+  consoleTabs.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Visão do laboratório" : "Lab view");
+  const consoleStage = element(document, "div", "landing-console__stage");
+  const leftFighter = snapshot.characters[2];
+  const rightFighter = snapshot.characters[3];
+  if (leftFighter && rightFighter) {
+    consoleStage.append(
+      createCharacterImage(document, leftFighter, { decorative: true, width: 120, height: 120, draggable: false }),
+      element(document, "span", "landing-console__bomb"),
+      createCharacterImage(document, rightFighter, { decorative: true, width: 120, height: 120, draggable: false }),
+    );
+  }
+  const viewDescriptions = element(document, "div", "landing-console__views");
+  const viewButtons: HTMLButtonElement[] = [];
+  copy.labViews.forEach((view, index) => {
+    const key = ["arena", "split", "data"][index] ?? "arena";
+    const tab = element(document, "button", "landing-console__tab" + (index === 0 ? " is-active" : ""), view.name);
+    tab.type = "button";
+    tab.dataset.view = key;
+    tab.setAttribute("aria-pressed", String(index === 0));
+    viewButtons.push(tab);
+    const description = element(document, "article", "landing-console__view");
+    description.dataset.view = key;
+    description.append(
+      element(document, "h3", "landing-console__view-name", view.name),
+      element(document, "p", "landing-console__view-body", view.body),
+    );
+    viewDescriptions.append(description);
+    tab.addEventListener("click", () => {
+      consolePreview.dataset.view = key;
+      viewButtons.forEach((button) => {
+        const active = button === tab;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+    });
+    consoleTabs.append(tab);
+  });
+  const telemetry = element(document, "ul", "landing-console__telemetry");
+  copy.telemetry.forEach((label) => {
+    const item = element(document, "li", "landing-console__metric");
+    item.append(element(document, "span", "landing-console__metric-name", label), element(document, "i", "landing-console__metric-rail"));
+    telemetry.append(item);
+  });
+  consolePreview.append(consoleTabs, consoleStage, viewDescriptions, telemetry);
+  lab.append(labCopy, consolePreview);
+
+  const closing = element(document, "section", "landing-closing landing-section");
+  closing.setAttribute("aria-labelledby", "landing-closing-title");
+  const closingField = element(document, "div", "landing-closing__field");
+  closingField.setAttribute("aria-hidden", "true");
+  const closingHeading = element(document, "h2", "landing-display landing-closing__title", copy.closingTitle);
+  closingHeading.id = "landing-closing-title";
+  const closingBody = element(document, "p", "landing-closing__body", copy.closingBody);
+  const closingActions = element(document, "div", "landing-actions landing-closing__actions");
+  const closingPrimary = button(
+    document,
+    copy.closingPrimary,
+    "landing-button landing-button--primary",
+    { type: "open-experience", experienceId: "continuous-room" },
+    dispatch,
+  );
+  closingPrimary.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Começar pela Sala contínua" : "Start in the Continuous room");
+  addArrow(document, closingPrimary);
+  const closingSecondary = button(
+    document,
+    copy.closingSecondary,
+    "landing-button landing-button--secondary",
+    { type: "open-experience", experienceId: "bot-training" },
+    dispatch,
+  );
+  addArrow(document, closingSecondary);
+  closingActions.append(closingPrimary, closingSecondary);
+  closing.append(closingField, closingHeading, closingBody, closingActions);
+
+  region.append(hero, modes, mechanics, fighters, lab, closing);
   return region;
 }
 
@@ -330,7 +675,10 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  if (snapshot.activeExperience?.id === "bot-training") {
+  if (
+    snapshot.activeExperience?.id === "bot-training"
+    || snapshot.activeExperience?.id === "continuous-room"
+  ) {
     const opponentField = element(document, "label", "training-bot-field");
     const opponentLabel = element(
       document,
@@ -343,20 +691,18 @@ function renderCharacterSelection(
       "aria-label",
       snapshot.locale === "pt-BR" ? "Bot adversário" : "Bot opponent",
     );
-    ([
-      { value: "bomb", label: "Bomb v2 · Agressivo" },
-      { value: "pingo", label: "Pingo v2 · Tático" },
-    ] as const).forEach(({ value, label }) => {
+    snapshot.bots.forEach(({ id, label }) => {
       const option = document.createElement("option");
-      option.value = value;
+      option.value = id;
       option.textContent = label;
       opponent.append(option);
     });
-    opponent.value = snapshot.selectedTrainingBot;
-    opponent.addEventListener("change", () => dispatch({
-      type: "select-training-bot",
-      botId: opponent.value === "pingo" ? "pingo" : "bomb",
-    }));
+    opponent.value = snapshot.selectedBot;
+    opponent.addEventListener("change", () => {
+      const selectedBot = snapshot.bots.find(({ id }) => id === opponent.value);
+      if (!selectedBot) return;
+      dispatch({ type: "select-bot", botId: selectedBot.id });
+    });
     opponentField.append(opponentLabel, opponent);
     confirmation.append(selectionSummary, opponentField, confirm);
   } else {

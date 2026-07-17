@@ -232,6 +232,9 @@ const POWER_UP_REVEAL_HALO_END_RADIUS = 26;
 const FLAME_DISSIPATE_TAIL_MS = 120;
 const CHAIN_REACTION_FEEDBACK_MS = 260;
 const EXPLOSION_FEEDBACK_INSET_PX = 1;
+const PLAYER_FLAME_OCCLUSION_INSET_PX = 3;
+const PLAYER_FLAME_OCCLUSION_CORNER_PX = 10;
+const PLAYER_FLAME_OCCLUSION_DEATH_WINDOW_MS = FLAME_DURATION_MS;
 const SPAWN_PROTECTION_MS = 2200;
 const PERFECT_START_WINDOW_MS = 320;
 const PERFECT_START_BOOST_MS = 640;
@@ -467,6 +470,73 @@ export interface ExplosionFeedbackConnector {
   toX: number;
   toY: number;
   style: NonNullable<FlameState["style"]>;
+}
+
+export interface PlayerFlameOcclusionIndicator {
+  playerId: PlayerId;
+  ownerId: PlayerId | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  cornerLength: number;
+  style: NonNullable<FlameState["style"]>;
+  alpha: number;
+}
+
+export interface PlayerFlameOcclusionElimination {
+  playerId: PlayerId;
+  startedAtMs: number;
+}
+
+export function buildPlayerFlameOcclusionIndicators(
+  flames: readonly Pick<FlameState, "tile" | "style" | "remainingMs" | "ownerId">[],
+  players: readonly Pick<PlayerState, "id" | "tile" | "active" | "alive">[],
+  eliminations: readonly PlayerFlameOcclusionElimination[],
+  animationClockMs: number,
+  prefersReducedMotion: boolean,
+): PlayerFlameOcclusionIndicator[] {
+  const recentlyEliminated = new Set(
+    eliminations
+      .filter(({ startedAtMs }) => {
+        const elapsedMs = animationClockMs - startedAtMs;
+        return elapsedMs >= 0 && elapsedMs <= PLAYER_FLAME_OCCLUSION_DEATH_WINDOW_MS;
+      })
+      .map(({ playerId }) => playerId),
+  );
+  const activeFlames = new Map(
+    flames
+      .filter((flame) => flame.remainingMs > 0)
+      .map((flame) => [tileKey(flame.tile.x, flame.tile.y), flame]),
+  );
+  const pulse = prefersReducedMotion
+    ? 0.5
+    : 0.5 + Math.sin(animationClockMs / 120) * 0.5;
+  const baseAlpha = 0.74 + pulse * 0.22;
+
+  return players.flatMap((player) => {
+    if (!player.active || (!player.alive && !recentlyEliminated.has(player.id))) {
+      return [];
+    }
+    const flame = activeFlames.get(tileKey(player.tile.x, player.tile.y));
+    if (!flame) {
+      return [];
+    }
+    const fade = Math.min(1, flame.remainingMs / FLAME_DISSIPATE_TAIL_MS);
+    return [{
+      playerId: player.id,
+      ownerId: flame.ownerId,
+      x: player.tile.x * TILE_SIZE + PLAYER_FLAME_OCCLUSION_INSET_PX,
+      y: player.tile.y * TILE_SIZE + PLAYER_FLAME_OCCLUSION_INSET_PX,
+      width: TILE_SIZE - PLAYER_FLAME_OCCLUSION_INSET_PX * 2,
+      height: TILE_SIZE - PLAYER_FLAME_OCCLUSION_INSET_PX * 2,
+      cornerLength: PLAYER_FLAME_OCCLUSION_CORNER_PX,
+      style: flame.style ?? "normal",
+      alpha: prefersReducedMotion
+        ? baseAlpha
+        : Math.round(baseAlpha * fade * 1_000) / 1_000,
+    }];
+  });
 }
 
 export function buildExplosionFeedbackGeometry(
@@ -810,7 +880,7 @@ export class GameApp {
         )
           ? player.skill.projectedBombEgressIds ?? []
           : [];
-        return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds, false);
+        return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds, false, true);
       },
       projectKillerBeeDashTarget: (player, dir) => computeKillerBeeDashTarget(player, dir, this.createSkillContext()),
       canMovementOptionAdvance: (pos, opt) => this.canMovementOptionAdvance(pos, opt),
@@ -838,10 +908,10 @@ export class GameApp {
       normalizeArenaPosition: (pos) => this.normalizeArenaPosition(pos),
       getWrappedDelta: (target, current, size) => this.getWrappedDelta(target, current, size),
       resolveMovementDirection: (player, dir, dt, ignoredBombIds) => (
-        this.resolveMovementDirection(player, dir, dt, ignoredBombIds, false)
+        this.resolveMovementDirection(player, dir, dt, ignoredBombIds, false, true)
       ),
       movePlayerSimulated: (player, dir, dt, ignoredBombIds) => (
-        this.movePlayerSimulated(player, dir, dt, ignoredBombIds, false)
+        this.movePlayerSimulated(player, dir, dt, ignoredBombIds, false, true)
       ),
       isPositionOverlappingTile: (position, tile) => this.isProjectedPositionOverlappingTile(position, tile),
       clonePlayerState: (player) => this.clonePlayerState(player),
@@ -2827,6 +2897,7 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): Direction {
     const desiredOption = this.evaluateMovementOption(
       player,
@@ -2834,6 +2905,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
     const desiredCanMove = this.canMovementOptionAdvance(player.position, desiredOption);
 
@@ -2852,6 +2924,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
     const continueAdvances = this.canMovementOptionAdvance(player.position, continueOption);
 
@@ -2864,6 +2937,7 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): MovementOption {
     const delta = directionDelta[direction];
     const step = this.getMoveSpeed(player) * (deltaMs / 1000);
@@ -2911,9 +2985,27 @@ export class GameApp {
       combinedMove,
       laneOnlyMove,
       forwardOnlyMove,
-      combinedFree: this.canOccupyPosition(player, combinedMove, ignoredBombIds, allowBodyBombEgress),
-      laneOnlyFree: this.canOccupyPosition(player, laneOnlyMove, ignoredBombIds, allowBodyBombEgress),
-      forwardOnlyFree: this.canOccupyPosition(player, forwardOnlyMove, ignoredBombIds, allowBodyBombEgress),
+      combinedFree: this.canOccupyPosition(
+        player,
+        combinedMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
+      laneOnlyFree: this.canOccupyPosition(
+        player,
+        laneOnlyMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
+      forwardOnlyFree: this.canOccupyPosition(
+        player,
+        forwardOnlyMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
     };
   }
 
@@ -2927,8 +3019,17 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): void {
-    this.movePlayerInternal(player, direction, deltaMs, false, ignoredBombIds, allowBodyBombEgress);
+    this.movePlayerInternal(
+      player,
+      direction,
+      deltaMs,
+      false,
+      ignoredBombIds,
+      allowBodyBombEgress,
+      allowProjectedBombEgress,
+    );
   }
 
   private movePlayerInternal(
@@ -2938,6 +3039,7 @@ export class GameApp {
     allowBombPush: boolean,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): void {
     const start = { ...player.position };
     let option = this.evaluateMovementOption(
@@ -2946,6 +3048,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
 
     if (allowBombPush && !option.combinedFree && !option.forwardOnlyFree && option.canAdvanceForward) {
@@ -3031,6 +3134,14 @@ export class GameApp {
     return this.bombs.find((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key) ?? null;
   }
 
+  private revokeRanniProjectedBombEgress(bombId: number): void {
+    for (const playerId of ALL_PLAYER_IDS) {
+      const player = this.players[playerId];
+      player.skill.projectedBombEgressIds = (player.skill.projectedBombEgressIds ?? [])
+        .filter((projectedBombId) => projectedBombId !== bombId);
+    }
+  }
+
   private tryPushBombAtTile(tile: TileCoord, direction: Direction, distance: number): boolean {
     const bomb = this.findBombAtTile(tile);
     if (!bomb) {
@@ -3062,6 +3173,7 @@ export class GameApp {
     if (movedTiles <= 0) {
       return false;
     }
+    this.revokeRanniProjectedBombEgress(bomb.id);
     bomb.tile = this.normalizeTile(targetTile);
     bomb.fuseMs = Math.max(KICK_FUSE_MIN_MS, bomb.fuseMs - movedTiles * KICK_FUSE_PENALTY_MS_PER_TILE);
     if (this.flames.some((flame) => flame.tile.x === bomb.tile.x && flame.tile.y === bomb.tile.y)) {
@@ -3069,6 +3181,17 @@ export class GameApp {
     }
     bomb.ownerCanPass = false;
     bomb.bodyEgressPlayerIds = [];
+    for (const activePlayerId of this.activePlayerIds) {
+      const activePlayer = this.players[activePlayerId];
+      if (
+        activePlayer.skill.id === "ranni-ice-blink"
+        && activePlayer.skill.phase === "channeling"
+        && activePlayer.skill.projectedPosition
+        && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)
+      ) {
+        grantRanniProjectedBombEgress(activePlayer, bomb.id);
+      }
+    }
     this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => effect.bombId !== bomb.id);
     this.bombKickImpactFeedback.push({ bombId: bomb.id, elapsedMs: 0 });
     if (impactBreakableKey) {
@@ -3097,6 +3220,7 @@ export class GameApp {
     position: PixelCoord,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): boolean {
     const wrapped = this.normalizeArenaPosition(position);
     if (
@@ -3106,6 +3230,17 @@ export class GameApp {
         bomb.ownerId !== player.id
         && !ignoredBombIds.includes(bomb.id)
         && bomb.bodyEgressPlayerIds?.includes(player.id)
+        && this.getBodyTileOverlapArea(player.position, bomb.tile) > 0
+        && this.doesBodyBombEgressCrossCenter(player.position, wrapped, bomb.tile)
+      ))
+    ) {
+      return false;
+    }
+    if (
+      allowProjectedBombEgress
+      && player.bombPassLevel <= 0
+      && this.bombs.some((bomb) => (
+        ignoredBombIds.includes(bomb.id)
         && this.getBodyTileOverlapArea(player.position, bomb.tile) > 0
         && this.doesBodyBombEgressCrossCenter(player.position, wrapped, bomb.tile)
       ))
@@ -3131,6 +3266,7 @@ export class GameApp {
           ignoredBombIds,
           allowBodyBombEgress,
           wrapped,
+          allowProjectedBombEgress,
         )) {
           return false;
         }
@@ -3147,6 +3283,7 @@ export class GameApp {
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
     candidatePosition: PixelCoord = player.position,
+    allowProjectedBombEgress = false,
   ): boolean {
     const normalized = this.normalizeTile({ x: tileX, y: tileY });
     const key = tileKey(normalized.x, normalized.y);
@@ -3162,7 +3299,13 @@ export class GameApp {
         continue;
       }
       if (ignoredBombIds.includes(bomb.id)) {
-        continue;
+        if (
+          !allowProjectedBombEgress
+          || this.isMonotonicBodyBombEgress(player.position, candidatePosition, bomb.tile)
+        ) {
+          continue;
+        }
+        return true;
       }
       if (bomb.ownerId === player.id && bomb.ownerCanPass) {
         continue;
@@ -3392,6 +3535,7 @@ export class GameApp {
     }
 
     const [bomb] = this.bombs.splice(index, 1);
+    this.revokeRanniProjectedBombEgress(bomb.id);
     this.players[bomb.ownerId].activeBombs = Math.max(0, this.players[bomb.ownerId].activeBombs - 1);
     this.soundManager.playOneShot("bombExplode");
     this.triggerExplosionScreenShake();
@@ -4942,6 +5086,8 @@ export class GameApp {
       this.drawPlayer(this.players[id]);
     }
 
+    this.drawPlayerFlameOcclusionIndicators();
+
     for (const effect of this.suddenDeathClosureEffects) {
       this.drawSuddenDeathClosureEffect(effect);
     }
@@ -5611,6 +5757,65 @@ export class GameApp {
       this.ctx.lineWidth = 2;
       this.ctx.beginPath();
       this.ctx.arc(toX, toY, this.prefersReducedMotion ? 9 : 6 + progress * 10, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
+  }
+
+  private drawPlayerFlameOcclusionIndicators(): void {
+    const indicators = buildPlayerFlameOcclusionIndicators(
+      this.flames,
+      ALL_PLAYER_IDS.map((playerId) => this.players[playerId]),
+      ALL_PLAYER_IDS.flatMap((playerId) => {
+        const deathAnimation = this.playerDeathAnimations[playerId];
+        return deathAnimation
+          ? [{ playerId, startedAtMs: deathAnimation.startedAtMs }]
+          : [];
+      }),
+      this.animationClockMs,
+      this.prefersReducedMotion,
+    );
+    if (indicators.length === 0) {
+      return;
+    }
+
+    const traceCorners = (indicator: PlayerFlameOcclusionIndicator): void => {
+      const { x, y, width, height, cornerLength } = indicator;
+      const right = x + width;
+      const bottom = y + height;
+      this.ctx.beginPath();
+      this.ctx.moveTo(x + cornerLength, y);
+      this.ctx.lineTo(x, y);
+      this.ctx.lineTo(x, y + cornerLength);
+      this.ctx.moveTo(right - cornerLength, y);
+      this.ctx.lineTo(right, y);
+      this.ctx.lineTo(right, y + cornerLength);
+      this.ctx.moveTo(x, bottom - cornerLength);
+      this.ctx.lineTo(x, bottom);
+      this.ctx.lineTo(x + cornerLength, bottom);
+      this.ctx.moveTo(right - cornerLength, bottom);
+      this.ctx.lineTo(right, bottom);
+      this.ctx.lineTo(right, bottom - cornerLength);
+    };
+
+    this.ctx.save();
+    this.ctx.lineCap = "square";
+    this.ctx.lineJoin = "miter";
+    for (const indicator of indicators) {
+      const toxic = indicator.style === "toxic";
+      this.ctx.globalAlpha = indicator.alpha;
+      this.ctx.shadowBlur = 0;
+      this.ctx.shadowColor = "transparent";
+      this.ctx.strokeStyle = "rgba(8, 8, 16, 0.9)";
+      this.ctx.lineWidth = 5;
+      traceCorners(indicator);
+      this.ctx.stroke();
+
+      this.ctx.strokeStyle = toxic ? "#baffd3" : "#fff0a6";
+      this.ctx.shadowColor = toxic ? "rgba(54, 255, 151, 0.95)" : "rgba(255, 76, 28, 0.95)";
+      this.ctx.shadowBlur = 6;
+      this.ctx.lineWidth = 2;
+      traceCorners(indicator);
       this.ctx.stroke();
     }
     this.ctx.restore();

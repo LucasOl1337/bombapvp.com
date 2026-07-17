@@ -1,31 +1,33 @@
 import type { PlayerId } from "../original-game/Gameplay/types.ts";
+import {
+  getLocalBotMetadataById,
+  getLocalBotMetadataByModel,
+  type LocalBotId,
+} from "../original-game/Engine/bot-catalog";
 
-export const LAB_V1_MODEL = "bot-v1";
-export const LAB_V2_MODEL = "bot-v2";
-export const LAB_V3_MODEL = "bot-v3";
-export const LAB_BOMB_MODEL = "bot-bomb";
-export const LAB_PINGO_MODEL = "bot-pingo";
+function requireLocalBotModel(id: LocalBotId): `bot-${LocalBotId}` {
+  const bot = getLocalBotMetadataById(id);
+  if (!bot) throw new Error(`local_bot_metadata_missing:${id}`);
+  return bot.model;
+}
+
+export const LAB_V1_MODEL = requireLocalBotModel("v1");
+export const LAB_V2_MODEL = requireLocalBotModel("v2");
+export const LAB_V3_MODEL = requireLocalBotModel("v3");
+export const LAB_BOMB_MODEL = requireLocalBotModel("bomb");
+export const LAB_PINGO_MODEL = requireLocalBotModel("pingo");
 export const LAB_MIN_COMPETITORS = 2;
 export const LAB_MAX_COMPETITORS = 4;
 
 export type LabMatchCompetitor = Readonly<{
   playerId: PlayerId;
   model: string;
-  kind: "v1" | "v2" | "v3" | "bomb" | "pingo" | "llm";
+  kind: LocalBotId | "llm";
   label: string;
 }>;
 
 function normalizeLabel(label: string | null): string {
   return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
-}
-
-function localBotKind(model: string): "v1" | "v2" | "v3" | "bomb" | "pingo" | null {
-  if (model === LAB_BOMB_MODEL) return "bomb";
-  if (model === LAB_PINGO_MODEL) return "pingo";
-  if (model === LAB_V1_MODEL) return "v1";
-  if (model === LAB_V2_MODEL) return "v2";
-  if (model === LAB_V3_MODEL) return "v3";
-  return null;
 }
 
 export function createLabMatchParams(
@@ -43,7 +45,7 @@ export function createLabMatchParams(
   normalizedModels.forEach((model, index) => {
     params.set(`model${index + 1}`, model);
     const label = normalizeLabel(labels[index] ?? null);
-    if (!localBotKind(model) && label) params.set(`label${index + 1}`, label);
+    if (!getLocalBotMetadataByModel(model) && label) params.set(`label${index + 1}`, label);
   });
   return params;
 }
@@ -64,14 +66,12 @@ export function parseLabMatchCompetitors(params: URLSearchParams): readonly LabM
 
   return models.filter(Boolean).map((model, index) => {
     const selectedLabel = normalizeLabel(params.get(`label${index + 1}`));
-    const kind = localBotKind(model);
+    const bot = getLocalBotMetadataByModel(model);
     return {
       playerId: (index + 1) as PlayerId,
       model,
-      kind: kind ?? "llm",
-      label: kind === "bomb"
-        ? "Bomb"
-        : kind === "pingo" ? "Pingo" : kind === "v1" ? "V1" : kind === "v2" ? "V2" : kind === "v3" ? "V3" : (selectedLabel || model),
+      kind: bot?.id ?? "llm",
+      label: bot?.label ?? (selectedLabel || model),
     };
   });
 }

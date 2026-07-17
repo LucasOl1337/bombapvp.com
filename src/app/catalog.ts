@@ -1,3 +1,8 @@
+import {
+  LOCAL_BOT_CATALOG,
+  type LocalBotMetadata,
+} from "../original-game/Engine/bot-catalog.ts";
+
 export type Locale = "pt-BR" | "en";
 
 export type ExperienceId = "continuous-room" | "bot-training" | "bot-vs-bot-lab";
@@ -200,6 +205,7 @@ export function localeForHostname(hostname: string): Locale {
 export function catalogFor(locale: Locale): Readonly<{
   experiences: readonly Experience[];
   characters: readonly Character[];
+  bots: readonly LocalBotMetadata[];
   copy: ProductCopy;
 }> {
   const descriptions = locale === "pt-BR" ? PT_CHARACTER_DESCRIPTIONS : EN_CHARACTER_DESCRIPTIONS;
@@ -216,6 +222,7 @@ export function catalogFor(locale: Locale): Readonly<{
   return Object.freeze({
     experiences: locale === "pt-BR" ? PT_EXPERIENCES : EN_EXPERIENCES,
     characters,
+    bots: LOCAL_BOT_CATALOG,
     copy: locale === "pt-BR" ? PT_COPY : EN_COPY,
   });
 }

@@ -2,6 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, within } from "@testing-library/dom";
 import { createBombApp, type BombApp } from "../src/app/index.ts";
 
+const LOCAL_BOT_IDS = ["bomb", "pingo", "v1", "v2", "v3"] as const;
+const BOT_SELECTION_CASES = [
+  ["training", "/treino/personagem", "bomb"],
+  ["training", "/treino/personagem", "pingo"],
+  ["training", "/treino/personagem", "v1"],
+  ["training", "/treino/personagem", "v2"],
+  ["training", "/treino/personagem", "v3"],
+  ["continuous", "/jogar/personagem", "bomb"],
+  ["continuous", "/jogar/personagem", "pingo"],
+  ["continuous", "/jogar/personagem", "v1"],
+  ["continuous", "/jogar/personagem", "v2"],
+  ["continuous", "/jogar/personagem", "v3"],
+] as const;
+
 describe("Bomba PvP app", () => {
   let app: BombApp | undefined;
 
@@ -70,6 +84,7 @@ describe("Bomba PvP app", () => {
       currentPath: "/jogar/personagem",
       activeExperience: { id: "continuous-room", name: "Sala contínua" },
       selectedCharacter: null,
+      selectedBot: "v1",
     });
     expect(
       (view.getByRole("button", { name: "Confirmar personagem" }) as HTMLButtonElement).disabled,
@@ -89,13 +104,13 @@ describe("Bomba PvP app", () => {
     fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034",
+      currentPath: "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=v1",
       selectedCharacter: { name: "Ranni" },
     });
     expect(view.getByRole("region", { name: "Abrindo arena" })).toBeTruthy();
     expect(visitedPaths).toEqual([
       "/jogar/personagem",
-      "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034",
+      "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=v1",
     ]);
   });
 
@@ -111,12 +126,12 @@ describe("Bomba PvP app", () => {
     expect(app.getSnapshot()).toMatchObject({
       screen: "character-selection",
       activeExperience: { id: "bot-training" },
-      selectedTrainingBot: "bomb",
+      selectedBot: "bomb",
     });
     const opponent = view.getByRole("combobox", { name: "Bot adversário" }) as HTMLSelectElement;
     expect(opponent.value).toBe("bomb");
     fireEvent.change(opponent, { target: { value: "pingo" } });
-    expect(app.getSnapshot().selectedTrainingBot).toBe("pingo");
+    expect(app.getSnapshot().selectedBot).toBe("pingo");
     fireEvent.click(view.getByRole("button", { name: "Nico, Escolher" }));
     fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
     expect(app.getSnapshot()).toMatchObject({
@@ -126,6 +141,26 @@ describe("Bomba PvP app", () => {
     });
     expect(view.getByText("Nico · Treino contra bots")).toBeTruthy();
   });
+
+  it.each(BOT_SELECTION_CASES)(
+    "oferece os cinco bots em %s (%s) e confirma %s",
+    (mode, initialPath, botId) => {
+      const root = createRoot();
+      app = createBombApp({ hostname: "bombapvp.com", root, initialPath });
+      const view = within(root);
+      const opponent = view.getByRole("combobox", { name: "Bot adversário" }) as HTMLSelectElement;
+      expect(Array.from(opponent.options, ({ value }) => value)).toEqual([...LOCAL_BOT_IDS]);
+
+      fireEvent.change(opponent, { target: { value: botId } });
+      expect(app.getSnapshot().selectedBot).toBe(botId);
+      fireEvent.click(view.getByRole("button", { name: "Ranni, Escolher" }));
+      fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
+
+      expect(app.getSnapshot().currentPath).toBe(
+        `/arena/?mode=${mode}&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=${botId}`,
+      );
+    },
+  );
 
   it("inicia o laboratório com os dois modelos selecionados", async () => {
     const root = createRoot();

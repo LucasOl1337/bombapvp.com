@@ -175,4 +175,34 @@ describe("Pingo nas falhas development após body-egress", () => {
     expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
     expect(outcome.winner).toBe("Pingo");
   }, 30_000);
+
+  it("recusa o pocket controlado antes da bomba causal no sparse remote-kick", () => {
+    let pingoDecisions = 0;
+    let firstBomb15 = null;
+    const replayPolicies = {
+      Bomb: getBombDecision,
+      Pingo: (player, context) => {
+        pingoDecisions += 1;
+        const decision = getBotPingoDecision(player, context);
+        const bomb15 = context.bombs.find((bomb) => bomb.id === 15);
+        if (firstBomb15 === null && bomb15) {
+          firstBomb15 = { ownerId: bomb15.ownerId, pingoDecisions };
+        }
+        return decision;
+      },
+    };
+    const outcome = playAdversarialMatch({
+      seed: "pingo-v3-remote-kick-dev-c:sparse-breakables:6",
+      arenaVariant: "sparse-breakables",
+      characterIndex: 0,
+      policies: replayPolicies,
+      spawnOrder: ["Pingo", "Bomb"],
+    });
+
+    expect(firstBomb15).toMatchObject({ ownerId: 1 });
+    expect(firstBomb15.pingoDecisions).toBeLessThanOrEqual(1_758);
+    expect(outcome.durationMs).toBeGreaterThan(31_300);
+    expect(outcome.winner).toBe("Pingo");
+    expect(outcome.metrics.Pingo.selfDeaths).toBe(0);
+  }, 30_000);
 });
