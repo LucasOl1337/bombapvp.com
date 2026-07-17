@@ -168,6 +168,213 @@ function projectedBombEgressDecision({
 }
 
 describe("política Pingo", () => {
+  it("reage imediatamente à bomba remota rival quando ficaria parado no choke", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4, { remoteLevel: 1 });
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 30, ownerId: 2, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: true });
+  });
+
+  it("mantém o fuse real da própria bomba remota", () => {
+    const pingo = player(1, 3, 2, {
+      activeBombs: 1,
+      remoteLevel: 1,
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 31, ownerId: 1, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("não antecipa a bomba remota de um dono inativo", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4, { active: false, remoteLevel: 1 });
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 32, ownerId: 2, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("não antecipa a bomba remota de um dono eliminado", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4, { alive: false, remoteLevel: 1 });
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 33, ownerId: 2, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("mantém o fuse real da bomba rival quando o dono não tem remote", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 34, ownerId: 2, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("mantém o fuse real quando o ownerId da bomba não resolve", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const enemy = player(2, 5, 4);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 36, ownerId: 4, tile: { x: 3, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("ignora a detonação remota rival fora da rota e do blast", () => {
+    const pingo = player(1, 1, 2);
+    const enemy = player(2, 5, 2, { remoteLevel: 1 });
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 1, y: 1 }, { x: 1, y: 3 }],
+      bombs: [
+        { id: 35, ownerId: 2, tile: { x: 6, y: 0 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: "right", placeBomb: false, useSkill: false });
+  });
+
+  it("não avança para dentro do blast de uma bomba remota rival", () => {
+    const pingo = player(1, 1, 2);
+    const enemy = player(2, 3, 2, { remoteLevel: 1 });
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: enemy },
+      solid: [{ x: 0, y: 2 }, { x: 1, y: 1 }, { x: 1, y: 3 }],
+      bombs: [
+        { id: 37, ownerId: 2, tile: { x: 2, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: false });
+  });
+
+  it("propaga a ETA imediata da bomba remota pela reação em cadeia", () => {
+    const pingo = player(1, 3, 2, {
+      skill: {
+        id: "ranni-ice-blink",
+        phase: "idle",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: 0,
+        castElapsedMs: 0,
+        projectedPosition: null,
+        projectedLastMoveDirection: null,
+        projectedBombEgressIds: [],
+      },
+    });
+    const remoteEnemy = player(2, 5, 4, { remoteLevel: 1 });
+    const otherEnemy = player(3, 6, 4);
+    const decision = getBotPingoDecision(pingo, context({
+      players: { 1: pingo, 2: remoteEnemy, 3: otherEnemy },
+      solid: [{ x: 2, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }],
+      bombs: [
+        { id: 38, ownerId: 2, tile: { x: 1, y: 1 }, fuseMs: 1_800, ownerCanPass: false, flameRange: 2 },
+        { id: 39, ownerId: 3, tile: { x: 3, y: 1 }, fuseMs: 1_900, ownerCanPass: false, flameRange: 1 },
+      ],
+    }));
+
+    expect(decision).toMatchObject({ direction: null, placeBomb: false, useSkill: true });
+  });
+
   it("abandona um corredor prestes a explodir pela única saída segura", () => {
     const pingo = player(1, 3, 2);
     const enemy = player(2, 5, 2);

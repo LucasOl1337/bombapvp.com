@@ -810,7 +810,7 @@ export class GameApp {
         )
           ? player.skill.projectedBombEgressIds ?? []
           : [];
-        return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds, false);
+        return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds, false, true);
       },
       projectKillerBeeDashTarget: (player, dir) => computeKillerBeeDashTarget(player, dir, this.createSkillContext()),
       canMovementOptionAdvance: (pos, opt) => this.canMovementOptionAdvance(pos, opt),
@@ -838,10 +838,10 @@ export class GameApp {
       normalizeArenaPosition: (pos) => this.normalizeArenaPosition(pos),
       getWrappedDelta: (target, current, size) => this.getWrappedDelta(target, current, size),
       resolveMovementDirection: (player, dir, dt, ignoredBombIds) => (
-        this.resolveMovementDirection(player, dir, dt, ignoredBombIds, false)
+        this.resolveMovementDirection(player, dir, dt, ignoredBombIds, false, true)
       ),
       movePlayerSimulated: (player, dir, dt, ignoredBombIds) => (
-        this.movePlayerSimulated(player, dir, dt, ignoredBombIds, false)
+        this.movePlayerSimulated(player, dir, dt, ignoredBombIds, false, true)
       ),
       isPositionOverlappingTile: (position, tile) => this.isProjectedPositionOverlappingTile(position, tile),
       clonePlayerState: (player) => this.clonePlayerState(player),
@@ -2827,6 +2827,7 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): Direction {
     const desiredOption = this.evaluateMovementOption(
       player,
@@ -2834,6 +2835,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
     const desiredCanMove = this.canMovementOptionAdvance(player.position, desiredOption);
 
@@ -2852,6 +2854,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
     const continueAdvances = this.canMovementOptionAdvance(player.position, continueOption);
 
@@ -2864,6 +2867,7 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): MovementOption {
     const delta = directionDelta[direction];
     const step = this.getMoveSpeed(player) * (deltaMs / 1000);
@@ -2911,9 +2915,27 @@ export class GameApp {
       combinedMove,
       laneOnlyMove,
       forwardOnlyMove,
-      combinedFree: this.canOccupyPosition(player, combinedMove, ignoredBombIds, allowBodyBombEgress),
-      laneOnlyFree: this.canOccupyPosition(player, laneOnlyMove, ignoredBombIds, allowBodyBombEgress),
-      forwardOnlyFree: this.canOccupyPosition(player, forwardOnlyMove, ignoredBombIds, allowBodyBombEgress),
+      combinedFree: this.canOccupyPosition(
+        player,
+        combinedMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
+      laneOnlyFree: this.canOccupyPosition(
+        player,
+        laneOnlyMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
+      forwardOnlyFree: this.canOccupyPosition(
+        player,
+        forwardOnlyMove,
+        ignoredBombIds,
+        allowBodyBombEgress,
+        allowProjectedBombEgress,
+      ),
     };
   }
 
@@ -2927,8 +2949,17 @@ export class GameApp {
     deltaMs: number,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): void {
-    this.movePlayerInternal(player, direction, deltaMs, false, ignoredBombIds, allowBodyBombEgress);
+    this.movePlayerInternal(
+      player,
+      direction,
+      deltaMs,
+      false,
+      ignoredBombIds,
+      allowBodyBombEgress,
+      allowProjectedBombEgress,
+    );
   }
 
   private movePlayerInternal(
@@ -2938,6 +2969,7 @@ export class GameApp {
     allowBombPush: boolean,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): void {
     const start = { ...player.position };
     let option = this.evaluateMovementOption(
@@ -2946,6 +2978,7 @@ export class GameApp {
       deltaMs,
       ignoredBombIds,
       allowBodyBombEgress,
+      allowProjectedBombEgress,
     );
 
     if (allowBombPush && !option.combinedFree && !option.forwardOnlyFree && option.canAdvanceForward) {
@@ -3031,6 +3064,14 @@ export class GameApp {
     return this.bombs.find((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key) ?? null;
   }
 
+  private revokeRanniProjectedBombEgress(bombId: number): void {
+    for (const playerId of ALL_PLAYER_IDS) {
+      const player = this.players[playerId];
+      player.skill.projectedBombEgressIds = (player.skill.projectedBombEgressIds ?? [])
+        .filter((projectedBombId) => projectedBombId !== bombId);
+    }
+  }
+
   private tryPushBombAtTile(tile: TileCoord, direction: Direction, distance: number): boolean {
     const bomb = this.findBombAtTile(tile);
     if (!bomb) {
@@ -3062,6 +3103,7 @@ export class GameApp {
     if (movedTiles <= 0) {
       return false;
     }
+    this.revokeRanniProjectedBombEgress(bomb.id);
     bomb.tile = this.normalizeTile(targetTile);
     bomb.fuseMs = Math.max(KICK_FUSE_MIN_MS, bomb.fuseMs - movedTiles * KICK_FUSE_PENALTY_MS_PER_TILE);
     if (this.flames.some((flame) => flame.tile.x === bomb.tile.x && flame.tile.y === bomb.tile.y)) {
@@ -3069,6 +3111,17 @@ export class GameApp {
     }
     bomb.ownerCanPass = false;
     bomb.bodyEgressPlayerIds = [];
+    for (const activePlayerId of this.activePlayerIds) {
+      const activePlayer = this.players[activePlayerId];
+      if (
+        activePlayer.skill.id === "ranni-ice-blink"
+        && activePlayer.skill.phase === "channeling"
+        && activePlayer.skill.projectedPosition
+        && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)
+      ) {
+        grantRanniProjectedBombEgress(activePlayer, bomb.id);
+      }
+    }
     this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => effect.bombId !== bomb.id);
     this.bombKickImpactFeedback.push({ bombId: bomb.id, elapsedMs: 0 });
     if (impactBreakableKey) {
@@ -3097,6 +3150,7 @@ export class GameApp {
     position: PixelCoord,
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
+    allowProjectedBombEgress = false,
   ): boolean {
     const wrapped = this.normalizeArenaPosition(position);
     if (
@@ -3106,6 +3160,17 @@ export class GameApp {
         bomb.ownerId !== player.id
         && !ignoredBombIds.includes(bomb.id)
         && bomb.bodyEgressPlayerIds?.includes(player.id)
+        && this.getBodyTileOverlapArea(player.position, bomb.tile) > 0
+        && this.doesBodyBombEgressCrossCenter(player.position, wrapped, bomb.tile)
+      ))
+    ) {
+      return false;
+    }
+    if (
+      allowProjectedBombEgress
+      && player.bombPassLevel <= 0
+      && this.bombs.some((bomb) => (
+        ignoredBombIds.includes(bomb.id)
         && this.getBodyTileOverlapArea(player.position, bomb.tile) > 0
         && this.doesBodyBombEgressCrossCenter(player.position, wrapped, bomb.tile)
       ))
@@ -3131,6 +3196,7 @@ export class GameApp {
           ignoredBombIds,
           allowBodyBombEgress,
           wrapped,
+          allowProjectedBombEgress,
         )) {
           return false;
         }
@@ -3147,6 +3213,7 @@ export class GameApp {
     ignoredBombIds: readonly number[] = [],
     allowBodyBombEgress = true,
     candidatePosition: PixelCoord = player.position,
+    allowProjectedBombEgress = false,
   ): boolean {
     const normalized = this.normalizeTile({ x: tileX, y: tileY });
     const key = tileKey(normalized.x, normalized.y);
@@ -3162,7 +3229,13 @@ export class GameApp {
         continue;
       }
       if (ignoredBombIds.includes(bomb.id)) {
-        continue;
+        if (
+          !allowProjectedBombEgress
+          || this.isMonotonicBodyBombEgress(player.position, candidatePosition, bomb.tile)
+        ) {
+          continue;
+        }
+        return true;
       }
       if (bomb.ownerId === player.id && bomb.ownerCanPass) {
         continue;
@@ -3392,6 +3465,7 @@ export class GameApp {
     }
 
     const [bomb] = this.bombs.splice(index, 1);
+    this.revokeRanniProjectedBombEgress(bomb.id);
     this.players[bomb.ownerId].activeBombs = Math.max(0, this.players[bomb.ownerId].activeBombs - 1);
     this.soundManager.playOneShot("bombExplode");
     this.triggerExplosionScreenShake();

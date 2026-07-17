@@ -476,7 +476,7 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     const app = new GameApp({}, assets(), definition);
     app.startServerAuthoritativeMatch(
       [1, 2],
-      { 1: 0, 2: 0, 3: 0, 4: 0 },
+      { 1: 0, 2: 1, 3: 0, 4: 0 },
       { roomMode: "endless", arena: definition },
     );
     app.advanceServerSimulation(1_300);
@@ -490,6 +490,7 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     app.advanceServerSimulation(STEP_MS);
     const kicked = app.exportOnlineSnapshot();
     expect(kicked.bombs[0].tile).toEqual({ x: 2, y: 1 });
+    expect(kicked.players[2].skill.id).toBe("killer-bee-wing-dash");
     expect(app.isPlayerOverlappingTile(kicked.players[2], kicked.bombs[0].tile)).toBe(true);
     expect(kicked.bombs[0].bodyEgressPlayerIds).toEqual([]);
   });

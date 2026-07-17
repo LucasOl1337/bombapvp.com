@@ -89,9 +89,17 @@ function blastTiles(bomb: BombState, context: BotContext): TileCoord[] {
   return result;
 }
 
-function buildThreatArrival(context: BotContext): Map<string, number> {
+function buildThreatArrival(player: PlayerState, context: BotContext): Map<string, number> {
   const arrival = new Map<string, number>();
-  const effectiveFuse = new Map(context.bombs.map((bomb) => [bomb.id, bomb.fuseMs]));
+  const effectiveFuse = new Map(context.bombs.map((bomb) => {
+    const owner = context.players[bomb.ownerId];
+    return [
+      bomb.id,
+      bomb.ownerId !== player.id && owner?.active && owner.alive && owner.remoteLevel > 0
+        ? 0
+        : bomb.fuseMs,
+    ];
+  }));
   for (let pass = 0; pass < context.bombs.length; pass += 1) {
     let changed = false;
     for (const source of context.bombs) {
@@ -177,7 +185,7 @@ function ownBombEscapeDirection(player: PlayerState, context: BotContext): Direc
   const fuseMs = getBombFuseMsForPlayer(player);
   const hypothetical = prospectiveBombFor(player);
   const projectedContext: BotContext = { ...context, bombs: [...context.bombs, hypothetical] };
-  const threatArrival = buildThreatArrival(projectedContext);
+  const threatArrival = buildThreatArrival(player, projectedContext);
   const ownBlast = new Set(blastTiles(hypothetical, projectedContext).map(key));
   const moveMs = moveDurationMs(player);
   const maxSteps = Math.max(1, Math.floor((fuseMs - ESCAPE_BUFFER_MS) / moveMs));
@@ -627,7 +635,7 @@ function channelEscapeDirection(player: PlayerState, context: BotContext): Direc
 }
 
 export function getBotPingoDecision(player: PlayerState, context: BotContext): BotDecision {
-  const threatArrival = buildThreatArrival(context);
+  const threatArrival = buildThreatArrival(player, context);
   const plannedEscape = escapeDirection(player, context, threatArrival);
   const threatened = threatArrival.has(key(player.tile));
   const alignedEscape = alignThreatenedMovementToTileCenter(
