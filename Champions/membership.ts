@@ -27,26 +27,6 @@ export const CHAMPION_MEMBERSHIP = Object.freeze({
     characterId: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
     skillId: "mirelle-tide-swap",
   }),
-  bram: Object.freeze({
-    characterId: "b2c3d4e5-f6a7-4890-b123-456789abcde2",
-    skillId: "bram-seismic-crack",
-  }),
-  zephyr: Object.freeze({
-    characterId: "c3d4e5f6-a7b8-4901-c234-56789abcdef3",
-    skillId: "zephyr-gale-scatter",
-  }),
-  hexa: Object.freeze({
-    characterId: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
-    skillId: "hexa-fuse-hex",
-  }),
-  aegis: Object.freeze({
-    characterId: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
-    skillId: "aegis-bastion-pulse",
-  }),
-  lumen: Object.freeze({
-    characterId: "f6a7b8c9-d0e1-4234-f567-89abcdef0123",
-    skillId: "lumen-flash-step",
-  }),
 } as const);
 
 export type ChampionSlug = keyof typeof CHAMPION_MEMBERSHIP;

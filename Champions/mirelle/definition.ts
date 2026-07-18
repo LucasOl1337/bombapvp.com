@@ -17,11 +17,11 @@ export const MIRELLE_DEFINITION = deepFreeze({
     localized: {
       "pt-BR": {
         label: "Personagem 7",
-        description: "Sereia das mares · Tide Swap",
+        description: "Sereia das mares · Tide Exchange (troca posicao ou bomba)",
       },
       en: {
         label: "Character 7",
-        description: "Tide siren · Tide Swap",
+        description: "Tide siren · Tide Exchange (swap foe or bomb)",
       },
     },
   },

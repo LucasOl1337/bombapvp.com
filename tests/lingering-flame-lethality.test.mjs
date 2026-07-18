@@ -70,7 +70,8 @@ describe("letalidade autoritativa da chama residual", () => {
 
     const result = app.exportOnlineSnapshot();
     expect(result.flames[0].remainingMs).toBeGreaterThan(0);
-    expect(result.players[1].tile).toEqual({ x: 2, y: 1 });
+    // Death uses hitbox overlap: player may die as soon as the body touches the
+    // flame tile, before floor(position) reports that discrete tile.
     expect(result.players[1].alive).toBe(false);
     expect(result.endlessStats.kills[2]).toBe(1);
     expect(result.endlessStats.opponentDeaths[1]).toBe(1);
@@ -148,6 +149,65 @@ describe("letalidade autoritativa da chama residual", () => {
     expect(app.exportOnlineSnapshot().players[1].alive).toBe(true);
 
     app.advanceServerSimulation(50);
+    const result = app.exportOnlineSnapshot();
+    expect(result.players[1].alive).toBe(false);
+    expect(result.endlessStats.kills[2]).toBe(1);
+  });
+
+  it("mata quando o hitbox sobrepoe a chama mesmo com tile discreto em vizinho", () => {
+    // TILE_SIZE=40, hitbox half=20. Center of tile (2,1) is (100,60).
+    // Position x=119 still floors to tile x=2, but body overlaps tile x=3 (120..160).
+    const app = createMatch();
+    const snapshot = app.exportOnlineSnapshot();
+    snapshot.players[1].position = { x: 119, y: 60 };
+    snapshot.players[1].tile = { x: 2, y: 1 };
+    snapshot.players[1].spawnProtectionMs = 0;
+    snapshot.players[1].flameGuardMs = 0;
+    snapshot.players[1].shieldCharges = 0;
+    snapshot.players[2].position = { x: 220, y: 220 };
+    snapshot.players[2].tile = { x: 5, y: 5 };
+    snapshot.flames = [{
+      tile: { x: 3, y: 1 },
+      remainingMs: 500,
+      style: "normal",
+      ownerId: 2,
+    }];
+    app.applyOnlineSnapshot(snapshot);
+
+    app.advanceServerSimulation(1_000 / 60);
+
+    const result = app.exportOnlineSnapshot();
+    expect(result.players[1].tile).toEqual({ x: 2, y: 1 });
+    expect(result.players[1].alive).toBe(false);
+    expect(result.endlessStats.kills[2]).toBe(1);
+  });
+
+  it("mata no instante da explosao se o corpo so sobrepoe tile de blast adjacente", () => {
+    const app = createMatch([1, 2, 3]);
+    const snapshot = app.exportOnlineSnapshot();
+    // Standing near right edge of (1,1); bomb on (2,1) range 1 covers (1,1) and (2,1) and (3,1)...
+    // Place player so discrete tile is (1,1) but body overlaps bomb tile (2,1) which will flame.
+    snapshot.players[1].position = { x: 79, y: 60 }; // tile 1,1 center-ish right edge (tile1: 40-80)
+    snapshot.players[1].tile = { x: 1, y: 1 };
+    snapshot.players[1].spawnProtectionMs = 0;
+    snapshot.players[1].flameGuardMs = 0;
+    snapshot.players[1].shieldCharges = 0;
+    snapshot.players[2].position = { x: 220, y: 220 };
+    snapshot.players[2].tile = { x: 5, y: 5 };
+    snapshot.bombs = [{
+      id: 1,
+      ownerId: 2,
+      tile: { x: 2, y: 1 },
+      fuseMs: 0,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [],
+      flameRange: 1,
+    }];
+    snapshot.nextBombId = 2;
+    app.applyOnlineSnapshot(snapshot);
+
+    app.advanceServerSimulation(1_000 / 60);
+
     const result = app.exportOnlineSnapshot();
     expect(result.players[1].alive).toBe(false);
     expect(result.endlessStats.kills[2]).toBe(1);

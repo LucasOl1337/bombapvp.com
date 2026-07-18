@@ -18,19 +18,20 @@ export {
   MIRELLE_SKILL_COOLDOWN_MS,
 } from "./definition";
 
-/** Short wind-up; always completes once started (tap is enough). */
-export const MIRELLE_SKILL_CHANNEL_MS = 220;
-/** Chebyshev range for nearest living enemy. */
+/** Channel while tide locks the target, then exchange. */
+export const MIRELLE_SKILL_CHANNEL_MS = 450;
 export const MIRELLE_SWAP_RANGE = 4;
-/** Miss / no-target cooldown so a dry cast is not full 8s. */
-export const MIRELLE_MISS_COOLDOWN_MS = 1_200;
-/** How long the tide ribbon VFX lasts. */
-export const MIRELLE_SWAP_VISUAL_MS = 420;
+export const MIRELLE_MISS_COOLDOWN_MS = 1_400;
+export const MIRELLE_SWAP_VISUAL_MS = 480;
+/** Brief tide shield after a successful enemy swap. */
+export const MIRELLE_POST_SWAP_GUARD_MS = 450;
 
 export type MirelleSkillContext = Pick<
   SkillContext,
   | "players"
   | "activePlayerIds"
+  | "bombs"
+  | "arena"
   | "getTileFromPosition"
   | "normalizeArenaPosition"
   | "canOccupyPosition"
@@ -49,7 +50,6 @@ export function tileCenter(tile: TileCoord): PixelCoord {
   };
 }
 
-/** Nearest living enemy within Chebyshev range (ties → lower player id). */
 export function findTideSwapTarget(
   caster: PlayerState,
   context: MirelleSkillContext,
@@ -75,67 +75,120 @@ export function findTideSwapTarget(
   return best;
 }
 
+/** Nearest bomb in range when no enemy — tide steals the bomb's tile. */
+export function findTideSwapBomb(
+  caster: PlayerState,
+  context: MirelleSkillContext,
+): { id: number; tile: TileCoord } | null {
+  const origin = context.getTileFromPosition(caster.position);
+  let best: { id: number; tile: TileCoord } | null = null;
+  let bestDist = Infinity;
+  for (const bomb of context.bombs) {
+    const dist = chebyshev(origin, bomb.tile);
+    if (dist < 1 || dist > MIRELLE_SWAP_RANGE) continue;
+    if (dist < bestDist || (dist === bestDist && best && bomb.id < best.id)) {
+      best = { id: bomb.id, tile: { ...bomb.tile } };
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function faceToward(self: PlayerState, other: TileCoord): void {
+  if (self.tile.x !== other.x) {
+    self.direction = self.tile.x < other.x ? "right" : "left";
+  } else if (self.tile.y !== other.y) {
+    self.direction = self.tile.y < other.y ? "down" : "up";
+  }
+  self.lastMoveDirection = self.direction;
+}
+
+function spawnRibbon(
+  ownerId: PlayerState["id"],
+  from: PixelCoord,
+  to: PixelCoord,
+  fromTile: TileCoord,
+  toTile: TileCoord,
+  context: MirelleSkillContext,
+): void {
+  const effect: MirelleTideSwapEffect = {
+    kind: "mirelle-tide-swap",
+    ownerId,
+    from: { ...from },
+    to: { ...to },
+    fromTile: { ...fromTile },
+    toTile: { ...toTile },
+    remainingMs: MIRELLE_SWAP_VISUAL_MS,
+  };
+  context.addChampionWorldEffect(effect);
+}
+
 /**
- * Instant position swap to tile centers.
- * Returns false when no valid enemy is in range.
+ * Tide Exchange:
+ * 1) Prefer nearest living enemy → full position swap + short dual flame guard.
+ * 2) Else nearest bomb in range → you take the bomb tile, bomb is teleported to your old tile.
  */
 export function fireTideSwap(
   caster: PlayerState,
   context: MirelleSkillContext,
 ): boolean {
-  const target = findTideSwapTarget(caster, context);
-  if (!target) {
-    return false;
+  const enemy = findTideSwapTarget(caster, context);
+  if (enemy) {
+    const aTile = context.getTileFromPosition(caster.position);
+    const bTile = context.getTileFromPosition(enemy.position);
+    if (aTile.x === bTile.x && aTile.y === bTile.y) return false;
+    const fromPx = { ...caster.position };
+    const toPx = { ...enemy.position };
+    caster.position = context.normalizeArenaPosition(tileCenter(bTile));
+    enemy.position = context.normalizeArenaPosition(tileCenter(aTile));
+    caster.tile = context.getTileFromPosition(caster.position);
+    enemy.tile = context.getTileFromPosition(enemy.position);
+    caster.velocity = { x: 0, y: 0 };
+    enemy.velocity = { x: 0, y: 0 };
+    faceToward(caster, enemy.tile);
+    faceToward(enemy, caster.tile);
+    caster.flameGuardMs = Math.max(
+      caster.flameGuardMs,
+      MIRELLE_POST_SWAP_GUARD_MS,
+    );
+    enemy.flameGuardMs = Math.max(
+      enemy.flameGuardMs,
+      MIRELLE_POST_SWAP_GUARD_MS,
+    );
+    spawnRibbon(caster.id, fromPx, toPx, aTile, bTile, context);
+    context.soundManager.playOneShot("powerCollect");
+    return true;
   }
 
+  const bombTarget = findTideSwapBomb(caster, context);
+  if (!bombTarget) return false;
+  const bomb = context.bombs.find((b) => b.id === bombTarget.id);
+  if (!bomb) return false;
   const aTile = context.getTileFromPosition(caster.position);
-  const bTile = context.getTileFromPosition(target.position);
-  if (aTile.x === bTile.x && aTile.y === bTile.y) {
+  const bTile = { ...bomb.tile };
+  if (aTile.x === bTile.x && aTile.y === bTile.y) return false;
+  // Bomb lands on caster's old tile only if free of other bombs/solids.
+  const bombKey = `${aTile.x},${aTile.y}`;
+  if (
+    context.arena.solid.has(bombKey) ||
+    context.arena.breakable.has(bombKey) ||
+    context.bombs.some(
+      (b) => b.id !== bomb.id && b.tile.x === aTile.x && b.tile.y === aTile.y,
+    )
+  ) {
     return false;
   }
-
-  // Land on clean tile centers so both players settle on grid.
-  const aLanding = context.normalizeArenaPosition(tileCenter(bTile));
-  const bLanding = context.normalizeArenaPosition(tileCenter(aTile));
-
-  // Soft occupy check: bombs under the other player should not hard-block a swap
-  // (tide fantasy = phase through), but solid geometry is already encoded in tiles.
-  void context.canOccupyPosition;
-
-  const fromPx: PixelCoord = { ...caster.position };
-  const toPx: PixelCoord = { ...target.position };
-
-  caster.position = aLanding;
-  target.position = bLanding;
+  const fromPx = { ...caster.position };
+  const toPx = tileCenter(bTile);
+  caster.position = context.normalizeArenaPosition(toPx);
   caster.tile = context.getTileFromPosition(caster.position);
-  target.tile = context.getTileFromPosition(target.position);
-  caster.velocity.x = 0;
-  caster.velocity.y = 0;
-  target.velocity.x = 0;
-  target.velocity.y = 0;
-
-  // Face each other after swap for readable body language.
-  if (caster.tile.x !== target.tile.x) {
-    caster.direction = caster.tile.x < target.tile.x ? "right" : "left";
-    target.direction = target.tile.x < caster.tile.x ? "right" : "left";
-  } else if (caster.tile.y !== target.tile.y) {
-    caster.direction = caster.tile.y < target.tile.y ? "down" : "up";
-    target.direction = target.tile.y < caster.tile.y ? "down" : "up";
-  }
-  caster.lastMoveDirection = caster.direction;
-  target.lastMoveDirection = target.direction;
-
-  const effect: MirelleTideSwapEffect = {
-    kind: "mirelle-tide-swap",
-    ownerId: caster.id,
-    from: fromPx,
-    to: toPx,
-    fromTile: { ...aTile },
-    toTile: { ...bTile },
-    remainingMs: MIRELLE_SWAP_VISUAL_MS,
-  };
-  context.addChampionWorldEffect(effect);
-  context.soundManager.playOneShot("powerCollect");
+  caster.velocity = { x: 0, y: 0 };
+  bomb.tile = { ...aTile };
+  bomb.ownerCanPass = false;
+  bomb.bodyEgressPlayerIds = [];
+  faceToward(caster, aTile);
+  spawnRibbon(caster.id, fromPx, toPx, aTile, bTile, context);
+  context.soundManager.playOneShot("bombPlace");
   return true;
 }
 

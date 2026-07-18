@@ -3837,7 +3837,8 @@ export class GameApp {
         continue;
       }
       player.tile = this.getTileFromPosition(player.position);
-      if (player.tile.x !== tile.x || player.tile.y !== tile.y) {
+      // Same hitbox rule as flames: body overlap, not only discrete tile center.
+      if (!this.isPlayerOverlappingTile(player, tile)) {
         continue;
       }
       if (this.isPlayerImmuneDuringSkillChannel(player)) {
@@ -3865,10 +3866,12 @@ export class GameApp {
       const player = this.players[id];
       if (!player.alive) continue;
       player.tile = this.getTileFromPosition(player.position);
+      // Hitbox is a full tile (PLAYER_HITBOX_HALF = TILE/2). Using only the
+      // discrete floor-tile lets players stand on visible fire and live when
+      // their center is still on a neighbor — match bot lethality overlap.
       const flame = this.flames.find((entry) => (
         entry.remainingMs > 0
-        && entry.tile.x === player.tile.x
-        && entry.tile.y === player.tile.y
+        && this.isPlayerOverlappingTile(player, entry.tile)
       ));
       if (flame) this.tryAbsorbInstantHit(player, flame.ownerId ?? null);
     }
@@ -3879,13 +3882,23 @@ export class GameApp {
     if (flameKeys.size === 0) {
       return;
     }
+    const flameTiles: TileCoord[] = [];
+    for (const key of flameKeys) {
+      const [xs, ys] = key.split(",");
+      const x = Number(xs);
+      const y = Number(ys);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        flameTiles.push({ x, y });
+      }
+    }
     for (const id of this.activePlayerIds) {
       const player = this.players[id];
       if (!player.alive) {
         continue;
       }
       player.tile = this.getTileFromPosition(player.position);
-      if (flameKeys.has(tileKey(player.tile.x, player.tile.y))) {
+      const hit = flameTiles.some((tile) => this.isPlayerOverlappingTile(player, tile));
+      if (hit) {
         this.tryAbsorbInstantHit(player, attackerId);
       }
     }
