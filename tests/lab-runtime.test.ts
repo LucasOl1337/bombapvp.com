@@ -109,6 +109,21 @@ function gameSnapshot(): OnlineGameSnapshot {
   };
 }
 
+function expectOnlyFiniteNumbers(value: unknown): void {
+  if (typeof value === "number") {
+    expect(Number.isFinite(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) expectOnlyFiniteNumbers(entry);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const entry of Object.values(value)) expectOnlyFiniteNumbers(entry);
+  }
+}
+
 class FakeMatch implements LabMatch {
   public session: LabMatchSession | null = null;
   public snapshot = gameSnapshot();
@@ -440,6 +455,519 @@ describe("runtime do laboratorio", () => {
 
       expect(runtime.readReport().players[0]?.decisions.count).toBe(0);
       expect(match.appliedInputs).toEqual([]);
+    } finally {
+      runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("descarta como stale uma decisao que excede a idade maxima configurada", async () => {
+    vi.useFakeTimers();
+    const match = new FakeMatch();
+    let clockMs = 0;
+    let resolveDecision!: (result: LabDecisionResult) => void;
+    const decider: LabDecider = {
+      decide: vi.fn()
+        .mockReturnValueOnce(new Promise<LabDecisionResult>((resolve) => {
+          resolveDecision = resolve;
+        }))
+        .mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const runtime = startLabRuntime({
+      match,
+      decider,
+      competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+      scheduling: { decisionPollMs: 10, motorIntervalMs: 10, maxDecisionAgeMs: 6_000 },
+      now: () => clockMs,
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      clockMs = 6_001;
+      resolveDecision({
+        decision: { direction: "left", placeBomb: true, detonate: false, useSkill: false },
+        roundTripMs: 20,
+        upstreamLatencyMs: 15,
+        usage: { inputTokens: 120, outputTokens: 8, totalTokens: 128 },
+        requestId: "lab-stale-age-1",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect({
+        appliedInputs: match.appliedInputs,
+        player: runtime.readReport().players[0],
+      }).toMatchObject({
+        appliedInputs: [],
+        player: {
+          timing: { lastMs: null, averageMs: null },
+          decisions: {
+            count: 0,
+            errors: 0,
+            discarded: {
+              stale: {
+                count: 1,
+                timing: {
+                  lastMs: 6_001,
+                  averageMs: 6_001,
+                  upstreamAverageMs: 15,
+                  transportAverageMs: 5_986,
+                },
+                tokens: { inputTokens: 120, outputTokens: 8, totalTokens: 128 },
+              },
+            },
+          },
+          tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          actions: { latest: null },
+        },
+      });
+    } finally {
+      runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("aplica a decisao cuja idade coincide com o limite inclusivo", async () => {
+    vi.useFakeTimers();
+    const match = new FakeMatch();
+    let clockMs = 0;
+    let resolveDecision!: (result: LabDecisionResult) => void;
+    const decider: LabDecider = {
+      decide: vi.fn()
+        .mockReturnValueOnce(new Promise<LabDecisionResult>((resolve) => {
+          resolveDecision = resolve;
+        }))
+        .mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    const runtime = startLabRuntime({
+      match,
+      decider,
+      competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+      scheduling: { decisionPollMs: 10, motorIntervalMs: 10, maxDecisionAgeMs: 6_000 },
+      now: () => clockMs,
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      clockMs = 6_000;
+      resolveDecision({
+        decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+        roundTripMs: 20,
+        upstreamLatencyMs: 15,
+        usage: { inputTokens: 100, outputTokens: 6, totalTokens: 106 },
+        requestId: "lab-fresh-boundary-1",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect({
+        appliedDirection: match.appliedInputs[0]?.input.direction,
+        decisions: runtime.readReport().players[0]?.decisions,
+      }).toMatchObject({
+        appliedDirection: "right",
+        decisions: { count: 1, errors: 0, discarded: { stale: { count: 0 } } },
+      });
+    } finally {
+      runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("trata idade maxima negativa como zero", async () => {
+    vi.useFakeTimers();
+    const match = new FakeMatch();
+    let clockMs = 0;
+    let resolveDecision!: (result: LabDecisionResult) => void;
+    const runtime = startLabRuntime({
+      match,
+      decider: {
+        decide: vi.fn(() => new Promise<LabDecisionResult>((resolve) => {
+          resolveDecision = resolve;
+        })),
+      },
+      competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+      scheduling: { maxDecisionAgeMs: -1 },
+      now: () => clockMs,
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      clockMs = 1;
+      resolveDecision({
+        decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+        roundTripMs: 1,
+        upstreamLatencyMs: 1,
+        usage: null,
+        requestId: "lab-negative-age",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(runtime.readReport().players[0]?.decisions).toMatchObject({
+        count: 0,
+        errors: 0,
+        discarded: { stale: { count: 1 } },
+      });
+    } finally {
+      runtime.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+  ] as const)(
+    "falha fechado quando o delta do relogio nao e finito: %s",
+    async (_caseName, invalidNow) => {
+      vi.useFakeTimers();
+      const match = new FakeMatch();
+      let clockMs = 0;
+      let resolveDecision!: (result: LabDecisionResult) => void;
+      const decide = vi.fn()
+        .mockReturnValueOnce(new Promise<LabDecisionResult>((resolve) => {
+          resolveDecision = resolve;
+        }))
+        .mockReturnValue(new Promise<never>(() => undefined));
+      const runtime = startLabRuntime({
+        match,
+        decider: { decide },
+        competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+        observe: (snapshot) => ({ frameId: snapshot.frameId }),
+        scheduling: { decisionPollMs: 50, motorIntervalMs: 50, maxDecisionAgeMs: 6_000 },
+        now: () => clockMs,
+      });
+
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        clockMs = invalidNow;
+        resolveDecision({
+          decision: { direction: "left", placeBomb: true, detonate: true, useSkill: true },
+          roundTripMs: invalidNow,
+          upstreamLatencyMs: invalidNow,
+          usage: {
+            inputTokens: invalidNow,
+            outputTokens: invalidNow,
+            totalTokens: invalidNow,
+          },
+          requestId: "lab-invalid-clock",
+        });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expectOnlyFiniteNumbers(runtime.readReport());
+
+        clockMs = 10_000;
+        match.snapshot = { ...match.snapshot, frameId: 7 };
+        const report = runtime.readReport();
+        expect({
+          appliedInputs: match.appliedInputs,
+          player: report.players[0],
+        }).toMatchObject({
+          appliedInputs: [],
+          player: {
+            timing: { lastMs: null, averageMs: null, p95Ms: null },
+            decisions: {
+              count: 0,
+              errors: 0,
+              discarded: {
+                stale: {
+                  count: 1,
+                  timing: { lastMs: 0, averageMs: 0, p95Ms: 0 },
+                  tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                },
+              },
+            },
+            tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            actions: { latest: null },
+          },
+        });
+        expectOnlyFiniteNumbers(report);
+
+        await vi.advanceTimersByTimeAsync(49);
+        expect(decide).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(decide.mock.calls.map(([request]) => request.observation)).toEqual([
+          { frameId: 0 },
+          { frameId: 7 },
+        ]);
+      } finally {
+        runtime.stop();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("satura round e acumuladores extremos sem perder contagens ou amostras", () => {
+    const match = new FakeMatch();
+    const runtime = startLabRuntime({
+      match,
+      decider: { decide: vi.fn(() => new Promise<never>(() => undefined)) },
+      competitors: [{ playerId: 1, model: "bot-v1", kind: "v1", label: "V1" }],
+      now: () => Number.MAX_VALUE,
+    });
+    const action = {
+      direction: "right" as const,
+      placeBomb: false,
+      detonate: false,
+      useSkill: false,
+    };
+    const maxUsage = {
+      inputTokens: Number.MAX_VALUE,
+      outputTokens: Number.MAX_VALUE,
+      totalTokens: Number.MAX_VALUE,
+    };
+
+    try {
+      for (let index = 0; index < 2; index += 1) {
+        runtime.record({
+          type: "decision",
+          playerId: 1,
+          decisionMs: Number.MAX_VALUE,
+          upstreamLatencyMs: Number.MAX_VALUE,
+          usage: maxUsage,
+          action,
+        });
+        runtime.record({
+          type: "decision_discarded",
+          reason: "stale",
+          playerId: 1,
+          decisionMs: Number.MAX_VALUE,
+          upstreamLatencyMs: Number.MAX_VALUE,
+          usage: maxUsage,
+        });
+      }
+      for (let index = 0; index < 2; index += 1) {
+        runtime.record({
+          type: "decision",
+          playerId: 1,
+          decisionMs: Number.MAX_VALUE,
+          upstreamLatencyMs: 0,
+          action,
+        });
+        runtime.record({
+          type: "decision_discarded",
+          reason: "stale",
+          playerId: 1,
+          decisionMs: Number.MAX_VALUE,
+          upstreamLatencyMs: 0,
+        });
+      }
+
+      const report = runtime.readReport();
+      const player = report.players[0]!;
+      expect(report.sampledAtMs).toBe(Number.MAX_VALUE);
+      expect(player.decisions.count).toBe(4);
+      expect(player.decisions.discarded?.stale.count).toBe(4);
+      expect(player.timing.averageMs).toBe(Number.MAX_VALUE);
+      expect(player.timing.p95Ms).toBe(Number.MAX_VALUE);
+      expect(player.timing.upstreamAverageMs! / Number.MAX_VALUE).toBeCloseTo(0.5, 12);
+      expect(player.timing.transportAverageMs! / Number.MAX_VALUE).toBeCloseTo(0.5, 12);
+      expect(player.decisions.discarded?.stale.timing.averageMs).toBe(Number.MAX_VALUE);
+      expect(player.decisions.discarded?.stale.timing.p95Ms).toBe(Number.MAX_VALUE);
+      expect(
+        player.decisions.discarded!.stale.timing.upstreamAverageMs! / Number.MAX_VALUE,
+      ).toBeCloseTo(0.5, 12);
+      expect(
+        player.decisions.discarded!.stale.timing.transportAverageMs! / Number.MAX_VALUE,
+      ).toBeCloseTo(0.5, 12);
+      expect(player.tokens).toEqual(maxUsage);
+      expect(player.decisions.discarded?.stale.tokens).toEqual(maxUsage);
+      expectOnlyFiniteNumbers(report);
+    } finally {
+      runtime.stop();
+    }
+  });
+
+  it.each([
+    ["iguais", Number.MAX_VALUE, Number.MAX_VALUE, 50],
+    ["round-trip maior", Number.MAX_VALUE, Number.MAX_VALUE / 2, 66.7],
+    ["gap maior", Number.MAX_VALUE / 2, Number.MAX_VALUE, 33.3],
+  ] as const)(
+    "calcula utilizacao overflow-safe para operandos extremos: %s",
+    (_caseName, roundTripMs, pollGapMs, expectedUtilizationPct) => {
+      const match = new FakeMatch();
+      let clockMs = 0;
+      const runtime = startLabRuntime({
+        match,
+        decider: { decide: vi.fn(() => new Promise<never>(() => undefined)) },
+        competitors: [{ playerId: 1, model: "bot-v1", kind: "v1", label: "V1" }],
+        now: () => clockMs,
+      });
+
+      try {
+        runtime.record({
+          type: "decision",
+          playerId: 1,
+          decisionMs: roundTripMs,
+          action: {
+            direction: "right",
+            placeBomb: false,
+            detonate: false,
+            useSkill: false,
+          },
+        });
+        clockMs = pollGapMs;
+        runtime.record({ type: "request", playerId: 1 });
+
+        const report = runtime.readReport();
+        expect(report.players[0]?.timing.pollingUtilizationPct).toBe(expectedUtilizationPct);
+        expectOnlyFiniteNumbers(report);
+      } finally {
+        runtime.stop();
+      }
+    },
+  );
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+  ] as const)(
+    "nao armazena timing ou usage nao finito de uma decisao fresca: %s",
+    async (_caseName, invalidMeasurement) => {
+      vi.useFakeTimers();
+      const match = new FakeMatch();
+      let clockMs = 0;
+      let resolveDecision!: (result: LabDecisionResult) => void;
+      const runtime = startLabRuntime({
+        match,
+        decider: {
+          decide: vi.fn(() => new Promise<LabDecisionResult>((resolve) => {
+            resolveDecision = resolve;
+          })),
+        },
+        competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+        scheduling: { motorIntervalMs: 10, maxDecisionAgeMs: 6_000 },
+        now: () => clockMs,
+      });
+
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        clockMs = 1;
+        resolveDecision({
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+          roundTripMs: invalidMeasurement,
+          upstreamLatencyMs: invalidMeasurement,
+          usage: {
+            inputTokens: invalidMeasurement,
+            outputTokens: invalidMeasurement,
+            totalTokens: invalidMeasurement,
+          },
+          requestId: "lab-invalid-measurement",
+        });
+        await vi.advanceTimersByTimeAsync(10);
+
+        const report = runtime.readReport();
+        expect({
+          appliedDirection: match.appliedInputs[0]?.input.direction,
+          player: report.players[0],
+        }).toMatchObject({
+          appliedDirection: "right",
+          player: {
+            timing: {
+              lastMs: 0,
+              averageMs: 0,
+              p95Ms: 0,
+              upstreamAverageMs: null,
+              transportAverageMs: null,
+            },
+            decisions: { count: 1, errors: 0, discarded: { stale: { count: 0 } } },
+            tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          },
+        });
+        expectOnlyFiniteNumbers(report);
+      } finally {
+        runtime.stop();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([
+    ["ausente", {}],
+    ["NaN", { maxDecisionAgeMs: Number.NaN }],
+    ["Infinity", { maxDecisionAgeMs: Number.POSITIVE_INFINITY }],
+    ["-Infinity", { maxDecisionAgeMs: Number.NEGATIVE_INFINITY }],
+  ] as const)(
+    "desabilita a idade maxima para valor nao finito ou ausente: %s",
+    async (_caseName, scheduling) => {
+      vi.useFakeTimers();
+      const match = new FakeMatch();
+      let clockMs = 0;
+      let resolveDecision!: (result: LabDecisionResult) => void;
+      const runtime = startLabRuntime({
+        match,
+        decider: {
+          decide: vi.fn(() => new Promise<LabDecisionResult>((resolve) => {
+            resolveDecision = resolve;
+          })),
+        },
+        competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+        scheduling,
+        now: () => clockMs,
+      });
+
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        clockMs = 60_000;
+        resolveDecision({
+          decision: { direction: "right", placeBomb: false, detonate: false, useSkill: false },
+          roundTripMs: 1,
+          upstreamLatencyMs: 1,
+          usage: null,
+          requestId: "lab-disabled-age",
+        });
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(runtime.readReport().players[0]?.decisions).toMatchObject({
+          count: 1,
+          errors: 0,
+          discarded: { stale: { count: 0 } },
+        });
+      } finally {
+        runtime.stop();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("pede um snapshot novo sem backoff depois de descartar uma decisao stale", async () => {
+    vi.useFakeTimers();
+    const match = new FakeMatch();
+    let clockMs = 0;
+    let resolveDecision!: (result: LabDecisionResult) => void;
+    const decide = vi.fn()
+      .mockReturnValueOnce(new Promise<LabDecisionResult>((resolve) => {
+        resolveDecision = resolve;
+      }))
+      .mockReturnValue(new Promise<never>(() => undefined));
+    const runtime = startLabRuntime({
+      match,
+      decider: { decide },
+      competitors: [{ playerId: 1, model: "cx/gpt-5.6-sol", kind: "llm", label: "Sol" }],
+      observe: (snapshot) => ({ frameId: snapshot.frameId }),
+      scheduling: { decisionPollMs: 50, maxDecisionAgeMs: 6_000 },
+      now: () => clockMs,
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      clockMs = 6_001;
+      resolveDecision({
+        decision: { direction: "left", placeBomb: false, detonate: false, useSkill: false },
+        roundTripMs: 20,
+        upstreamLatencyMs: 15,
+        usage: null,
+        requestId: "lab-stale-repoll-1",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      match.snapshot = { ...match.snapshot, frameId: 7 };
+      await vi.advanceTimersByTimeAsync(49);
+      expect(decide).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(decide.mock.calls.map(([request]) => request.observation)).toEqual([
+        { frameId: 0 },
+        { frameId: 7 },
+      ]);
     } finally {
       runtime.stop();
       vi.useRealTimers();

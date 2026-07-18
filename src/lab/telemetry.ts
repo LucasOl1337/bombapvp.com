@@ -20,6 +20,14 @@ export type LabTelemetryEvent =
   | Readonly<{ type: "request"; playerId: PlayerId }>
   | Readonly<{ type: "motor"; playerId: PlayerId; safetyOverride: boolean }>
   | Readonly<{
+      type: "decision_discarded";
+      reason: "stale";
+      playerId: PlayerId;
+      decisionMs: number;
+      upstreamLatencyMs?: number | null;
+      usage?: LabTelemetryUsage | null;
+    }>
+  | Readonly<{
       type: "decision";
       playerId: PlayerId;
       decisionMs: number;
@@ -47,6 +55,19 @@ export type LabTelemetryPlayerReport = Readonly<{
     count: number;
     perSecond: number;
     errors: number;
+    discarded?: Readonly<{
+      stale: Readonly<{
+        count: number;
+        timing: Readonly<{
+          lastMs: number | null;
+          averageMs: number | null;
+          p95Ms: number | null;
+          upstreamAverageMs: number | null;
+          transportAverageMs: number | null;
+        }>;
+        tokens: LabTelemetryUsage;
+      }>;
+    }>;
   }>;
   motor: Readonly<{
     ticks: number;
@@ -104,16 +125,33 @@ type PlayerAccumulator = {
   motorTicks: number;
   safetyOverrides: number;
   errors: number;
+  staleDecisions: number;
+  staleDecisionMsTotal: number;
+  staleDecisionMsAverage: number | null;
+  staleDecisionMsLast: number | null;
+  staleDecisionMsSamples: number[];
+  staleUpstreamMsTotal: number;
+  staleUpstreamMsAverage: number | null;
+  staleUpstreamSamples: number;
+  staleTransportMsTotal: number;
+  staleTransportMsAverage: number | null;
+  staleTransportSamples: number;
+  staleUsage: LabTelemetryUsage;
   decisionMsTotal: number;
+  decisionMsAverage: number | null;
   decisionMsLast: number | null;
   decisionMsSamples: number[];
   upstreamMsTotal: number;
+  upstreamMsAverage: number | null;
   upstreamSamples: number;
   transportMsTotal: number;
+  transportMsAverage: number | null;
   transportSamples: number;
   pollGapMsTotal: number;
+  pollGapMsAverage: number | null;
   pollGapSamples: number;
   pairedRoundTripMsTotal: number;
+  pairedRoundTripMsAverage: number | null;
   lastDecisionRecordedAtMs: number | null;
   lastDecisionRoundTripMs: number | null;
   actionChanges: number;
@@ -129,13 +167,45 @@ type PlayerAccumulator = {
 
 const MAX_TIMING_SAMPLES = 240;
 
-function round(value: number, digits = 2): number {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
+function nonNegativeFinite(value: number): number | null {
+  return Number.isFinite(value) ? Math.max(0, value) : null;
 }
 
-function average(total: number, count: number): number | null {
-  return count > 0 ? round(total / count) : null;
+function nonNegativeFiniteOrZero(value: number): number {
+  return nonNegativeFinite(value) ?? 0;
+}
+
+function saturatingAdd(left: number, right: number): number {
+  const safeLeft = nonNegativeFiniteOrZero(left);
+  const safeRight = nonNegativeFiniteOrZero(right);
+  return safeLeft > Number.MAX_VALUE - safeRight
+    ? Number.MAX_VALUE
+    : safeLeft + safeRight;
+}
+
+/** Overflow-safe online mean; identical samples remain bit-exact. */
+function onlineAverage(
+  currentAverage: number | null,
+  sampleCount: number,
+  sample: number,
+): number {
+  const safeSample = nonNegativeFiniteOrZero(sample);
+  if (currentAverage === null || sampleCount <= 0) return safeSample;
+  if (currentAverage === safeSample) return safeSample;
+  const nextCount = sampleCount + 1;
+  return saturatingAdd(
+    currentAverage * (sampleCount / nextCount),
+    safeSample / nextCount,
+  );
+}
+
+function round(value: number, digits = 2): number {
+  const safeValue = nonNegativeFiniteOrZero(value);
+  const scale = 10 ** digits;
+  if (!Number.isFinite(scale) || scale <= 0 || safeValue > Number.MAX_VALUE / scale) {
+    return safeValue;
+  }
+  return Math.round(safeValue * scale) / scale;
 }
 
 function percentile95(samples: readonly number[]): number | null {
@@ -146,6 +216,16 @@ function percentile95(samples: readonly number[]): number | null {
 
 function percentage(count: number, total: number): number {
   return total > 0 ? round((count / total) * 100, 1) : 0;
+}
+
+function pairPercentage(part: number, other: number): number {
+  const safePart = nonNegativeFiniteOrZero(part);
+  const safeOther = nonNegativeFiniteOrZero(other);
+  const largest = Math.max(safePart, safeOther);
+  if (largest === 0) return 0;
+  const normalizedPart = safePart / largest;
+  const normalizedOther = safeOther / largest;
+  return round((normalizedPart / (normalizedPart + normalizedOther)) * 100, 1);
 }
 
 function actionKey(action: LabTelemetryAction): string {
@@ -165,16 +245,33 @@ function createAccumulator(competitor: Competitor): PlayerAccumulator {
     motorTicks: 0,
     safetyOverrides: 0,
     errors: 0,
+    staleDecisions: 0,
+    staleDecisionMsTotal: 0,
+    staleDecisionMsAverage: null,
+    staleDecisionMsLast: null,
+    staleDecisionMsSamples: [],
+    staleUpstreamMsTotal: 0,
+    staleUpstreamMsAverage: null,
+    staleUpstreamSamples: 0,
+    staleTransportMsTotal: 0,
+    staleTransportMsAverage: null,
+    staleTransportSamples: 0,
+    staleUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     decisionMsTotal: 0,
+    decisionMsAverage: null,
     decisionMsLast: null,
     decisionMsSamples: [],
     upstreamMsTotal: 0,
+    upstreamMsAverage: null,
     upstreamSamples: 0,
     transportMsTotal: 0,
+    transportMsAverage: null,
     transportSamples: 0,
     pollGapMsTotal: 0,
+    pollGapMsAverage: null,
     pollGapSamples: 0,
     pairedRoundTripMsTotal: 0,
+    pairedRoundTripMsAverage: null,
     lastDecisionRecordedAtMs: null,
     lastDecisionRoundTripMs: null,
     actionChanges: 0,
@@ -196,7 +293,7 @@ export function createLabTelemetry(
   record(event: LabTelemetryEvent): void;
   read(snapshot: OnlineGameSnapshot): LabTelemetryReport;
 }> {
-  const startedAtMs = now();
+  const startedAtMs = nonNegativeFiniteOrZero(now());
   const players = new Map<PlayerId, PlayerAccumulator>(
     competitors.map((competitor) => [competitor.playerId, createAccumulator(competitor)]),
   );
@@ -221,9 +318,25 @@ export function createLabTelemetry(
     }
     if (event.type === "request") {
       if (player.lastDecisionRecordedAtMs !== null && player.lastDecisionRoundTripMs !== null) {
-        player.pollGapMsTotal += Math.max(0, now() - player.lastDecisionRecordedAtMs);
-        player.pollGapSamples += 1;
-        player.pairedRoundTripMsTotal += player.lastDecisionRoundTripMs;
+        const pollGapMs = nonNegativeFinite(now() - player.lastDecisionRecordedAtMs);
+        if (pollGapMs !== null) {
+          player.pollGapMsAverage = onlineAverage(
+            player.pollGapMsAverage,
+            player.pollGapSamples,
+            pollGapMs,
+          );
+          player.pairedRoundTripMsAverage = onlineAverage(
+            player.pairedRoundTripMsAverage,
+            player.pollGapSamples,
+            player.lastDecisionRoundTripMs,
+          );
+          player.pollGapMsTotal = saturatingAdd(player.pollGapMsTotal, pollGapMs);
+          player.pollGapSamples += 1;
+          player.pairedRoundTripMsTotal = saturatingAdd(
+            player.pairedRoundTripMsTotal,
+            player.lastDecisionRoundTripMs,
+          );
+        }
         player.lastDecisionRecordedAtMs = null;
         player.lastDecisionRoundTripMs = null;
       }
@@ -234,22 +347,85 @@ export function createLabTelemetry(
       if (event.safetyOverride) player.safetyOverrides += 1;
       return;
     }
+    if (event.type === "decision_discarded") {
+      const decisionMs = nonNegativeFiniteOrZero(event.decisionMs);
+      player.staleDecisionMsAverage = onlineAverage(
+        player.staleDecisionMsAverage,
+        player.staleDecisions,
+        decisionMs,
+      );
+      player.staleDecisions += 1;
+      player.staleDecisionMsTotal = saturatingAdd(player.staleDecisionMsTotal, decisionMs);
+      player.staleDecisionMsLast = decisionMs;
+      player.staleDecisionMsSamples.push(decisionMs);
+      if (player.staleDecisionMsSamples.length > MAX_TIMING_SAMPLES) {
+        player.staleDecisionMsSamples.shift();
+      }
+      if (typeof event.upstreamLatencyMs === "number" && Number.isFinite(event.upstreamLatencyMs)) {
+        const upstreamMs = Math.max(0, event.upstreamLatencyMs);
+        const transportMs = Math.max(0, decisionMs - upstreamMs);
+        player.staleUpstreamMsAverage = onlineAverage(
+          player.staleUpstreamMsAverage,
+          player.staleUpstreamSamples,
+          upstreamMs,
+        );
+        player.staleTransportMsAverage = onlineAverage(
+          player.staleTransportMsAverage,
+          player.staleTransportSamples,
+          transportMs,
+        );
+        player.staleUpstreamMsTotal = saturatingAdd(player.staleUpstreamMsTotal, upstreamMs);
+        player.staleUpstreamSamples += 1;
+        player.staleTransportMsTotal = saturatingAdd(
+          player.staleTransportMsTotal,
+          transportMs,
+        );
+        player.staleTransportSamples += 1;
+      }
+      if (event.usage) {
+        player.staleUsage = {
+          inputTokens: saturatingAdd(player.staleUsage.inputTokens, event.usage.inputTokens),
+          outputTokens: saturatingAdd(player.staleUsage.outputTokens, event.usage.outputTokens),
+          totalTokens: saturatingAdd(player.staleUsage.totalTokens, event.usage.totalTokens),
+        };
+      }
+      return;
+    }
 
-    const decisionMs = Math.max(0, event.decisionMs);
-    player.lastDecisionRecordedAtMs = now();
+    const decisionMs = nonNegativeFiniteOrZero(event.decisionMs);
+    player.lastDecisionRecordedAtMs = nonNegativeFinite(now());
     player.lastDecisionRoundTripMs = decisionMs;
     player.status = "acting";
+    player.decisionMsAverage = onlineAverage(
+      player.decisionMsAverage,
+      player.decisions,
+      decisionMs,
+    );
     player.decisions += 1;
-    player.decisionMsTotal += decisionMs;
+    player.decisionMsTotal = saturatingAdd(player.decisionMsTotal, decisionMs);
     player.decisionMsLast = decisionMs;
     player.decisionMsSamples.push(decisionMs);
     if (player.decisionMsSamples.length > MAX_TIMING_SAMPLES) player.decisionMsSamples.shift();
 
     if (typeof event.upstreamLatencyMs === "number" && Number.isFinite(event.upstreamLatencyMs)) {
       const upstreamMs = Math.max(0, event.upstreamLatencyMs);
-      player.upstreamMsTotal += upstreamMs;
+      const transportMs = Math.max(0, decisionMs - upstreamMs);
+      player.upstreamMsAverage = onlineAverage(
+        player.upstreamMsAverage,
+        player.upstreamSamples,
+        upstreamMs,
+      );
+      player.transportMsAverage = onlineAverage(
+        player.transportMsAverage,
+        player.transportSamples,
+        transportMs,
+      );
+      player.upstreamMsTotal = saturatingAdd(player.upstreamMsTotal, upstreamMs);
       player.upstreamSamples += 1;
-      player.transportMsTotal += Math.max(0, decisionMs - upstreamMs);
+      player.transportMsTotal = saturatingAdd(
+        player.transportMsTotal,
+        transportMs,
+      );
       player.transportSamples += 1;
     }
 
@@ -265,16 +441,16 @@ export function createLabTelemetry(
 
     if (event.usage) {
       player.usage = {
-        inputTokens: player.usage.inputTokens + Math.max(0, event.usage.inputTokens),
-        outputTokens: player.usage.outputTokens + Math.max(0, event.usage.outputTokens),
-        totalTokens: player.usage.totalTokens + Math.max(0, event.usage.totalTokens),
+        inputTokens: saturatingAdd(player.usage.inputTokens, event.usage.inputTokens),
+        outputTokens: saturatingAdd(player.usage.outputTokens, event.usage.outputTokens),
+        totalTokens: saturatingAdd(player.usage.totalTokens, event.usage.totalTokens),
       };
     }
   };
 
   const read = (snapshot: OnlineGameSnapshot): LabTelemetryReport => {
-    const sampledAtMs = now();
-    const sessionElapsedMs = Math.max(0, sampledAtMs - startedAtMs);
+    const sampledAtMs = nonNegativeFinite(now()) ?? startedAtMs;
+    const sessionElapsedMs = nonNegativeFiniteOrZero(sampledAtMs - startedAtMs);
     const elapsedSeconds = Math.max(1, sessionElapsedMs / 1000);
     return {
       sampledAtMs: round(sampledAtMs),
@@ -288,8 +464,12 @@ export function createLabTelemetry(
         const opponentDeaths = snapshot.endlessStats?.opponentDeaths?.[entry.competitor.playerId] ?? 0;
         const suddenDeathDeaths = snapshot.endlessStats?.suddenDeathDeaths?.[entry.competitor.playerId] ?? 0;
         const environmentDeaths = snapshot.endlessStats?.environmentDeaths?.[entry.competitor.playerId] ?? 0;
-        const averageDecisionMs = average(entry.decisionMsTotal, entry.decisions);
-        const averagePollGapMs = average(entry.pollGapMsTotal, entry.pollGapSamples);
+        const averageDecisionMs = entry.decisionMsAverage === null
+          ? null
+          : round(entry.decisionMsAverage);
+        const averagePollGapMs = entry.pollGapMsAverage === null
+          ? null
+          : round(entry.pollGapMsAverage);
         return {
           playerId: entry.competitor.playerId,
           label: entry.competitor.label,
@@ -300,20 +480,45 @@ export function createLabTelemetry(
             lastMs: entry.decisionMsLast === null ? null : round(entry.decisionMsLast),
             averageMs: averageDecisionMs,
             p95Ms: percentile95(entry.decisionMsSamples),
-            upstreamAverageMs: average(entry.upstreamMsTotal, entry.upstreamSamples),
-            transportAverageMs: average(entry.transportMsTotal, entry.transportSamples),
+            upstreamAverageMs: entry.upstreamMsAverage === null
+              ? null
+              : round(entry.upstreamMsAverage),
+            transportAverageMs: entry.transportMsAverage === null
+              ? null
+              : round(entry.transportMsAverage),
             pollGapAverageMs: averagePollGapMs,
             pollingUtilizationPct: entry.pollGapSamples === 0
               ? null
-              : percentage(
-                entry.pairedRoundTripMsTotal,
-                entry.pairedRoundTripMsTotal + entry.pollGapMsTotal,
+              : pairPercentage(
+                entry.pairedRoundTripMsAverage ?? 0,
+                entry.pollGapMsAverage ?? 0,
               ),
           },
           decisions: {
             count: entry.decisions,
             perSecond: round(entry.decisions / elapsedSeconds),
             errors: entry.errors,
+            discarded: {
+              stale: {
+                count: entry.staleDecisions,
+                timing: {
+                  lastMs: entry.staleDecisionMsLast === null
+                    ? null
+                    : round(entry.staleDecisionMsLast),
+                  averageMs: entry.staleDecisionMsAverage === null
+                    ? null
+                    : round(entry.staleDecisionMsAverage),
+                  p95Ms: percentile95(entry.staleDecisionMsSamples),
+                  upstreamAverageMs: entry.staleUpstreamMsAverage === null
+                    ? null
+                    : round(entry.staleUpstreamMsAverage),
+                  transportAverageMs: entry.staleTransportMsAverage === null
+                    ? null
+                    : round(entry.staleTransportMsAverage),
+                },
+                tokens: { ...entry.staleUsage },
+              },
+            },
           },
           motor: {
             ticks: entry.motorTicks,
@@ -325,7 +530,7 @@ export function createLabTelemetry(
             latest: entry.lastAction ? { ...entry.lastAction } : null,
             latestAgeMs: entry.lastActionAtMs === null
               ? null
-              : round(Math.max(0, sampledAtMs - entry.lastActionAtMs)),
+              : round(nonNegativeFiniteOrZero(sampledAtMs - entry.lastActionAtMs)),
             changeRatePct: percentage(entry.actionChanges, Math.max(0, entry.decisions - 1)),
             movementPct: percentage(entry.movementIntents, entry.decisions),
             bombIntentPct: percentage(entry.bombIntents, entry.decisions),

@@ -59,6 +59,11 @@ export type LabRuntimeScheduling = Readonly<{
   decisionLanes?: number;
   decisionPollMs?: number;
   motorIntervalMs?: number;
+  /**
+   * Optional end-to-end age budget for applying a remote decision.
+   * Negative values clamp to zero; non-finite values disable the budget.
+   */
+  maxDecisionAgeMs?: number;
 }>;
 
 export type LabRuntime = Readonly<{
@@ -85,6 +90,7 @@ type RemoteCompetitorState = {
   request: {
     token: symbol;
     roundNumber: number;
+    requestedAtMs: number;
     abort: AbortController;
   } | null;
   nextEligibleAtMs: number;
@@ -141,6 +147,10 @@ function resolvedLaneCount(
   return Math.max(1, Math.min(LAB_MAX_DECISION_LANES, remoteCompetitorCount, desired));
 }
 
+function nonNegativeFinite(value: number): number | null {
+  return Number.isFinite(value) ? Math.max(0, value) : null;
+}
+
 function retryDelayMs(error: unknown): number {
   if (error instanceof LabPublicError && error.retryAfterMs !== null) {
     return Math.min(LAB_MAX_RETRY_AFTER_MS, Math.max(0, error.retryAfterMs));
@@ -186,6 +196,10 @@ export function startLabRuntime(options: LabRuntimeOptions): LabRuntime {
   const laneCount = resolvedLaneCount(options.scheduling?.decisionLanes, remotes.length);
   const decisionPollMs = Math.max(10, Math.floor(options.scheduling?.decisionPollMs ?? 50));
   const motorIntervalMs = Math.max(10, Math.floor(options.scheduling?.motorIntervalMs ?? 50));
+  const configuredMaxDecisionAgeMs = options.scheduling?.maxDecisionAgeMs;
+  const maxDecisionAgeMs = typeof configuredMaxDecisionAgeMs === "number"
+    ? nonNegativeFinite(configuredMaxDecisionAgeMs)
+    : null;
   let stopped = false;
   let cursor = 0;
 
@@ -236,6 +250,7 @@ export function startLabRuntime(options: LabRuntimeOptions): LabRuntime {
     const request = {
       token: Symbol("lab-decision-request"),
       roundNumber: snapshot.roundNumber,
+      requestedAtMs: now(),
       abort: new AbortController(),
     };
     remote.request = request;
@@ -250,6 +265,19 @@ export function startLabRuntime(options: LabRuntimeOptions): LabRuntime {
         if (stopped || request.abort.signal.aborted || remote.request?.token !== request.token) return;
         const current = match.readSnapshot();
         if (isActiveRound(current, competitor.playerId, request.roundNumber)) {
+          const acceptanceAgeMs = nonNegativeFinite(now() - request.requestedAtMs);
+          if (acceptanceAgeMs === null
+            || (maxDecisionAgeMs !== null && acceptanceAgeMs > maxDecisionAgeMs)) {
+            telemetry.record({
+              type: "decision_discarded",
+              reason: "stale",
+              playerId: competitor.playerId,
+              decisionMs: acceptanceAgeMs ?? 0,
+              upstreamLatencyMs: result.upstreamLatencyMs,
+              usage: result.usage,
+            });
+            return;
+          }
           telemetry.record({
             type: "decision",
             playerId: competitor.playerId,
