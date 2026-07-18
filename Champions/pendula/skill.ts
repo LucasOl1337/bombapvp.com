@@ -5,6 +5,7 @@ import type {
   TileCoord,
 } from "../../src/original-game/Gameplay/types";
 import { tileKey } from "../../src/original-game/Arenas/arena";
+import { TILE_SIZE } from "../../src/original-game/PersonalConfig/config";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
 import type { PendulaPullEffect } from "./contracts";
@@ -37,15 +38,10 @@ function sign(n: number): number {
   return 0;
 }
 
-function tileSizeOf(context: SkillContext): number {
-  return context.arena.config.grid.tileSize;
-}
-
-function tileCenter(tile: TileCoord, context: SkillContext): PixelCoord {
-  const size = tileSizeOf(context);
+function tileCenter(tile: TileCoord): PixelCoord {
   return {
-    x: tile.x * size + size * 0.5,
-    y: tile.y * size + size * 0.5,
+    x: tile.x * TILE_SIZE + TILE_SIZE * 0.5,
+    y: tile.y * TILE_SIZE + TILE_SIZE * 0.5,
   };
 }
 
@@ -121,7 +117,7 @@ export function pullPlayerToward(
       if (isTileBlockedForPlayer(next, victim, context, reserved)) {
         continue;
       }
-      const nextPos = tileCenter(next, context);
+      const nextPos = tileCenter(next);
       if (!context.canOccupyPosition(victim, nextPos)) {
         continue;
       }
@@ -139,7 +135,7 @@ export function pullPlayerToward(
     return false;
   }
 
-  const landing = tileCenter(tile, context);
+  const landing = tileCenter(tile);
   const normalized = context.normalizeArenaPosition(landing);
   victim.position = { ...normalized };
   victim.tile = context.getTileFromPosition(victim.position);

@@ -9,12 +9,14 @@ import {
 import { PENDULA_SKILL_ID } from "../Champions/pendula/definition";
 import { createDefaultPlayerSkillState } from "../src/original-game/ultimate/shared";
 
+const TS = 40;
+
 function emptyArena(width = 9, height = 9): ArenaState {
   return {
     solid: new Set(),
     breakable: new Set(),
     config: {
-      grid: { width, height, tileSize: 32 },
+      grid: { width, height },
     },
   } as unknown as ArenaState;
 }
@@ -27,7 +29,7 @@ function makePlayer(
   return {
     id: id as PlayerState["id"],
     alive: true,
-    position: { x: 32 * tileX + 16, y: 32 * tileY + 16 },
+    position: { x: TS * tileX + TS / 2, y: TS * tileY + TS / 2 },
     tile: { x: tileX, y: tileY },
     direction: "down",
     lastMoveDirection: "down",
@@ -57,8 +59,8 @@ function makeContext(
     characterRoster: [],
     canOccupyPosition: () => true,
     getTileFromPosition: (position: { x: number; y: number }) => ({
-      x: Math.floor(position.x / 32),
-      y: Math.floor(position.y / 32),
+      x: Math.floor(position.x / TS),
+      y: Math.floor(position.y / TS),
     }),
     normalizeArenaPosition: (p: { x: number; y: number }) => p,
     getWrappedDelta: (target: number, current: number) => target - current,
@@ -68,8 +70,8 @@ function makeContext(
       position: { x: number; y: number },
       tile: { x: number; y: number },
     ) =>
-      Math.floor(position.x / 32) === tile.x &&
-      Math.floor(position.y / 32) === tile.y,
+      Math.floor(position.x / TS) === tile.x &&
+      Math.floor(position.y / TS) === tile.y,
     clonePlayerState: (p: PlayerState) => structuredClone(p),
     tryAbsorbInstantHit: () => {},
     breakCrateAtKey: () => false,
