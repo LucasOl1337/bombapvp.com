@@ -95,9 +95,24 @@ export const PENDULA_VISUAL_ADAPTER: ChampionVisualAdapter = {
   skillId: PENDULA_SKILL_ID,
   resolveAnimation: resolvePendulaAnimation,
   advanceWorldEffects: advancePendulaWorldEffects,
+  getHudStatus: (player, language) => {
+    if (player.skill.phase !== "channeling" && player.skill.phase !== "releasing") {
+      return null;
+    }
+    const sec = Math.max(0, player.skill.channelRemainingMs / 1000).toFixed(1);
+    return {
+      label: language === "pt" ? `PULL ${sec}s` : `PULL ${sec}s`,
+      tone: "success",
+      critical: false,
+      dangerEtaMs: null,
+    };
+  },
   drawWorldEffect: (ctx, effect, tileSize) => {
     if (isPendulaPullEffect(effect)) {
       drawPendulaPull(ctx, effect, tileSize);
     }
   },
 };
+export function createChampionVisualAdapter(): ChampionVisualAdapter {
+  return PENDULA_VISUAL_ADAPTER;
+}

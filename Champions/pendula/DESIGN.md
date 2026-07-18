@@ -28,20 +28,19 @@
 
 **Id:** `pendula-command-shockwave` (stable id; presentation name is Pull)  
 **Cooldown:** 7500 ms  
-**Channel:** **300 ms** wind-up (3× faster than the old 900 ms; cancel early → short CD 200 ms)  
-**Release:** instant **enemy pull** toward Pendula + inward visual ring (Orianna-style)
+**Channel:** **300 ms** wind-up (3× faster than the old 900 ms). **Release does not cancel** — once started, the cast always completes.  
+**Release:** instant **enemy yank** toward Pendula + inward visual ring (Orianna-style)
 
 ### Logic
 
 1. **Activate** → `channeling`, face aim dir, freeze velocity, Ball charges.
-2. **Hold** until channel ends (or release at 0 cancels). Full channel auto-fires.
+2. Channel always runs to completion (tap is enough; hold not required).
 3. **Fire** at end of channel:
    - Center = Pendula tile.
-   - For every **living enemy** with Chebyshev distance ≤ **3** from center (farthest first):
-     - Step tile-by-tile toward center (cardinal preferred on diagonals).
-     - Stop at free tiles only (not solid, crate, bomb, or other living player).
-     - Land as close as possible, preferably **adjacent** (stop distance 1).
-     - Instant reposition (no multi-frame travel) — the pull itself is snappy/OP.
+   - For every **living enemy** with Chebyshev distance ≤ **4** from center (farthest first):
+     - **Yank** to best free landing tile on the adjacent ring (through walls OK; landing must be free of solid/crate/bomb/player).
+     - Fallback: step one tile closer if no free landing on inner rings.
+     - Instant reposition — snappy/OP.
    - Spawn inward cyan/brass ring visual (~280 ms).
 4. Enter **cooldown**.
 

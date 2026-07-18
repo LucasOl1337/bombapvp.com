@@ -133,6 +133,7 @@ import {
   updatePlayerSkillChannel as skill_updatePlayerSkillChannel,
   isPlayerImmuneDuringSkillChannel as skill_isPlayerImmuneDuringSkillChannel,
   getCharacterSkillId,
+  getCharacterSkillDefinition,
 } from "../ultimate/skill-system";
 import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
 import {
@@ -1008,6 +1009,7 @@ export class GameApp {
       tile: { ...flame.tile },
     }));
     this.championWorldEffects = (snapshot.magicBeams ?? []).map((beam) => ({
+      kind: "nico-beam" as const,
       ...beam,
       origin: { ...beam.origin },
       tiles: beam.tiles.map((tile: { x: number; y: number }) => ({ ...tile })),
@@ -1096,6 +1098,7 @@ export class GameApp {
       tile: { ...flame.tile },
     }));
     this.championWorldEffects = (frame.magicBeams ?? []).map((beam) => ({
+      kind: "nico-beam" as const,
       ...beam,
       origin: { ...beam.origin },
       tiles: beam.tiles.map((tile) => ({ ...tile })),
@@ -1678,9 +1681,11 @@ export class GameApp {
         tile: { ...flame.tile },
       })),
       magicBeams: this.championWorldEffects.filter(isNicoBeamEffect).map((beam) => ({
-        ...beam,
+        ownerId: beam.ownerId,
         origin: { ...beam.origin },
+        direction: beam.direction,
         tiles: beam.tiles.map((tile) => ({ ...tile })),
+        remainingMs: beam.remainingMs,
       })),
       nextBombId: this.nextBombId,
       score: { ...this.score },
@@ -4584,13 +4589,111 @@ export class GameApp {
       : (this.onlineRoomMode === "endless" ? y + 32 : y + 30);
     const insetWidth = Math.max(12, width - 8);
     const gap = 2;
+    // Leave a dedicated ultimate chip on the right when the player has a skill.
+    const hasUltimate = Boolean(player.skill.id);
+    const ultChipWidth = hasUltimate ? Math.min(34, Math.max(28, Math.floor(insetWidth * 0.22))) : 0;
+    const powerInsetWidth = hasUltimate
+      ? Math.max(12, insetWidth - ultChipWidth - gap)
+      : insetWidth;
     const slotCount = skillSlots.length;
-    const slotWidth = Math.max(10, Math.floor((insetWidth - gap * (slotCount - 1)) / slotCount));
+    const slotWidth = Math.max(10, Math.floor((powerInsetWidth - gap * (slotCount - 1)) / slotCount));
     for (let index = 0; index < slotCount; index += 1) {
       const slot = skillSlots[index];
       const slotX = insetX + index * (slotWidth + gap);
       this.drawHudSkillSlot(slotX, insetY, slotWidth, 10, slot);
     }
+    if (hasUltimate) {
+      this.drawHudUltimateChip(
+        insetX + powerInsetWidth + gap,
+        insetY,
+        ultChipWidth,
+        10,
+        playerId,
+      );
+    }
+  }
+
+  /** Compact ultimate cooldown chip (ULT RDY / ULT 5.2s / CAST). */
+  private drawHudUltimateChip(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    playerId: PlayerId,
+  ): void {
+    const player = this.players[playerId];
+    if (!player?.skill.id) {
+      return;
+    }
+    const phase = player.skill.phase;
+    const ready = phase === "idle";
+    const casting = phase === "channeling" || phase === "releasing";
+    const onCooldown = phase === "cooldown" && player.skill.cooldownRemainingMs > 0;
+
+    let fill = "rgba(180, 167, 147, 0.22)";
+    let border = CANVAS_UI_BORDER;
+    let label = this.language === "pt" ? "ULT" : "ULT";
+    let progress = 0;
+
+    if (ready) {
+      fill = "rgba(80, 200, 120, 0.28)";
+      border = CANVAS_UI_SUCCESS;
+      label = this.language === "pt" ? "OK" : "RDY";
+      progress = 1;
+    } else if (casting) {
+      fill = "rgba(120, 200, 255, 0.35)";
+      border = "rgba(120, 220, 255, 0.95)";
+      const total = Math.max(1, player.skill.castElapsedMs + player.skill.channelRemainingMs);
+      progress = Math.max(0, Math.min(1, player.skill.castElapsedMs / total));
+      label = this.language === "pt" ? "CAST" : "CAST";
+    } else if (onCooldown) {
+      fill = "rgba(40, 36, 32, 0.85)";
+      border = CANVAS_UI_MUTED;
+      // Prefer definition cooldown when available so the bar is accurate.
+      const totalCd = Math.max(
+        player.skill.cooldownRemainingMs,
+        this.getCharacterSkillCooldownMs(playerId) || player.skill.cooldownRemainingMs,
+      );
+      progress = 1 - Math.max(0, Math.min(1, player.skill.cooldownRemainingMs / totalCd));
+      label = `${(player.skill.cooldownRemainingMs / 1000).toFixed(1)}`;
+    }
+
+    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+    this.ctx.fillRect(x, y, width, height);
+    if (progress > 0) {
+      this.ctx.fillStyle = fill;
+      this.ctx.fillRect(x, y, Math.max(1, width * progress), height);
+    }
+    this.ctx.strokeStyle = border;
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+
+    const keyLabel = this.getSkillHudKeyLabel(playerId);
+    this.ctx.textAlign = "center";
+    this.ctx.font = "700 6px Inter";
+    const text = keyLabel && width >= 30 ? `${keyLabel} ${label}` : label;
+    this.drawHudText(text, x + width / 2, y + 7, ready || casting ? CANVAS_UI_TEXT : CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
+  }
+
+  private getSkillHudKeyLabel(playerId: PlayerId): string | null {
+    if (this.onlineSession) {
+      if (playerId !== this.onlineLocalPlayerId) {
+        return null;
+      }
+      return formatControlKey(KEY_BINDINGS[1].skill);
+    }
+    if (MENU_PLAYER_IDS.includes(playerId as MenuPlayerId)) {
+      return formatControlKey(KEY_BINDINGS[playerId as MenuPlayerId].skill);
+    }
+    return null;
+  }
+
+  private getCharacterSkillCooldownMs(playerId: PlayerId): number {
+    const skillId = this.getPlayerSkillId(playerId);
+    if (!skillId) {
+      return 0;
+    }
+    return getCharacterSkillDefinition(skillId)?.cooldownMs ?? 0;
   }
 
   private drawRoundPips(
@@ -4755,10 +4858,18 @@ export class GameApp {
     if (!player.alive) {
       return { label: "DOWN", tone: "muted", critical: false, dangerEtaMs: null };
     }
-    if (player.skill.phase === "channeling") {
+    if (player.skill.phase === "channeling" || player.skill.phase === "releasing") {
       const championStatus = this.championVisuals.getHudStatus(player, this.language);
       if (championStatus) return championStatus;
-      return { label: "ICE", tone: "success", critical: false, dangerEtaMs: null };
+      const castSec = Math.max(0, player.skill.channelRemainingMs / 1000);
+      return {
+        label: this.language === "pt"
+          ? `ULT ${castSec.toFixed(1)}s`
+          : `ULT ${castSec.toFixed(1)}s`,
+        tone: "success",
+        critical: false,
+        dangerEtaMs: null,
+      };
     }
     if (player.flameGuardMs > 0) {
       return {
@@ -4780,10 +4891,36 @@ export class GameApp {
       };
     }
 
+    // Character ultimate cooldown — always visible while recharging.
+    if (
+      player.skill.id &&
+      player.skill.phase === "cooldown" &&
+      player.skill.cooldownRemainingMs > 0
+    ) {
+      const cdSec = player.skill.cooldownRemainingMs / 1000;
+      return {
+        label: this.language === "pt"
+          ? `ULT ${cdSec.toFixed(1)}s`
+          : `ULT ${cdSec.toFixed(1)}s`,
+        tone: "muted",
+        critical: false,
+        dangerEtaMs: null,
+      };
+    }
+
     const pickupChain = this.pickupChains[playerId];
     if (pickupChain.previousType !== null && pickupChain.remainingMs > 0) {
       return {
         label: `CHAIN ${(pickupChain.remainingMs / 1000).toFixed(1)}s`,
+        tone: "success",
+        critical: false,
+        dangerEtaMs: null,
+      };
+    }
+
+    if (player.skill.id && player.skill.phase === "idle") {
+      return {
+        label: this.language === "pt" ? "ULT OK" : "ULT RDY",
         tone: "success",
         critical: false,
         dangerEtaMs: null,

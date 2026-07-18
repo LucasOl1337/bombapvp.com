@@ -19,23 +19,30 @@ export {
   PENDULA_SKILL_COOLDOWN_MS,
 } from "./definition";
 
-/** Short wind-up before the Ball yanks enemies in (3× faster than the old 900 ms cast). */
+/** Short wind-up; once started the cast always completes (no cancel on release). */
 export const PENDULA_SKILL_CHANNEL_MS = 300;
 export const PENDULA_VOLUNTARY_CANCEL_COOLDOWN_MS = 200;
 /** Chebyshev radius: enemies within this range of Pendula are pulled. */
-export const PENDULA_PULL_RANGE = 3;
+export const PENDULA_PULL_RANGE = 4;
 /** Prefer landing targets this far from Pendula (1 = adjacent tile). */
 export const PENDULA_PULL_STOP_DISTANCE = 1;
 export const PENDULA_PULL_VISUAL_MS = 280;
 
+export type PendulaSkillContext = Pick<
+  SkillContext,
+  | "arena"
+  | "bombs"
+  | "players"
+  | "activePlayerIds"
+  | "addChampionWorldEffect"
+  | "canOccupyPosition"
+  | "getTileFromPosition"
+  | "normalizeArenaPosition"
+  | "soundManager"
+>;
+
 function chebyshev(a: TileCoord, b: TileCoord): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
-}
-
-function sign(n: number): number {
-  if (n > 0) return 1;
-  if (n < 0) return -1;
-  return 0;
 }
 
 function tileCenter(tile: TileCoord): PixelCoord {
@@ -45,10 +52,10 @@ function tileCenter(tile: TileCoord): PixelCoord {
   };
 }
 
-function isTileBlockedForPlayer(
+function isLandingBlocked(
   tile: TileCoord,
   subject: PlayerState,
-  context: SkillContext,
+  context: PendulaSkillContext,
   reserved: ReadonlySet<string>,
 ): boolean {
   const key = tileKey(tile.x, tile.y);
@@ -65,7 +72,9 @@ function isTileBlockedForPlayer(
     if (playerId === subject.id) continue;
     const other = context.players[playerId];
     if (!other?.alive) continue;
-    if (other.tile.x === tile.x && other.tile.y === tile.y) {
+    // Prefer live position tile over possibly-stale other.tile.
+    const otherTile = context.getTileFromPosition(other.position);
+    if (otherTile.x === tile.x && otherTile.y === tile.y) {
       return true;
     }
   }
@@ -73,71 +82,89 @@ function isTileBlockedForPlayer(
 }
 
 /**
- * Step the victim tile-by-tile toward `center`, stopping at the closest free
- * tile that is still outside / on the stop ring. Instant (no multi-frame travel).
+ * Orianna-style yank: teleport the victim to the best free landing tile near
+ * Pendula (prefer adjacent). Does not require a free path through walls —
+ * the Ball pulls through obstacles as long as the landing tile is free.
  */
 export function pullPlayerToward(
   victim: PlayerState,
   center: TileCoord,
-  context: SkillContext,
+  context: PendulaSkillContext,
   reserved: Set<string>,
 ): boolean {
   if (!victim.alive) {
     return false;
   }
-  let tile = { ...victim.tile };
-  if (chebyshev(center, tile) > PENDULA_PULL_RANGE) {
+  const from = context.getTileFromPosition(victim.position);
+  const startDist = chebyshev(center, from);
+  if (startDist > PENDULA_PULL_RANGE || startDist <= 0) {
     return false;
   }
-  if (chebyshev(center, tile) <= PENDULA_PULL_STOP_DISTANCE) {
+  // Already on the stop ring (adjacent) — nothing to do.
+  if (startDist <= PENDULA_PULL_STOP_DISTANCE) {
     return false;
   }
 
-  let moved = false;
-  // Hard cap steps so a pathological map cannot loop.
-  for (let step = 0; step < PENDULA_PULL_RANGE * 2; step += 1) {
-    const dist = chebyshev(center, tile);
-    if (dist <= PENDULA_PULL_STOP_DISTANCE) {
+  let bestTile: TileCoord | null = null;
+  let bestRing = Infinity;
+  let bestToVictim = Infinity;
+
+  // Prefer stop ring (adjacent), then expand outward if packed.
+  const maxRing = Math.min(PENDULA_PULL_RANGE, startDist - 1);
+  for (let ring = PENDULA_PULL_STOP_DISTANCE; ring <= maxRing; ring += 1) {
+    let foundOnRing = false;
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const tile = { x: center.x + dx, y: center.y + dy };
+        if (isLandingBlocked(tile, victim, context, reserved)) {
+          continue;
+        }
+        const landing = tileCenter(tile);
+        if (!context.canOccupyPosition(victim, landing)) {
+          continue;
+        }
+        const toVictim = chebyshev(from, tile);
+        if (ring < bestRing || (ring === bestRing && toVictim < bestToVictim)) {
+          bestTile = tile;
+          bestRing = ring;
+          bestToVictim = toVictim;
+          foundOnRing = true;
+        }
+      }
+    }
+    if (foundOnRing) {
       break;
     }
-    const dx = sign(center.x - tile.x);
-    const dy = sign(center.y - tile.y);
-    // Prefer pure cardinals when diagonal — more readable pulls.
-    const candidates: TileCoord[] =
-      dx !== 0 && dy !== 0
+  }
+
+  if (!bestTile) {
+    // Fallback: step one tile closer (cardinal preferred) even if full yank fails.
+    const stepX = center.x === from.x ? 0 : center.x > from.x ? 1 : -1;
+    const stepY = center.y === from.y ? 0 : center.y > from.y ? 1 : -1;
+    const steps: TileCoord[] =
+      stepX !== 0 && stepY !== 0
         ? [
-            { x: tile.x + dx, y: tile.y },
-            { x: tile.x, y: tile.y + dy },
-            { x: tile.x + dx, y: tile.y + dy },
+            { x: from.x + stepX, y: from.y },
+            { x: from.x, y: from.y + stepY },
+            { x: from.x + stepX, y: from.y + stepY },
           ]
-        : [{ x: tile.x + dx, y: tile.y + dy }];
-
-    let advanced: TileCoord | null = null;
-    for (const next of candidates) {
-      if (isTileBlockedForPlayer(next, victim, context, reserved)) {
-        continue;
-      }
-      const nextPos = tileCenter(next);
-      if (!context.canOccupyPosition(victim, nextPos)) {
-        continue;
-      }
-      advanced = next;
+        : [{ x: from.x + stepX, y: from.y + stepY }];
+    for (const tile of steps) {
+      if (isLandingBlocked(tile, victim, context, reserved)) continue;
+      const landing = tileCenter(tile);
+      if (!context.canOccupyPosition(victim, landing)) continue;
+      bestTile = tile;
       break;
     }
-    if (!advanced) {
-      break;
-    }
-    tile = advanced;
-    moved = true;
   }
 
-  if (!moved) {
+  if (!bestTile) {
     return false;
   }
 
-  const landing = tileCenter(tile);
-  const normalized = context.normalizeArenaPosition(landing);
-  victim.position = { ...normalized };
+  const landing = context.normalizeArenaPosition(tileCenter(bestTile));
+  victim.position = { ...landing };
   victim.tile = context.getTileFromPosition(victim.position);
   victim.velocity.x = 0;
   victim.velocity.y = 0;
@@ -147,38 +174,38 @@ export function pullPlayerToward(
 
 export function firePendulaPull(
   player: PlayerState,
-  context: SkillContext,
+  context: PendulaSkillContext,
 ): number {
   const center = context.getTileFromPosition(player.position);
   const reserved = new Set<string>([tileKey(center.x, center.y)]);
-  // Reserve other living players' current tiles so we do not stomp them mid-pull
-  // unless we deliberately move that player this cast.
+
   for (const playerId of context.activePlayerIds) {
     if (playerId === player.id) continue;
     const other = context.players[playerId];
     if (other?.alive) {
-      reserved.add(tileKey(other.tile.x, other.tile.y));
+      const t = context.getTileFromPosition(other.position);
+      reserved.add(tileKey(t.x, t.y));
     }
   }
 
-  // Pull farthest first so closer tiles free up for nearer victims less often race.
   const victims = context.activePlayerIds
     .filter((id) => id !== player.id)
     .map((id) => context.players[id])
     .filter((other): other is PlayerState => Boolean(other?.alive))
-    .filter((other) => chebyshev(center, other.tile) <= PENDULA_PULL_RANGE)
-    .sort(
-      (a, b) => chebyshev(center, b.tile) - chebyshev(center, a.tile),
-    );
+    .map((other) => ({
+      other,
+      tile: context.getTileFromPosition(other.position),
+    }))
+    .filter(({ tile }) => chebyshev(center, tile) <= PENDULA_PULL_RANGE)
+    .sort((a, b) => chebyshev(center, b.tile) - chebyshev(center, a.tile));
 
   let pulled = 0;
-  for (const victim of victims) {
-    // Free their current tile before moving so another pull can land there if needed.
-    reserved.delete(tileKey(victim.tile.x, victim.tile.y));
-    if (pullPlayerToward(victim, center, context, reserved)) {
+  for (const { other, tile } of victims) {
+    reserved.delete(tileKey(tile.x, tile.y));
+    if (pullPlayerToward(other, center, context, reserved)) {
       pulled += 1;
     } else {
-      reserved.add(tileKey(victim.tile.x, victim.tile.y));
+      reserved.add(tileKey(tile.x, tile.y));
     }
   }
 
@@ -197,9 +224,10 @@ export function firePendulaPull(
 export const PENDULA_SKILL_ADAPTER: ChampionSkillAdapter = {
   skillId: PENDULA_SKILL_ID,
   activate: (player, direction) => startPendulaPull(player, direction),
-  update: (player, direction, _pressed, held, deltaMs, context) =>
-    updatePendulaPullChannel(player, direction, held, deltaMs, context),
+  update: (player, direction, _pressed, _held, deltaMs, context) =>
+    updatePendulaPullChannel(player, direction, deltaMs, context),
 };
+export const CHAMPION_SKILL_ADAPTER = PENDULA_SKILL_ADAPTER;
 
 export function startPendulaPull(
   player: PlayerState,
@@ -222,12 +250,15 @@ export function startPendulaPull(
   player.velocity.y = 0;
 }
 
+/**
+ * Channel always completes once started — release no longer cancels.
+ * (Previous cancel-on-release made the pull feel broken on a short tap.)
+ */
 export function updatePendulaPullChannel(
   player: PlayerState,
   desiredDirection: Direction | null,
-  skillHeld: boolean,
   deltaMs: number,
-  context: SkillContext,
+  context: PendulaSkillContext,
 ): boolean {
   if (player.skill.id !== PENDULA_SKILL_ID) {
     return false;
@@ -240,11 +271,6 @@ export function updatePendulaPullChannel(
   if (desiredDirection) {
     player.direction = desiredDirection;
     player.skill.projectedLastMoveDirection = desiredDirection;
-  }
-  // Early release cancels with short cooldown.
-  if (!skillHeld && player.skill.castElapsedMs > 0) {
-    cancelPendulaPull(player);
-    return true;
   }
   player.skill.channelRemainingMs = Math.max(
     0,
@@ -286,7 +312,7 @@ export function finishPendulaPull(player: PlayerState): void {
   player.skill.projectedLastMoveDirection = null;
 }
 
-// ---- Backward-compatible aliases (tests / older call sites) ----
+// ---- Backward-compatible aliases ----
 /** @deprecated Use firePendulaPull */
 export const firePendulaShockwave = firePendulaPull;
 /** @deprecated Use startPendulaPull */
