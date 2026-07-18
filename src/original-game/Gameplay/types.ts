@@ -84,7 +84,10 @@ export interface FlameState {
  * Network/telemetry beam payload (Nico shape).
  * Runtime may hold a wider ChampionWorldEffect union; only Nico beams serialize here.
  */
-export type MagicBeamState = import("../../../Champions/nico/contracts").NicoBeamEffect;
+export type MagicBeamState = Omit<
+  import("../../../Champions/nico/contracts").NicoBeamEffect,
+  "kind"
+>;
 
 export interface SuddenDeathClosingTileState {
   tile: TileCoord;
