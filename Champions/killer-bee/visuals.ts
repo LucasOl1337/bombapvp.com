@@ -23,3 +23,6 @@ export const KILLER_BEE_VISUAL_ADAPTER: ChampionVisualAdapter = {
   skillId: KILLER_BEE_SKILL_ID,
   resolveAnimation: resolveKillerBeeAnimation,
 };
+export function createChampionVisualAdapter(): ChampionVisualAdapter {
+  return KILLER_BEE_VISUAL_ADAPTER;
+}

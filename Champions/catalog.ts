@@ -5,21 +5,45 @@ import type {
   CharacterRosterEntry,
   CharacterSkillDefinition,
 } from "./contracts";
-import { RANNI_DEFINITION } from "./ranni/definition";
-import { KILLER_BEE_DEFINITION } from "./killer-bee/definition";
-import { CROCODILO_DEFINITION } from "./crocodilo-arcano/definition";
-import { NICO_DEFINITION } from "./nico/definition";
-import { NIX_EMBER_DEFINITION } from "./nix-ember/definition";
-import { PENDULA_DEFINITION } from "./pendula/definition";
+import {
+  CHAMPION_MEMBERSHIP,
+  getChampionSlugFromModulePath,
+  listChampionMembership,
+  type ChampionSlug,
+} from "./membership";
+
+type ChampionDefinitionModule = Readonly<{
+  CHAMPION_DEFINITION: CharacterDefinition;
+}>;
+
+const definitionModules = import.meta.glob<ChampionDefinitionModule>(
+  "./*/definition.ts",
+  { eager: true },
+);
+const definitionsBySlug = new Map<ChampionSlug, CharacterDefinition>();
+
+for (const [modulePath, module] of Object.entries(definitionModules)) {
+  const championSlug = getChampionSlugFromModulePath(modulePath, "definition");
+  if (!championSlug) continue;
+  const identity = CHAMPION_MEMBERSHIP[championSlug];
+  const definition = module.CHAMPION_DEFINITION;
+  if (
+    definition.id !== identity.characterId ||
+    definition.skill.id !== identity.skillId
+  ) {
+    throw new Error(
+      `Champion definition does not match membership: ${championSlug}`,
+    );
+  }
+  definitionsBySlug.set(championSlug, definition);
+}
+
 const DEFINITIONS = Object.freeze(
-  [
-    RANNI_DEFINITION,
-    KILLER_BEE_DEFINITION,
-    CROCODILO_DEFINITION,
-    NICO_DEFINITION,
-    NIX_EMBER_DEFINITION,
-    PENDULA_DEFINITION,
-  ].sort((a, b) => a.roster.order - b.roster.order),
+  listChampionMembership().map(({ slug }) => {
+    const definition = definitionsBySlug.get(slug);
+    if (!definition) throw new Error(`Missing Champion definition: ${slug}`);
+    return definition;
+  }).sort((a, b) => a.roster.order - b.roster.order),
 );
 const BY_ID = new Map<string, CharacterDefinition>(
   DEFINITIONS.map((d) => [d.id, d]),

@@ -1,8 +1,9 @@
 import type { CharacterDefinition } from "../contracts";
+import { CHAMPION_MEMBERSHIP } from "../membership";
 import { deepFreeze } from "../../src/shared/deep-freeze";
 import portraitUrl from "./assets/portrait.png?url";
-export const KILLER_BEE_CHARACTER_ID = "6ee8baa5-3277-413b-ae0e-2659b9cc52e9",
-  KILLER_BEE_SKILL_ID = "killer-bee-wing-dash",
+export const KILLER_BEE_CHARACTER_ID = CHAMPION_MEMBERSHIP["killer-bee"].characterId,
+  KILLER_BEE_SKILL_ID = CHAMPION_MEMBERSHIP["killer-bee"].skillId,
   KILLER_BEE_SKILL_COOLDOWN_MS = 4000;
 export const KILLER_BEE_DEFINITION = deepFreeze({
   id: KILLER_BEE_CHARACTER_ID,
@@ -24,3 +25,4 @@ export const KILLER_BEE_DEFINITION = deepFreeze({
   },
   skill: { id: KILLER_BEE_SKILL_ID, cooldownMs: KILLER_BEE_SKILL_COOLDOWN_MS },
 } as const satisfies CharacterDefinition);
+export const CHAMPION_DEFINITION = KILLER_BEE_DEFINITION;

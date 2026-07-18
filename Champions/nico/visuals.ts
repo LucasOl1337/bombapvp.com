@@ -193,9 +193,16 @@ export function advanceNicoBeamEffects(
   effects: readonly ChampionWorldEffect[],
   deltaMs: number,
 ): ChampionWorldEffect[] {
-  return effects
-    .map((effect) => ({ ...effect, remainingMs: effect.remainingMs - deltaMs }))
-    .filter((effect) => effect.remainingMs > 0);
+  const advanced: ChampionWorldEffect[] = [];
+  for (const effect of effects) {
+    if (!isNicoBeamEffect(effect)) {
+      advanced.push(effect);
+      continue;
+    }
+    const remainingMs = effect.remainingMs - deltaMs;
+    if (remainingMs > 0) advanced.push({ ...effect, remainingMs });
+  }
+  return advanced;
 }
 export const NICO_VISUAL_ADAPTER: ChampionVisualAdapter = {
   skillId: NICO_SKILL_ID,
@@ -223,3 +230,6 @@ export const NICO_VISUAL_ADAPTER: ChampionVisualAdapter = {
     }
   },
 };
+export function createChampionVisualAdapter(): ChampionVisualAdapter {
+  return NICO_VISUAL_ADAPTER;
+}

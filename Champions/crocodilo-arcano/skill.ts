@@ -33,6 +33,7 @@ export const CROCODILO_SKILL_ADAPTER: ChampionSkillAdapter = {
     ),
   immune: isCrocodiloImmuneDuringChannel,
 };
+export const CHAMPION_SKILL_ADAPTER = CROCODILO_SKILL_ADAPTER;
 
 const directionDelta: Record<Direction, TileCoord> = {
   up: { x: 0, y: -1 },

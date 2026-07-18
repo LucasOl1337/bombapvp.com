@@ -6,6 +6,7 @@ import type {
 
 /** Runtime world effect produced exclusively by Nico's Arcane Beam. */
 export interface NicoBeamEffect {
+  kind: "nico-beam";
   ownerId: PlayerId;
   origin: TileCoord;
   direction: Direction;

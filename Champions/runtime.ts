@@ -5,29 +5,45 @@ import type {
 } from "../src/original-game/Gameplay/types";
 import type { SkillContext } from "../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "./runtime-contracts";
-import { RANNI_SKILL_ADAPTER } from "./ranni/skill";
-import { KILLER_BEE_SKILL_ADAPTER } from "./killer-bee/skill";
-import { CROCODILO_SKILL_ADAPTER } from "./crocodilo-arcano/skill";
-import { NICO_SKILL_ADAPTER } from "./nico/skill";
-import { NIX_EMBER_SKILL_ADAPTER } from "./nix-ember/skill";
-import { PENDULA_SKILL_ADAPTER } from "./pendula/skill";
+import {
+  CHAMPION_MEMBERSHIP,
+  getChampionSlugFromModulePath,
+  listChampionMembership,
+} from "./membership";
 import {
   getCharacterSkillDefinition,
   getCharacterSkillId,
   listCharacterSkillDefinitions,
 } from "./catalog";
 
-const adapters: readonly ChampionSkillAdapter[] = Object.freeze([
-  RANNI_SKILL_ADAPTER,
-  KILLER_BEE_SKILL_ADAPTER,
-  CROCODILO_SKILL_ADAPTER,
-  NICO_SKILL_ADAPTER,
-  NIX_EMBER_SKILL_ADAPTER,
-  PENDULA_SKILL_ADAPTER,
-]);
-const adaptersBySkillId = new Map(
-  adapters.map((adapter) => [adapter.skillId, adapter]),
+type ChampionSkillModule = Readonly<{
+  CHAMPION_SKILL_ADAPTER: ChampionSkillAdapter;
+}>;
+
+const skillModules = import.meta.glob<ChampionSkillModule>("./*/skill.ts", {
+  eager: true,
+});
+const discoveredAdapters = Object.entries(skillModules).map(
+  ([modulePath, { CHAMPION_SKILL_ADAPTER }]) => {
+    const slug = getChampionSlugFromModulePath(modulePath, "skill");
+    if (!slug) throw new Error(`Unexpected Champion skill module: ${modulePath}`);
+    if (CHAMPION_SKILL_ADAPTER.skillId !== CHAMPION_MEMBERSHIP[slug].skillId) {
+      throw new Error(`Champion skill adapter does not match folder: ${slug}`);
+    }
+    return CHAMPION_SKILL_ADAPTER;
+  },
 );
+const adaptersBySkillId = new Map(
+  discoveredAdapters.map((adapter) => [adapter.skillId, adapter]),
+);
+for (const { slug, skillId } of listChampionMembership()) {
+  if (!adaptersBySkillId.has(skillId)) {
+    throw new Error(`Missing Champion skill adapter: ${slug}`);
+  }
+}
+if (adaptersBySkillId.size !== listChampionMembership().length) {
+  throw new Error("Champion skill adapters do not match canonical membership");
+}
 
 export const CHARACTER_SKILL_DEFINITIONS = listCharacterSkillDefinitions();
 export { getCharacterSkillDefinition, getCharacterSkillId };

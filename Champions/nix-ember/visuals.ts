@@ -25,3 +25,6 @@ export const NIX_EMBER_VISUAL_ADAPTER: ChampionVisualAdapter = {
   skillId: NIX_EMBER_SKILL_ID,
   resolveAnimation: resolveNixEmberAnimation,
 };
+export function createChampionVisualAdapter(): ChampionVisualAdapter {
+  return NIX_EMBER_VISUAL_ADAPTER;
+}

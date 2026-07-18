@@ -38,6 +38,7 @@ export const NICO_SKILL_ADAPTER: ChampionSkillAdapter = {
   update: (player, direction, _pressed, held, deltaMs, context) =>
     updateNicoArcaneBeamChannel(player, direction, held, deltaMs, context),
 };
+export const CHAMPION_SKILL_ADAPTER = NICO_SKILL_ADAPTER;
 export const NICO_VOLUNTARY_CANCEL_COOLDOWN_MS = 600;
 export const NICO_BEAM_DURATION_MS = 260;
 export const NICO_BEAM_CORE_WIDTH_PX = TILE_SIZE * 0.26;
@@ -179,6 +180,7 @@ export function computeNicoBeam(
     context.arena.config.grid,
   );
   return {
+    kind: "nico-beam",
     ownerId,
     origin: { ...origin },
     direction,

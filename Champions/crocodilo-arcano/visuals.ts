@@ -120,3 +120,6 @@ export const CROCODILO_VISUAL_ADAPTER: ChampionVisualAdapter = {
       );
   },
 };
+export function createChampionVisualAdapter(): ChampionVisualAdapter {
+  return CROCODILO_VISUAL_ADAPTER;
+}

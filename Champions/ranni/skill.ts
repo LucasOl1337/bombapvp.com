@@ -224,3 +224,4 @@ export const RANNI_SKILL_ADAPTER: ChampionSkillAdapter = {
   bombPlaced: notifyRanniBombPlaced,
   bombRemoved: notifyRanniBombRemoved,
 };
+export const CHAMPION_SKILL_ADAPTER = RANNI_SKILL_ADAPTER;

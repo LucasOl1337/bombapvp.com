@@ -1,9 +1,10 @@
 import type { CharacterDefinition } from "../contracts";
+import { CHAMPION_MEMBERSHIP } from "../membership";
 import { deepFreeze } from "../../src/shared/deep-freeze";
 import portraitUrl from "./assets/portrait.png?url";
 
-export const NIX_EMBER_CHARACTER_ID = "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c";
-export const NIX_EMBER_SKILL_ID = "nix-ember-vault";
+export const NIX_EMBER_CHARACTER_ID = CHAMPION_MEMBERSHIP["nix-ember"].characterId;
+export const NIX_EMBER_SKILL_ID = CHAMPION_MEMBERSHIP["nix-ember"].skillId;
 export const NIX_EMBER_SKILL_COOLDOWN_MS = 7_000;
 
 export const NIX_EMBER_DEFINITION = deepFreeze({
@@ -29,3 +30,4 @@ export const NIX_EMBER_DEFINITION = deepFreeze({
     cooldownMs: NIX_EMBER_SKILL_COOLDOWN_MS,
   },
 } as const satisfies CharacterDefinition);
+export const CHAMPION_DEFINITION = NIX_EMBER_DEFINITION;

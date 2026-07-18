@@ -65,6 +65,7 @@ export const NIX_EMBER_SKILL_ADAPTER: ChampionSkillAdapter = {
   projectTarget: computeNixEmberVaultTarget,
   allowsPlayerOverlap: true,
 };
+export const CHAMPION_SKILL_ADAPTER = NIX_EMBER_SKILL_ADAPTER;
 
 export function startNixEmberVault(
   player: PlayerState,

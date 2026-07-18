@@ -61,6 +61,7 @@ export const KILLER_BEE_SKILL_ADAPTER: ChampionSkillAdapter = {
   projectTarget: computeKillerBeeDashTarget,
   allowsPlayerOverlap: true,
 };
+export const CHAMPION_SKILL_ADAPTER = KILLER_BEE_SKILL_ADAPTER;
 
 export function startKillerBeeDash(
   player: PlayerState,

@@ -1,5 +1,6 @@
 import portraitUrl from "./assets/portrait.png?url";
 import { createChampionAssets } from "../assets";
+import { NIX_EMBER_CHARACTER_ID } from "./definition";
 
 export const NIX_EMBER_ASSETS = createChampionAssets(
   portraitUrl,
@@ -10,3 +11,7 @@ export const NIX_EMBER_ASSETS = createChampionAssets(
     query: "?url",
   }) as Record<string, string>,
 );
+export const CHAMPION_ASSET_ENTRY = Object.freeze({
+  characterId: NIX_EMBER_CHARACTER_ID,
+  assets: NIX_EMBER_ASSETS,
+});

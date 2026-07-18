@@ -259,3 +259,4 @@ export function createRanniVisualAdapter(): RanniVisualAdapter {
     },
   };
 }
+export const createChampionVisualAdapter = createRanniVisualAdapter;
