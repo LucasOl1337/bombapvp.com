@@ -6,11 +6,11 @@ import {
   listCharacterPresentations,
   listCharacterRosterEntries,
   listCharacterSkillDefinitions,
-} from "../src/characters/catalog.ts";
+} from "../Champions/index.ts";
 
 describe("character catalog", () => {
   it("exposes a portable character definition through its stable ID", () => {
-    expect(getCharacterDefinition("03a976fb-7313-4064-a477-5bb9b0760034")).toEqual({
+    expect(getCharacterDefinition("03a976fb-7313-4064-a477-5bb9b0760034")).toMatchObject({
       id: "03a976fb-7313-4064-a477-5bb9b0760034",
       name: "Ranni",
       roster: {
@@ -18,7 +18,7 @@ describe("character catalog", () => {
         defaultSlot: 1,
       },
       presentation: {
-        portraitPath: "/characters/ranni.png",
+        portraitPath: expect.stringContaining("/Champions/ranni/assets/portrait.png"),
         accent: "blue",
         localized: {
           "pt-BR": {
@@ -81,6 +81,12 @@ describe("character catalog", () => {
         order: 3,
         defaultSlot: undefined,
       },
+      {
+        id: "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c",
+        name: "Nix Ember",
+        order: 4,
+        defaultSlot: undefined,
+      },
     ]);
   });
 
@@ -89,7 +95,7 @@ describe("character catalog", () => {
       {
         id: "03a976fb-7313-4064-a477-5bb9b0760034",
         name: "Ranni",
-        assetPath: "/characters/ranni.png",
+        assetPath: expect.stringContaining("/Champions/ranni/assets/portrait.png"),
         accent: "blue",
         label: "Character 1",
         description: "Fighter 01 · canonical character",
@@ -97,7 +103,7 @@ describe("character catalog", () => {
       {
         id: "6ee8baa5-3277-413b-ae0e-2659b9cc52e9",
         name: "Killer Bee",
-        assetPath: "/characters/killer-bee.png",
+        assetPath: expect.stringContaining("/Champions/killer-bee/assets/portrait.png"),
         accent: "gold",
         label: "Character 2",
         description: "Fighter 02 · canonical character",
@@ -105,7 +111,7 @@ describe("character catalog", () => {
       {
         id: "d083c3dc-7162-4391-8628-6adde0b8d8d6",
         name: "Crocodilo Arcano",
-        assetPath: "/characters/crocodilo-arcano.png",
+        assetPath: expect.stringContaining("/Champions/crocodilo-arcano/assets/portrait.png"),
         accent: "green",
         label: "Character 3",
         description: "Fighter 03 · canonical character",
@@ -113,10 +119,18 @@ describe("character catalog", () => {
       {
         id: "5474c45c-2987-43e0-af2c-a6500c836881",
         name: "Nico",
-        assetPath: "/characters/nico.png",
+        assetPath: expect.stringContaining("/Champions/nico/assets/portrait.png"),
         accent: "red",
         label: "Character 4",
         description: "Fighter 04 · canonical character",
+      },
+      {
+        id: "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c",
+        name: "Nix Ember",
+        assetPath: expect.stringContaining("/Champions/nix-ember/assets/portrait.png"),
+        accent: "red",
+        label: "Character 5",
+        description: "Ember saboteur · survival vault hop",
       },
     ]);
   });
@@ -145,6 +159,11 @@ describe("character catalog", () => {
         name: "Nico",
         order: 3,
       },
+      {
+        id: "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c",
+        name: "Nix Ember",
+        order: 4,
+      },
     ]);
   });
 
@@ -169,6 +188,11 @@ describe("character catalog", () => {
         characterId: "5474c45c-2987-43e0-af2c-a6500c836881",
         skillId: "nico-arcane-beam",
         cooldownMs: 8_000,
+      },
+      {
+        characterId: "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c",
+        skillId: "nix-ember-vault",
+        cooldownMs: 7_000,
       },
     ]);
   });

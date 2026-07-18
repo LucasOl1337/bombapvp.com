@@ -91,7 +91,7 @@ function context(players, testArena, bombs = [], overrides = {}) {
     canOccupyPosition: () => true,
     evaluateMovementOption: () => ({}),
     evaluateProjectedMovementOption: () => ({}),
-    projectKillerBeeDashTarget: (candidate) => candidate.position,
+    projectSkillTarget: (candidate) => candidate.position,
     canMovementOptionAdvance: () => true,
     areOppositeDirections: () => false,
     isPlayerOverlappingTile: (candidate, tile) => (

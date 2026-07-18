@@ -1,0 +1,46 @@
+{
+  "slug": "nix-ember",
+  "displayName": "Nix Ember",
+  "accent": "ember-orange",
+  "packageKind": "grok-character-experiment",
+  "notLiveRoster": true,
+  "creativeBrief": "Bound ember wisp in cracked volcanic-glass armor; bomb saboteur for arena PvP.",
+  "ultimate": {
+    "id": "nix-ember-vault",
+    "name": "Ember Vault",
+    "role": "survival-reposition",
+    "summary": "Short vault hop that clears a bomb or flame tile line and lands Nix crouched, ready to plant again."
+  },
+  "bannedRosterNames": ["Ranni", "Killer Bee", "Crocodilo Arcano", "Nico"],
+  "clips": {
+    "idle-south": { "frames": 4, "slot": "idle", "dir": "selected/idle-south" },
+    "walk-south": { "frames": 8, "slot": "walk", "dir": "selected/walk-south" },
+    "cast-south": { "frames": 4, "slot": "cast", "dir": "selected/cast-south", "skill": "Ember Vault" },
+    "plant-south": { "frames": 6, "slot": "plant-body", "dir": "selected/plant-south", "bakesBomb": false }
+  },
+  "previews": {
+    "portrait": "portrait/nix-ember-portrait.png",
+    "sheets": [
+      "sheets/idle-south-sheet-256.png",
+      "sheets/walk-south-sheet-256.png",
+      "sheets/cast-south-sheet-256.png",
+      "sheets/plant-south-sheet-256.png"
+    ],
+    "gifs": [
+      "sheets/idle-south-preview.gif",
+      "sheets/walk-south-preview.gif",
+      "sheets/cast-south-preview.gif",
+      "sheets/plant-south-preview.gif"
+    ],
+    "videos": [
+      "video/walk-south.mp4",
+      "video/cast-south.mp4",
+      "video/plant-south.mp4"
+    ]
+  },
+  "rules": {
+    "plantNeverBakesBomb": true,
+    "oneUltimateOnly": true,
+    "background": "solid-black"
+  }
+}

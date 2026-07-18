@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
-import { finishRanniBlink } from "../src/original-game/Characters/CustomMechanics/ranni-skill.ts";
+import { finishRanniBlink } from "../Champions/ranni/skill.ts";
 
 const STEP_MS = 1_000 / 60;
 const DIRECTIONS = ["up", "down", "left", "right"];

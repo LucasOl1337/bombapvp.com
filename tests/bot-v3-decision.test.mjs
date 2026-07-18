@@ -68,7 +68,7 @@ function threatenedProjectionContext() {
     canOccupyPosition: () => true,
     evaluateMovementOption: () => ({}),
     evaluateProjectedMovementOption,
-    projectKillerBeeDashTarget: (candidate) => ({ ...candidate.position }),
+    projectSkillTarget: (candidate) => ({ ...candidate.position }),
     canMovementOptionAdvance: (_position, option) => option.direction !== "up",
     areOppositeDirections: () => false,
     isPlayerOverlappingTile: () => false,

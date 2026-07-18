@@ -13,6 +13,7 @@ import type {
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
 import type { BotContext, BotDecision } from "./bot-contracts";
 import { SUDDEN_DEATH_FALL_MS, SUDDEN_DEATH_TICK_MS } from "./danger-map";
+import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
 
 const ESCAPE_BUFFER_MS = 220;
 const RANNI_EMERGENCY_PHASE_WINDOW_MS = 1_300;
@@ -224,7 +225,7 @@ function ownBombEscapeDirection(player: PlayerState, context: BotContext): Direc
 function bombEscapeDirection(player: PlayerState, context: BotContext): Direction | null {
   if (context.roomBombPlacementThrottleMs > 0
     || player.activeBombs >= player.maxBombs
-    || (player.skill.id === "ranni-ice-blink" && player.skill.phase !== "idle")
+    || (player.skill.id === RANNI_SKILL_ID && player.skill.phase !== "idle")
     || context.bombs.some((bomb) => key(bomb.tile) === key(player.tile))
     || (!canHitOpponent(player, context) && !canOpenTerrain(player, context))) {
     return null;
@@ -512,7 +513,7 @@ function shouldStartEmergencyPhase(
   threatArrival: ReadonlyMap<string, number>,
   escaping: Direction | null,
 ): boolean {
-  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase !== "idle") {
+  if (player.skill.id !== RANNI_SKILL_ID || player.skill.phase !== "idle") {
     return false;
   }
   const arrival = threatArrival.get(key(player.tile));
@@ -552,7 +553,7 @@ function isPositionCentered(position: Readonly<{ x: number; y: number }>): boole
 }
 
 function shouldReleaseEmergencyPhase(player: PlayerState, context: BotContext): boolean {
-  return player.skill.id === "ranni-ice-blink"
+  return player.skill.id === RANNI_SKILL_ID
     && player.skill.phase === "channeling"
     && player.skill.projectedPosition !== null
     && (player.skill.projectedBombEgressIds?.length ?? 0) === 0
@@ -565,7 +566,7 @@ function shouldHoldPostPhaseRefuge(
   context: BotContext,
   threatArrival: ReadonlyMap<string, number>,
 ): boolean {
-  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase !== "cooldown") {
+  if (player.skill.id !== RANNI_SKILL_ID || player.skill.phase !== "cooldown") {
     return false;
   }
   const imminentOwnedFuse = context.bombs

@@ -7,7 +7,7 @@ import {
   type CharacterId as CatalogCharacterId,
   type CharacterLocale,
   type CharacterPresentation,
-} from "../characters/catalog.ts";
+} from "../../Champions/index.ts";
 
 export type Locale = CharacterLocale;
 

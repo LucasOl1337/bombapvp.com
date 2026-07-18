@@ -5,7 +5,7 @@ import {
   finishRanniBlink,
   RANNI_SKILL_COOLDOWN_MS,
   startRanniIceBlink,
-} from "../src/original-game/Characters/CustomMechanics/ranni-skill.ts";
+} from "../Champions/ranni/skill.ts";
 import { advancePlayerSkillTimers } from "../src/original-game/ultimate/skill-system.ts";
 
 function ranni() {

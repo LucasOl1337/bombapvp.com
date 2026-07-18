@@ -250,7 +250,7 @@ describe("feedback de chama ocluida pelo personagem", () => {
       arena: { powerUps: [] },
       bombs: [],
       flames: [],
-      magicBeams: [],
+      championWorldEffects: [],
       suddenDeathClosureEffects: [],
       players: { 1: { id: 1 }, 2: { id: 2 }, 3: { id: 3 }, 4: { id: 4 } },
       ctx: {

@@ -1,4 +1,4 @@
-import { assetUrl } from "./asset-url";
+import { resolveGameAsset } from "../../../game-assets";
 
 export type SfxKey =
   | "bombPlace"
@@ -41,23 +41,23 @@ const SFX_PLAYBACK_POLICIES: Partial<Record<SfxKey, SoundPlaybackPolicy>> = {
 };
 
 export const SFX_MANIFEST: Partial<Record<SfxKey, SoundManifestEntry>> = {
-  bombPlace: { url: assetUrl("/Assets/SoundEffects/bomb_place.mp3"), volume: 0.72 * MASTER_VOLUME },
+  bombPlace: { url: resolveGameAsset("audio.bomb.place"), volume: 0.72 * MASTER_VOLUME },
   bombExplode: [
-    { url: assetUrl("/Assets/SoundEffects/bomb_explode_default.mp3"), volume: 0.84 * MASTER_VOLUME },
-    { url: assetUrl("/Assets/SoundEffects/bomb_explode_main.mp3"), volume: 0.78 * MASTER_VOLUME },
+    { url: resolveGameAsset("audio.bomb.explode.default"), volume: 0.84 * MASTER_VOLUME },
+    { url: resolveGameAsset("audio.bomb.explode.main"), volume: 0.78 * MASTER_VOLUME },
   ],
-  crateBreak: { url: assetUrl("/Assets/SoundEffects/shield_block_deflect.mp3"), volume: 0.5 * MASTER_VOLUME },
-  flames: { url: assetUrl("/Assets/SoundEffects/flames.mp3"), volume: 0.74 * MASTER_VOLUME },
-  matchStart: { url: assetUrl("/Assets/SoundEffects/match_start.mp3"), volume: 0.84 * 0.45 * MASTER_VOLUME },
-  roundEnd: { url: assetUrl("/Assets/SoundEffects/round_end.wav"), volume: 0.76 * MASTER_VOLUME },
-  matchWin: { url: assetUrl("/Assets/SoundEffects/match_win.mp3"), volume: 0.9 * MASTER_VOLUME },
+  crateBreak: { url: resolveGameAsset("audio.gameplay.shield-block-deflect"), volume: 0.5 * MASTER_VOLUME },
+  flames: { url: resolveGameAsset("audio.bomb.flames"), volume: 0.74 * MASTER_VOLUME },
+  matchStart: { url: resolveGameAsset("audio.match.start"), volume: 0.84 * 0.45 * MASTER_VOLUME },
+  roundEnd: { url: resolveGameAsset("audio.match.round-end"), volume: 0.76 * MASTER_VOLUME },
+  matchWin: { url: resolveGameAsset("audio.match.win"), volume: 0.9 * MASTER_VOLUME },
   powerCollect: [
-    { url: assetUrl("/Assets/SoundEffects/powerup_collect.mp3"), volume: 0.68 * MASTER_VOLUME },
-    { url: assetUrl("/Assets/SoundEffects/powerup_collect_bright.mp3"), volume: 0.58 * MASTER_VOLUME },
-    { url: assetUrl("/Assets/SoundEffects/powerup_collect_crystal.mp3"), volume: 0.52 * MASTER_VOLUME },
+    { url: resolveGameAsset("audio.power-up.collect.default"), volume: 0.68 * MASTER_VOLUME },
+    { url: resolveGameAsset("audio.power-up.collect.bright"), volume: 0.58 * MASTER_VOLUME },
+    { url: resolveGameAsset("audio.power-up.collect.crystal"), volume: 0.52 * MASTER_VOLUME },
   ],
-  shieldBlock: { url: assetUrl("/Assets/SoundEffects/shield_block_deflect.mp3"), volume: 0.64 * MASTER_VOLUME },
-  suddenDeathAlarm: { url: assetUrl("/Assets/SoundEffects/sudden_death_alarm.wav"), volume: 0.8 * MASTER_VOLUME },
+  shieldBlock: { url: resolveGameAsset("audio.gameplay.shield-block-deflect"), volume: 0.64 * MASTER_VOLUME },
+  suddenDeathAlarm: { url: resolveGameAsset("audio.match.sudden-death-alarm"), volume: 0.8 * MASTER_VOLUME },
 };
 
 export class SoundManager {

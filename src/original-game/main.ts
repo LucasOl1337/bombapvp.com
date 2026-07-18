@@ -13,7 +13,7 @@ import {
 import type { LabTelemetryReport } from "../lab/telemetry";
 import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
-import { getCharacterDefinition } from "../characters/catalog";
+import { getCharacterDefinition } from "../../Champions";
 import { launchRequestFromSearchParams } from "../matches/url-search-params";
 
 declare global {

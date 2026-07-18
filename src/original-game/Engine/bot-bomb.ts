@@ -14,6 +14,7 @@ import type {
   TileCoord,
 } from "../Gameplay/types";
 import type { BotContext, BotDecision } from "./bot-contracts";
+import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
 
 export const BOMB_CHARACTER_INDEX = 0;
 
@@ -262,7 +263,7 @@ function centerExitTimeMs(player: PlayerState, direction: Direction): number {
 }
 
 function hasRanniSafetyWindowForNewBomb(player: PlayerState): boolean {
-  if (player.skill.id !== "ranni-ice-blink" || player.skill.phase === "idle") return true;
+  if (player.skill.id !== RANNI_SKILL_ID || player.skill.phase === "idle") return true;
   return player.skill.phase === "cooldown"
     && player.skill.cooldownRemainingMs + ARRIVAL_MARGIN_MS < getBombFuseMsForPlayer(player);
 }
@@ -638,7 +639,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
       physicalEscapeDirection !== null
       && currentDanger !== undefined
       && currentDanger <= centerExitTimeMs(player, physicalEscapeDirection) + ARRIVAL_MARGIN_MS
-      && player.skill.id === "ranni-ice-blink"
+      && player.skill.id === RANNI_SKILL_ID
       && player.skill.phase === "idle"
     ) {
       return { direction: null, placeBomb: false, useSkill: true };
@@ -647,7 +648,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
       direction === null
       && currentDanger !== undefined
       && currentDanger <= REACTION_WINDOW_MS
-      && player.skill.id === "ranni-ice-blink"
+      && player.skill.id === RANNI_SKILL_ID
       && player.skill.phase === "idle"
     ) {
       return { direction: null, placeBomb: false, useSkill: true };

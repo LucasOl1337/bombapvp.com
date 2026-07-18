@@ -1,9 +1,11 @@
+import type { GameAssetId } from "../../../game-assets/index.ts";
+
 export interface ArenaThemeTilePaths {
-  base: string;
-  lane: string;
-  spawn: string;
-  wall: string;
-  crate: string;
+  base: GameAssetId;
+  lane: GameAssetId;
+  spawn: GameAssetId;
+  wall: GameAssetId;
+  crate: GameAssetId;
 }
 
 export interface ArenaThemePalette {
@@ -139,11 +141,11 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). cool blue-gray fortress floor tile with subtle wear and clean center 2). brighter combat-lane slab tile with clearer edge cuts and readable path rhythm 3). protected spawn tile with restrained cyan-gold rune ring and open center 4). thick carved stone wall tile with clear top lip and strong silhouette 5). reinforced wooden crate with iron bands, readable crack seams and low-top-down depth 6). optional accent tile with faint rune fracture and moss only on the edge",
     renderMode: "sprite",
     tilePaths: {
-      base: "/Assets/TileMaps/themes/arcane-citadel/floor-base.png",
-      lane: "/Assets/TileMaps/themes/arcane-citadel/floor-lane.png",
-      spawn: "/Assets/TileMaps/themes/arcane-citadel/floor-spawn.png",
-      wall: "/Assets/TileMaps/themes/arcane-citadel/wall.png",
-      crate: "/Assets/TileMaps/themes/arcane-citadel/crate.png",
+      base: "arena.theme.arcane-citadel.floor.base",
+      lane: "arena.theme.arcane-citadel.floor.lane",
+      spawn: "arena.theme.arcane-citadel.floor.spawn",
+      wall: "arena.theme.arcane-citadel.wall",
+      crate: "arena.theme.arcane-citadel.crate",
     },
     palette: {
       floorBase: "#10233d",
@@ -203,11 +205,11 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). moss-kissed ruin floor tile with large readable slab breakup and dark grout 2). clean sandstone combat lane tile with brighter value grouping and minimal noise 3). ancient spawn seal tile with teal circular rune inset and open negative space 4). ruined garden wall tile with moss only on the crown and crisp block silhouette 5). sturdy travel crate with brass bindings and bright lid planes 6). optional cracked obsidian accent tile with vine edge detail",
     renderMode: "procedural",
     tilePaths: {
-      base: "/Assets/TileMaps/themes/verdant-ruins/floor-base.png",
-      lane: "/Assets/TileMaps/themes/verdant-ruins/floor-lane.png",
-      spawn: "/Assets/TileMaps/themes/verdant-ruins/floor-spawn.png",
-      wall: "/Assets/TileMaps/themes/verdant-ruins/wall.png",
-      crate: "/Assets/TileMaps/themes/verdant-ruins/crate.png",
+      base: "arena.theme.verdant-ruins.floor.base",
+      lane: "arena.theme.verdant-ruins.floor.lane",
+      spawn: "arena.theme.verdant-ruins.floor.spawn",
+      wall: "arena.theme.verdant-ruins.wall",
+      crate: "arena.theme.verdant-ruins.crate",
     },
     palette: {
       floorBase: "#52623c",
@@ -267,11 +269,11 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). steel-blue bastion floor tile with subtle riveted slab seams and dark center 2). brighter route lane tile with amber guide cuts near edges only 3). restrained spawn dais tile with circular brass inlay and open center 4). heavy skyforge wall tile with layered stone-metal crown and strong silhouette 5). breakable cargo crate with wood face, steel corners and readable crack geometry 6). optional accent tile with tiny spark vent and soot edge",
     renderMode: "procedural",
     tilePaths: {
-      base: "/Assets/TileMaps/themes/skyfoundry-bastion/floor-base.png",
-      lane: "/Assets/TileMaps/themes/skyfoundry-bastion/floor-lane.png",
-      spawn: "/Assets/TileMaps/themes/skyfoundry-bastion/floor-spawn.png",
-      wall: "/Assets/TileMaps/themes/skyfoundry-bastion/wall.png",
-      crate: "/Assets/TileMaps/themes/skyfoundry-bastion/crate.png",
+      base: "arena.theme.skyfoundry-bastion.floor.base",
+      lane: "arena.theme.skyfoundry-bastion.floor.lane",
+      spawn: "arena.theme.skyfoundry-bastion.floor.spawn",
+      wall: "arena.theme.skyfoundry-bastion.wall",
+      crate: "arena.theme.skyfoundry-bastion.crate",
     },
     palette: {
       floorBase: "#5f7490",
@@ -331,11 +333,11 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). deep teal harbor stone floor tile with subtle wet slab seams and low noise 2). brighter sea-glass route lane tile with pale trim at tile edges only 3). restrained brass compass spawn tile with open readable center 4). dark basalt harbor wall block with crisp top lip and strong silhouette 5). warm breakable wooden cargo crate with iron corner bands and clear crack seams",
     renderMode: "sprite",
     tilePaths: {
-      base: "/Assets/TileMaps/themes/tidal-foundry/floor-base.png",
-      lane: "/Assets/TileMaps/themes/tidal-foundry/floor-lane.png",
-      spawn: "/Assets/TileMaps/themes/tidal-foundry/floor-spawn.png",
-      wall: "/Assets/TileMaps/themes/tidal-foundry/wall.png",
-      crate: "/Assets/TileMaps/themes/tidal-foundry/crate-mare-de-bronze.png",
+      base: "arena.theme.tidal-foundry.floor.base",
+      lane: "arena.theme.tidal-foundry.floor.lane",
+      spawn: "arena.theme.tidal-foundry.floor.spawn",
+      wall: "arena.theme.tidal-foundry.wall",
+      crate: "arena.theme.tidal-foundry.crate",
     },
     palette: {
       floorBase: "#2f676b",
@@ -395,11 +397,11 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). dark charcoal kiln brick floor tile with calm center and subtle mortar 2). ember-lit route lane tile with thin orange edge glow only 3). protected spawn tile with restrained circular forge mark and open center 4). heavy blackened furnace wall block with crisp top lip and strong silhouette 5). warm breakable charcoal wood crate with iron bands and clear crack seams",
     renderMode: "sprite",
     tilePaths: {
-      base: "/Assets/TileMaps/themes/ember-kiln/floor-base.png",
-      lane: "/Assets/TileMaps/themes/ember-kiln/floor-lane.png",
-      spawn: "/Assets/TileMaps/themes/ember-kiln/floor-spawn.png",
-      wall: "/Assets/TileMaps/themes/ember-kiln/wall.png",
-      crate: "/Assets/TileMaps/themes/ember-kiln/crate.png",
+      base: "arena.theme.ember-kiln.floor.base",
+      lane: "arena.theme.ember-kiln.floor.lane",
+      spawn: "arena.theme.ember-kiln.floor.spawn",
+      wall: "arena.theme.ember-kiln.wall",
+      crate: "arena.theme.ember-kiln.crate",
     },
     palette: {
       floorBase: "#2b2c2f",
@@ -742,7 +744,11 @@ export function getArenaThemeById(id: string | null | undefined): ArenaThemeDefi
 
 export function resolveArenaTheme(search: string): ArenaThemeDefinition {
   const params = new URLSearchParams(search);
-  return getArenaThemeById(params.get(ARENA_THEME_QUERY_PARAM))
+  const theme = getArenaThemeById(params.get(ARENA_THEME_QUERY_PARAM))
     ?? ARENA_THEME_MAP.get(DEFAULT_ARENA_THEME_ID)
     ?? ARENA_THEME_LIBRARY[0];
+  if (!theme) {
+    throw new Error("Arena theme library must expose at least one theme.");
+  }
+  return theme;
 }

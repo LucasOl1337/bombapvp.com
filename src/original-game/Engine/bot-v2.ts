@@ -6,6 +6,7 @@ import {
   getBotDecision,
 } from "./bot-ai";
 import type { BotContext, BotDecision } from "./bot-contracts";
+import { KILLER_BEE_SKILL_ID } from "../../../Champions/killer-bee/definition";
 
 export const BOT_V2_CHARACTER_INDEX = 1;
 
@@ -62,7 +63,7 @@ function hasTacticalDashLane(player: PlayerState, direction: Direction, context:
 
 function getSafeDashDirection(player: PlayerState, target: Target, context: BotContext): Direction | null {
   if (
-    player.skill.id !== "killer-bee-wing-dash"
+    player.skill.id !== KILLER_BEE_SKILL_ID
     || player.skill.phase !== "idle"
     || player.skill.cooldownRemainingMs > 0
     || player.spawnProtectionMs > 0
@@ -74,7 +75,7 @@ function getSafeDashDirection(player: PlayerState, target: Target, context: BotC
   const direction = alignedDirection(player, target.player);
   if (!direction || !hasTacticalDashLane(player, direction, context)) return null;
 
-  const projectedPosition = context.projectKillerBeeDashTarget(player, direction);
+  const projectedPosition = context.projectSkillTarget(player, direction);
   const horizontal = direction === "left" || direction === "right";
   const projectedDistancePx = Math.abs(horizontal
     ? projectedPosition.x - player.position.x

@@ -1,0 +1,235 @@
+import type {
+  Direction,
+  PixelCoord,
+  PlayerState,
+  TileCoord,
+} from "../../src/original-game/Gameplay/types";
+import { TILE_SIZE } from "../../src/original-game/PersonalConfig/config";
+import type { SkillContext } from "../../src/original-game/ultimate/shared";
+import type { ChampionSkillAdapter } from "../runtime-contracts";
+import {
+  KILLER_BEE_SKILL_COOLDOWN_MS,
+  KILLER_BEE_SKILL_ID,
+} from "./definition";
+
+export {
+  KILLER_BEE_CHARACTER_ID,
+  KILLER_BEE_SKILL_COOLDOWN_MS,
+} from "./definition";
+
+export const KILLER_BEE_DASH_DISTANCE_PX = TILE_SIZE * 3;
+export const KILLER_BEE_DASH_DURATION_MS = 240;
+export const KILLER_BEE_DASH_MIN_DURATION_MS = 90;
+export const KILLER_BEE_DASH_BLOCKED_COOLDOWN_MS = 300;
+export const KILLER_BEE_DASH_FRAME_MS = 60;
+const directionDelta: Record<Direction, TileCoord> = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+};
+export function getDashDistancePx(
+  from: PixelCoord,
+  to: PixelCoord,
+  direction: Direction,
+  context: SkillContext,
+): number {
+  const width = context.arena.config.grid.width * TILE_SIZE,
+    height = context.arena.config.grid.height * TILE_SIZE;
+  return direction === "left" || direction === "right"
+    ? Math.abs(context.getWrappedDelta(to.x, from.x, width))
+    : Math.abs(context.getWrappedDelta(to.y, from.y, height));
+}
+export function hasReachedSkillTarget(
+  position: PixelCoord,
+  target: PixelCoord,
+  context: SkillContext,
+): boolean {
+  const width = context.arena.config.grid.width * TILE_SIZE,
+    height = context.arena.config.grid.height * TILE_SIZE,
+    dx = context.getWrappedDelta(target.x, position.x, width),
+    dy = context.getWrappedDelta(target.y, position.y, height);
+  return Math.hypot(dx, dy) <= 0.5;
+}
+
+export const KILLER_BEE_SKILL_ADAPTER: ChampionSkillAdapter = {
+  skillId: KILLER_BEE_SKILL_ID,
+  activate: (player, direction, context) =>
+    startKillerBeeDash(player, direction, context),
+  update: (player, _direction, _pressed, _held, deltaMs, context) =>
+    updateKillerBeeDash(player, deltaMs, context),
+  projectTarget: computeKillerBeeDashTarget,
+  allowsPlayerOverlap: true,
+};
+
+export function startKillerBeeDash(
+  player: PlayerState,
+  desiredDirection: Direction | null,
+  context: SkillContext,
+): void {
+  if (player.skill.id !== KILLER_BEE_SKILL_ID) {
+    return;
+  }
+  const dashDirection =
+    desiredDirection ?? player.lastMoveDirection ?? player.direction;
+  const target = computeKillerBeeDashTarget(player, dashDirection, context);
+  const dashDistance = getDashDistancePx(
+    player.position,
+    target,
+    dashDirection,
+    context,
+  );
+  if (dashDistance < 1) {
+    player.skill.phase = "cooldown";
+    player.skill.channelRemainingMs = 0;
+    player.skill.cooldownRemainingMs = KILLER_BEE_DASH_BLOCKED_COOLDOWN_MS;
+    player.skill.castElapsedMs = 0;
+    player.skill.projectedPosition = null;
+    player.skill.projectedLastMoveDirection = null;
+    player.velocity.x = 0;
+    player.velocity.y = 0;
+    return;
+  }
+  const durationMs = Math.max(
+    KILLER_BEE_DASH_MIN_DURATION_MS,
+    Math.round(
+      KILLER_BEE_DASH_DURATION_MS *
+        (dashDistance / KILLER_BEE_DASH_DISTANCE_PX),
+    ),
+  );
+  player.direction = dashDirection;
+  player.lastMoveDirection = dashDirection;
+  player.skill.phase = "channeling";
+  player.skill.channelRemainingMs = durationMs;
+  player.skill.castElapsedMs = 0;
+  player.skill.projectedPosition = target;
+  player.skill.projectedLastMoveDirection = dashDirection;
+  player.velocity.x = 0;
+  player.velocity.y = 0;
+}
+
+export function updateKillerBeeDash(
+  player: PlayerState,
+  deltaMs: number,
+  context: SkillContext,
+): boolean {
+  if (player.skill.id !== KILLER_BEE_SKILL_ID) {
+    return false;
+  }
+  if (!Number.isFinite(deltaMs) || deltaMs <= 0) {
+    player.velocity.x = 0;
+    player.velocity.y = 0;
+    return true;
+  }
+  const dashDirection =
+    player.skill.projectedLastMoveDirection ??
+    player.lastMoveDirection ??
+    player.direction;
+  const target = player.skill.projectedPosition ?? player.position;
+  const start = { ...player.position };
+  const remainingMs = Math.max(0, player.skill.channelRemainingMs);
+  const stepFraction =
+    remainingMs <= 0 ? 1 : Math.min(1, deltaMs / remainingMs);
+  const arenaPixelWidth = context.arena.config.grid.width * TILE_SIZE;
+  const arenaPixelHeight = context.arena.config.grid.height * TILE_SIZE;
+  const deltaX = context.getWrappedDelta(
+    target.x,
+    player.position.x,
+    arenaPixelWidth,
+  );
+  const deltaY = context.getWrappedDelta(
+    target.y,
+    player.position.y,
+    arenaPixelHeight,
+  );
+  const nextPosition = context.normalizeArenaPosition({
+    x: player.position.x + deltaX * stepFraction,
+    y: player.position.y + deltaY * stepFraction,
+  });
+  if (!context.canOccupyPosition(player, nextPosition)) {
+    finishKillerBeeDash(
+      player,
+      context,
+      player.position,
+      KILLER_BEE_DASH_BLOCKED_COOLDOWN_MS,
+    );
+    return true;
+  }
+  player.position = nextPosition;
+  player.velocity = {
+    x:
+      context.getWrappedDelta(player.position.x, start.x, arenaPixelWidth) /
+      (deltaMs / 1000),
+    y:
+      context.getWrappedDelta(player.position.y, start.y, arenaPixelHeight) /
+      (deltaMs / 1000),
+  };
+  player.direction = dashDirection;
+  player.lastMoveDirection = dashDirection;
+  player.tile = context.getTileFromPosition(player.position);
+  player.skill.channelRemainingMs = Math.max(0, remainingMs - deltaMs);
+  player.skill.castElapsedMs += deltaMs;
+  if (
+    player.skill.channelRemainingMs <= 0 ||
+    hasReachedSkillTarget(player.position, target, context)
+  ) {
+    finishKillerBeeDash(player, context);
+  }
+  return true;
+}
+
+export function finishKillerBeeDash(
+  player: PlayerState,
+  context: SkillContext,
+  fallbackPosition: PixelCoord = player.position,
+  cooldownMs: number = KILLER_BEE_SKILL_COOLDOWN_MS,
+): void {
+  if (player.skill.id !== KILLER_BEE_SKILL_ID) {
+    return;
+  }
+  const projectedTarget = player.skill.projectedPosition ?? player.position;
+  const target = context.canOccupyPosition(player, projectedTarget)
+    ? projectedTarget
+    : fallbackPosition;
+  player.position = { ...target };
+  player.tile = context.getTileFromPosition(player.position);
+  if (player.skill.projectedLastMoveDirection) {
+    player.direction = player.skill.projectedLastMoveDirection;
+    player.lastMoveDirection = player.skill.projectedLastMoveDirection;
+  }
+  player.velocity.x = 0;
+  player.velocity.y = 0;
+  player.skill.phase = "cooldown";
+  player.skill.channelRemainingMs = 0;
+  player.skill.cooldownRemainingMs = cooldownMs;
+  player.skill.castElapsedMs = 0;
+  player.skill.projectedPosition = null;
+  player.skill.projectedLastMoveDirection = null;
+}
+
+export function computeKillerBeeDashTarget(
+  player: PlayerState,
+  direction: Direction,
+  context: SkillContext,
+): PixelCoord {
+  const delta = directionDelta[direction];
+  const stepPx = 4;
+  let position = { ...player.position };
+  let travelledPx = 0;
+  while (travelledPx < KILLER_BEE_DASH_DISTANCE_PX) {
+    const nextStep = Math.min(
+      stepPx,
+      KILLER_BEE_DASH_DISTANCE_PX - travelledPx,
+    );
+    const candidate = context.normalizeArenaPosition({
+      x: position.x + delta.x * nextStep,
+      y: position.y + delta.y * nextStep,
+    });
+    if (!context.canOccupyPosition(player, candidate)) {
+      break;
+    }
+    position = candidate;
+    travelledPx += nextStep;
+  }
+  return position;
+}

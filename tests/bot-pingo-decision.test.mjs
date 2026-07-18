@@ -117,7 +117,7 @@ function context({
     ),
     evaluateMovementOption,
     evaluateProjectedMovementOption,
-    projectKillerBeeDashTarget: (subject) => subject.position,
+    projectSkillTarget: (subject) => subject.position,
     canMovementOptionAdvance,
     areOppositeDirections: () => false,
     isPlayerOverlappingTile,

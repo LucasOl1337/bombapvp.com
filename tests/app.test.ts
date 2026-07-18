@@ -60,12 +60,14 @@ describe("Bomba PvP app", () => {
       within(portugueseRoot).getByRole("complementary", { name: "Personagens" }),
     ).toBeTruthy();
     expect(within(portugueseRoot).getByRole("group", { name: "Idioma" })).toBeTruthy();
+    expect(portugueseRoot.querySelector(".experience-region")).not.toBeNull();
 
     app.dispose();
     const englishRoot = createRoot();
     app = createBombApp({ hostname: "www.bombpvp.com", root: englishRoot });
     expect(app.getSnapshot().locale).toBe("en");
     expect(within(englishRoot).getByRole("heading", { name: "Choose your experience" })).toBeTruthy();
+    expect(englishRoot.querySelector(".experience-region")).not.toBeNull();
   });
 
   it("envia a Sala contínua ao motor original após a seleção", () => {

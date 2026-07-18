@@ -1,6 +1,7 @@
 import { tileKey } from "../Arenas/arena";
 import { BASE_MOVE_MS, FLAME_DURATION_MS, MIN_MOVE_MS, SPEED_STEP_MS, TILE_SIZE } from "../PersonalConfig/config";
-import { RANNI_SKILL_CHANNEL_MS } from "../Characters/CustomMechanics/ranni-skill";
+import { RANNI_SKILL_CHANNEL_MS } from "../../../Champions/ranni/skill";
+import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
 import type {
   BombState,
   Direction,
@@ -440,7 +441,7 @@ export function getBotV3Decision(player: PlayerState, context: BotContext): BotD
   }
 
   const phaseWindowThreat = currentDanger !== undefined && currentDanger <= PHASE_COMMIT_WINDOW_MS;
-  const shouldPhase = player.skill.id === "ranni-ice-blink"
+  const shouldPhase = player.skill.id === RANNI_SKILL_ID
     && player.skill.phase === "idle"
     && (phaseWindowThreat || remoteThreat);
   if (shouldPhase) {

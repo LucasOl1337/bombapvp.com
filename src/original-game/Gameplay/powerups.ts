@@ -10,6 +10,7 @@ import {
 } from "../PersonalConfig/config";
 import type { MenuPlayerId, PlayerState, PowerUpType } from "./types";
 import { deepFreeze } from "../../shared/deep-freeze";
+import type { GameAssetId } from "../../../game-assets/index.ts";
 
 export type SkillPowerUpType = PowerUpType;
 export type PowerUpLevelField =
@@ -37,7 +38,7 @@ export interface PowerUpDefinition {
     demolitionComboEligible: boolean;
   }>;
   readonly asset: Readonly<{
-    path: string;
+    id: GameAssetId;
   }>;
 }
 
@@ -54,7 +55,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: true,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-bomb.png",
+      id: "gameplay.power-up.bomb.icon",
     },
   },
   "flame-up": {
@@ -69,7 +70,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: true,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-flame.png",
+      id: "gameplay.power-up.flame.icon",
     },
   },
   "speed-up": {
@@ -84,7 +85,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: true,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-speed-rastro-relampago.png",
+      id: "gameplay.power-up.speed.icon",
     },
   },
   "remote-up": {
@@ -99,7 +100,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: false,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-remote.png",
+      id: "gameplay.power-up.remote.icon",
     },
   },
   "shield-up": {
@@ -114,7 +115,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: true,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-shield.png",
+      id: "gameplay.power-up.shield.icon",
     },
   },
   "bomb-pass-up": {
@@ -129,7 +130,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: false,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-bomb-pass.png",
+      id: "gameplay.power-up.bomb-pass.icon",
     },
   },
   "kick-up": {
@@ -144,7 +145,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: false,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-kick.png",
+      id: "gameplay.power-up.kick.icon",
     },
   },
   "short-fuse-up": {
@@ -159,7 +160,7 @@ const POWER_UP_DEFINITIONS: Readonly<Record<PowerUpType, PowerUpDefinition>> = d
       demolitionComboEligible: true,
     },
     asset: {
-      path: "/Assets/UiLayouts/power-short-fuse-v2.png",
+      id: "gameplay.power-up.short-fuse.icon",
     },
   },
 });

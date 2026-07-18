@@ -21,7 +21,7 @@ describe("power-up catalog", () => {
         demolitionComboEligible: true,
       },
       asset: {
-        path: "/Assets/UiLayouts/power-bomb.png",
+        id: "gameplay.power-up.bomb.icon",
       },
     });
   });
@@ -36,7 +36,7 @@ describe("power-up catalog", () => {
         levelField: "maxBombs",
         maxLevel: 5,
         drop: { poolSlots: [3, 4, 13, 16, 17], demolitionComboEligible: true },
-        asset: { path: "/Assets/UiLayouts/power-bomb.png" },
+        asset: { id: "gameplay.power-up.bomb.icon" },
       },
       {
         type: "flame-up",
@@ -46,7 +46,7 @@ describe("power-up catalog", () => {
         levelField: "flameRange",
         maxLevel: 5,
         drop: { poolSlots: [5, 6, 18, 19], demolitionComboEligible: true },
-        asset: { path: "/Assets/UiLayouts/power-flame.png" },
+        asset: { id: "gameplay.power-up.flame.icon" },
       },
       {
         type: "speed-up",
@@ -56,7 +56,7 @@ describe("power-up catalog", () => {
         levelField: "speedLevel",
         maxLevel: 4,
         drop: { poolSlots: [0, 1, 12, 14, 15], demolitionComboEligible: true },
-        asset: { path: "/Assets/UiLayouts/power-speed-rastro-relampago.png" },
+        asset: { id: "gameplay.power-up.speed.icon" },
       },
       {
         type: "remote-up",
@@ -66,7 +66,7 @@ describe("power-up catalog", () => {
         levelField: "remoteLevel",
         maxLevel: 1,
         drop: { poolSlots: [2, 7], demolitionComboEligible: false },
-        asset: { path: "/Assets/UiLayouts/power-remote.png" },
+        asset: { id: "gameplay.power-up.remote.icon" },
       },
       {
         type: "shield-up",
@@ -76,7 +76,7 @@ describe("power-up catalog", () => {
         levelField: "shieldCharges",
         maxLevel: 2,
         drop: { poolSlots: [8, 20], demolitionComboEligible: true },
-        asset: { path: "/Assets/UiLayouts/power-shield.png" },
+        asset: { id: "gameplay.power-up.shield.icon" },
       },
       {
         type: "bomb-pass-up",
@@ -86,7 +86,7 @@ describe("power-up catalog", () => {
         levelField: "bombPassLevel",
         maxLevel: 1,
         drop: { poolSlots: [22], demolitionComboEligible: false },
-        asset: { path: "/Assets/UiLayouts/power-bomb-pass.png" },
+        asset: { id: "gameplay.power-up.bomb-pass.icon" },
       },
       {
         type: "kick-up",
@@ -96,7 +96,7 @@ describe("power-up catalog", () => {
         levelField: "kickLevel",
         maxLevel: 1,
         drop: { poolSlots: [10, 11, 23], demolitionComboEligible: false },
-        asset: { path: "/Assets/UiLayouts/power-kick.png" },
+        asset: { id: "gameplay.power-up.kick.icon" },
       },
       {
         type: "short-fuse-up",
@@ -106,7 +106,7 @@ describe("power-up catalog", () => {
         levelField: "shortFuseLevel",
         maxLevel: 2,
         drop: { poolSlots: [9, 21], demolitionComboEligible: true },
-        asset: { path: "/Assets/UiLayouts/power-short-fuse-v2.png" },
+        asset: { id: "gameplay.power-up.short-fuse.icon" },
       },
     ]);
   });

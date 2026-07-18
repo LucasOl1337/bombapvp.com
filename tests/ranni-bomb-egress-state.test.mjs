@@ -5,11 +5,11 @@ import {
   finishRanniBlink,
   grantRanniProjectedBombEgress,
   retainOverlappingRanniProjectedBombEgress,
+  simulateProjectedMovement,
   startRanniIceBlink,
-} from "../src/original-game/Characters/CustomMechanics/ranni-skill.ts";
+} from "../Champions/ranni/skill.ts";
 import {
   createDefaultPlayerSkillState,
-  simulateProjectedMovement,
 } from "../src/original-game/ultimate/skill-system.ts";
 
 function ranni() {

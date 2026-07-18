@@ -6,12 +6,13 @@ export type Mode = "boot" | "menu" | "match" | "match-result";
 export type Direction = "up" | "down" | "left" | "right";
 export type FlameStyle = "normal" | "arcane" | "shadow" | "toxic";
 export type ArenaDefinitionStatus = "draft" | "active";
-export type CharacterSkillId =
-  | "ranni-ice-blink"
-  | "killer-bee-wing-dash"
-  | "nico-arcane-beam"
-  | "crocodilo-emerald-surge";
-export type SkillPhase = "idle" | "channeling" | "releasing" | "cooldown";
+export type { CharacterSkillId } from "../../../Champions/contracts";
+import type {
+  ChampionPlayerSkillState,
+  ChampionSkillPhase,
+} from "../../../Champions/runtime-contracts";
+import type { ChampionWorldEffect } from "../../../Champions/world-effects";
+export type SkillPhase = ChampionSkillPhase;
 export type PowerUpType =
   | "bomb-up"
   | "flame-up"
@@ -60,16 +61,8 @@ export interface PlayerState {
   skill: PlayerSkillState;
 }
 
-export interface PlayerSkillState {
-  id: CharacterSkillId | null;
-  phase: SkillPhase;
-  channelRemainingMs: number;
-  cooldownRemainingMs: number;
-  castElapsedMs: number;
-  projectedPosition: PixelCoord | null;
-  projectedLastMoveDirection: Direction | null;
-  projectedBombEgressIds?: number[];
-}
+/** @deprecated Import ChampionPlayerSkillState from Champions/runtime-contracts. */
+export type PlayerSkillState = ChampionPlayerSkillState;
 
 export interface BombState {
   id: number;
@@ -88,13 +81,8 @@ export interface FlameState {
   ownerId: PlayerId | null;
 }
 
-export interface MagicBeamState {
-  ownerId: PlayerId;
-  origin: TileCoord;
-  direction: Direction;
-  tiles: TileCoord[];
-  remainingMs: number;
-}
+/** @deprecated Wire-compatible alias for Champion-owned world effects. */
+export type MagicBeamState = ChampionWorldEffect;
 
 export interface SuddenDeathClosingTileState {
   tile: TileCoord;

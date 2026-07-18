@@ -74,7 +74,7 @@ function context(players, overrides = {}) {
     canOccupyPosition: () => true,
     evaluateMovementOption: (_candidate, direction) => ({ direction }),
     evaluateProjectedMovementOption: (_candidate, direction) => ({ direction }),
-    projectKillerBeeDashTarget: (candidate) => candidate.position,
+    projectSkillTarget: (candidate) => candidate.position,
     canMovementOptionAdvance: () => true,
     areOppositeDirections: (first, second) => (
       (first === "up" && second === "down")

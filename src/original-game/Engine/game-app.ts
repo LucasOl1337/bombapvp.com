@@ -42,7 +42,6 @@ import type {
   CharacterSkillId,
   Direction,
   FlameState,
-  MagicBeamState,
   MatchScore,
   MenuPlayerId,
   Mode,
@@ -134,19 +133,6 @@ import {
   updatePlayerSkillChannel as skill_updatePlayerSkillChannel,
   isPlayerImmuneDuringSkillChannel as skill_isPlayerImmuneDuringSkillChannel,
   getCharacterSkillId,
-  KILLER_BEE_DASH_FRAME_MS,
-  computeKillerBeeDashTarget,
-  NICO_SKILL_CHANNEL_MS,
-  NICO_SKILL_RELEASE_MS,
-  NICO_BEAM_DURATION_MS,
-  NICO_BEAM_CORE_WIDTH_PX,
-  NICO_BEAM_GLOW_WIDTH_PX,
-  collectNicoBeamTiles,
-  computeCrocodiloSurgeTiles,
-  CROCODILO_SKILL_CHANNEL_MS,
-  CROCODILO_SKILL_RELEASE_MS,
-  RANNI_SKILL_CHANNEL_MS,
-  grantRanniProjectedBombEgress,
 } from "../ultimate/skill-system";
 import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
 import {
@@ -162,13 +148,14 @@ import {
   updateVisualPlayerPositions as online_updateVisualPlayerPositions,
 } from "../NetCode/online-sync";
 import { SITE_COPY, type SiteLanguage } from "../UiLayouts/i18n";
+import { createChampionVisualRuntime } from "../../../Champions/visual-runtime";
+import { championSkillAllowsPlayerOverlap, getChampionProjectedMovementIgnoredBombIds, notifyChampionBombPlaced, notifyChampionBombRemoved, projectChampionSkillTarget } from "../../../Champions/runtime";
+import type { ChampionWorldEffect } from "../../../Champions/world-effects";
 
 const KICK_SLIDE_MAX_TILES = 3;
 const KICK_FUSE_PENALTY_MS_PER_TILE = 250;
 const KICK_FUSE_MIN_MS = 450;
 const KICK_IMPACT_FEEDBACK_MS = 220;
-const RANNI_BLINK_FEEDBACK_MS = 800;
-const RANNI_PROJECTION_MIN_DISTANCE_PX = 1;
 const EXPLOSION_SCREEN_SHAKE_MS = 160;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_PX = 4;
 const EXPLOSION_SCREEN_SHAKE_AMPLITUDE_MAX_PX = 6;
@@ -412,40 +399,6 @@ export interface ExplosionChainReactionFeedback {
   elapsedMs: number;
 }
 
-interface RanniBlinkFeedback {
-  kind: "blocked" | "failed";
-  position: PixelCoord;
-  elapsedMs: number;
-}
-
-export interface RanniProjectionFeedbackGeometry {
-  originX: number;
-  originY: number;
-  targetX: number;
-  targetY: number;
-  distancePx: number;
-  hasDisplacement: boolean;
-  blocked: boolean;
-}
-
-export function buildRanniProjectionFeedbackGeometry(
-  origin: PixelCoord,
-  target: PixelCoord,
-  attemptedDirection: boolean,
-): RanniProjectionFeedbackGeometry {
-  const distancePx = Math.hypot(target.x - origin.x, target.y - origin.y);
-  const hasDisplacement = distancePx >= RANNI_PROJECTION_MIN_DISTANCE_PX;
-  return {
-    originX: origin.x,
-    originY: origin.y,
-    targetX: target.x,
-    targetY: target.y,
-    distancePx,
-    hasDisplacement,
-    blocked: attemptedDirection && !hasDisplacement,
-  };
-}
-
 export interface ExplosionFeedbackCell {
   x: number;
   y: number;
@@ -650,7 +603,7 @@ export class GameApp {
   private players: Record<PlayerId, PlayerState> = this.createPlayers();
   private bombs: BombState[] = [];
   private flames: FlameState[] = [];
-  private magicBeams: MagicBeamState[] = [];
+  private championWorldEffects: ChampionWorldEffect[] = [];
   private nextBombId = 1;
 
   private menuReady: Record<PlayerId, boolean> = createBooleanPlayerRecord(false);
@@ -701,7 +654,7 @@ export class GameApp {
   private crateBreakAnimations: CrateBreakAnimation[] = [];
   private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
   private chainReactionFeedback: ExplosionChainReactionFeedback[] = [];
-  private ranniBlinkFeedback: Record<PlayerId, RanniBlinkFeedback | null> = createPlayerRecord(() => null);
+  private readonly championVisuals = createChampionVisualRuntime();
   private readonly prefersReducedMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -879,15 +832,10 @@ export class GameApp {
       canOccupyPosition: (_pos, _tile) => true,
       evaluateMovementOption: (player, dir, dt) => this.evaluateMovementOption(player, dir, dt),
       evaluateProjectedMovementOption: (player, dir, dt) => {
-        const projectedBombEgressIds = (
-          player.skill.id === "ranni-ice-blink"
-          && player.skill.phase === "channeling"
-        )
-          ? player.skill.projectedBombEgressIds ?? []
-          : [];
+        const projectedBombEgressIds = getChampionProjectedMovementIgnoredBombIds(player);
         return this.evaluateMovementOption(player, dir, dt, projectedBombEgressIds, false, true);
       },
-      projectKillerBeeDashTarget: (player, dir) => computeKillerBeeDashTarget(player, dir, this.createSkillContext()),
+      projectSkillTarget: (player, dir) => projectChampionSkillTarget(player, dir, this.createSkillContext()),
       canMovementOptionAdvance: (pos, opt) => this.canMovementOptionAdvance(pos, opt),
       areOppositeDirections: (a, b) => this.areOppositeDirections(a, b),
       isPlayerOverlappingTile: (player, tile) => this.isPlayerOverlappingTile(player, tile),
@@ -900,14 +848,16 @@ export class GameApp {
       bombs: this.bombs,
       players: this.players,
       activePlayerIds: this.activePlayerIds,
-      magicBeams: this.magicBeams,
+      addChampionWorldEffect: (effect) => {
+        this.championWorldEffects.push(effect);
+      },
       selectedCharacterIndex: this.selectedCharacterIndex,
       characterRoster: this.characterRoster,
       canOccupyPosition: (player, pos) => this.canOccupyPosition(
         player,
         pos,
         [],
-        player.skill.id === "killer-bee-wing-dash",
+        championSkillAllowsPlayerOverlap(player),
       ),
       getTileFromPosition: (pos) => this.getTileFromPosition(pos),
       normalizeArenaPosition: (pos) => this.normalizeArenaPosition(pos),
@@ -1054,7 +1004,7 @@ export class GameApp {
       ...flame,
       tile: { ...flame.tile },
     }));
-    this.magicBeams = (snapshot.magicBeams ?? []).map((beam) => ({
+    this.championWorldEffects = (snapshot.magicBeams ?? []).map((beam) => ({
       ...beam,
       origin: { ...beam.origin },
       tiles: beam.tiles.map((tile) => ({ ...tile })),
@@ -1142,7 +1092,7 @@ export class GameApp {
       ...flame,
       tile: { ...flame.tile },
     }));
-    this.magicBeams = (frame.magicBeams ?? []).map((beam) => ({
+    this.championWorldEffects = (frame.magicBeams ?? []).map((beam) => ({
       ...beam,
       origin: { ...beam.origin },
       tiles: beam.tiles.map((tile) => ({ ...tile })),
@@ -1724,7 +1674,7 @@ export class GameApp {
         ...flame,
         tile: { ...flame.tile },
       })),
-      magicBeams: this.magicBeams.map((beam) => ({
+      magicBeams: this.championWorldEffects.map((beam) => ({
         ...beam,
         origin: { ...beam.origin },
         tiles: beam.tiles.map((tile) => ({ ...tile })),
@@ -2106,51 +2056,12 @@ export class GameApp {
     skillHeld: boolean,
     deltaMs: number,
   ): boolean {
-    const wasRanniChanneling = (
-      player.skill.id === "ranni-ice-blink"
-      && player.skill.phase === "channeling"
+    return this.championVisuals.updateSkillChannel(
+      player, desiredDirection, skillPressed, skillHeld, deltaMs,
+      (subject, direction, pressed, held, elapsedMs) => skill_updatePlayerSkillChannel(
+        subject, direction, pressed, held, elapsedMs, this.createSkillContext(),
+      ),
     );
-    const origin = wasRanniChanneling ? { ...player.position } : null;
-    const projectedBefore = wasRanniChanneling
-      ? { ...(player.skill.projectedPosition ?? player.position) }
-      : null;
-    const handled = skill_updatePlayerSkillChannel(
-      player,
-      desiredDirection,
-      skillPressed,
-      skillHeld,
-      deltaMs,
-      this.createSkillContext(),
-    );
-
-    if (!wasRanniChanneling || !origin || !projectedBefore) {
-      return handled;
-    }
-
-    if (player.skill.phase !== "channeling") {
-      const outcome = buildRanniProjectionFeedbackGeometry(origin, player.position, Boolean(desiredDirection));
-      this.ranniBlinkFeedback[player.id] = outcome.hasDisplacement
-        ? null
-        : {
-            kind: "failed",
-            position: { ...player.position },
-            elapsedMs: 0,
-          };
-      return handled;
-    }
-
-    if (desiredDirection) {
-      const projectedAfter = player.skill.projectedPosition ?? projectedBefore;
-      const step = buildRanniProjectionFeedbackGeometry(projectedBefore, projectedAfter, true);
-      this.ranniBlinkFeedback[player.id] = step.blocked
-        ? {
-            kind: "blocked",
-            position: { ...projectedAfter },
-            elapsedMs: 0,
-          }
-        : null;
-    }
-    return handled;
   }
 
   private isPlayerImmuneDuringSkillChannel(player: PlayerState): boolean {
@@ -2490,10 +2401,10 @@ export class GameApp {
     this.players = this.createPlayers();
     this.bombs = [];
     this.flames = [];
-    this.magicBeams = [];
+    this.championWorldEffects = [];
     this.crateBreakAnimations = [];
     this.chainReactionFeedback = [];
-    this.ranniBlinkFeedback = createPlayerRecord(() => null);
+    this.championVisuals.reset();
     this.screenShakeMs = 0;
     this.screenShakeAmplitudePx = 0;
     this.powerUpRevealStartedAtMs.clear();
@@ -3230,14 +3141,6 @@ export class GameApp {
     return this.bombs.find((bomb) => tileKey(bomb.tile.x, bomb.tile.y) === key) ?? null;
   }
 
-  private revokeRanniProjectedBombEgress(bombId: number): void {
-    for (const playerId of ALL_PLAYER_IDS) {
-      const player = this.players[playerId];
-      player.skill.projectedBombEgressIds = (player.skill.projectedBombEgressIds ?? [])
-        .filter((projectedBombId) => projectedBombId !== bombId);
-    }
-  }
-
   private tryPushBombAtTile(tile: TileCoord, direction: Direction, distance: number): boolean {
     const bomb = this.findBombAtTile(tile);
     if (!bomb) {
@@ -3269,7 +3172,7 @@ export class GameApp {
     if (movedTiles <= 0) {
       return false;
     }
-    this.revokeRanniProjectedBombEgress(bomb.id);
+    notifyChampionBombRemoved(ALL_PLAYER_IDS.map((playerId) => this.players[playerId]), bomb.id);
     bomb.tile = this.normalizeTile(targetTile);
     bomb.fuseMs = Math.max(KICK_FUSE_MIN_MS, bomb.fuseMs - movedTiles * KICK_FUSE_PENALTY_MS_PER_TILE);
     if (this.flames.some((flame) => flame.tile.x === bomb.tile.x && flame.tile.y === bomb.tile.y)) {
@@ -3277,17 +3180,11 @@ export class GameApp {
     }
     bomb.ownerCanPass = false;
     bomb.bodyEgressPlayerIds = [];
-    for (const activePlayerId of this.activePlayerIds) {
-      const activePlayer = this.players[activePlayerId];
-      if (
-        activePlayer.skill.id === "ranni-ice-blink"
-        && activePlayer.skill.phase === "channeling"
-        && activePlayer.skill.projectedPosition
-        && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)
-      ) {
-        grantRanniProjectedBombEgress(activePlayer, bomb.id);
-      }
-    }
+    notifyChampionBombPlaced(
+      this.activePlayerIds.map((playerId) => this.players[playerId]),
+      bomb.id,
+      (activePlayer) => Boolean(activePlayer.skill.projectedPosition && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)),
+    );
     this.bombKickImpactFeedback = this.bombKickImpactFeedback.filter((effect) => effect.bombId !== bomb.id);
     this.bombKickImpactFeedback.push({ bombId: bomb.id, elapsedMs: 0 });
     if (impactBreakableKey) {
@@ -3566,17 +3463,11 @@ export class GameApp {
       flameRange: player.flameRange,
     };
     this.bombs.push(bomb);
-    for (const activePlayerId of this.activePlayerIds) {
-      const activePlayer = this.players[activePlayerId];
-      if (
-        activePlayer.skill.id === "ranni-ice-blink"
-        && activePlayer.skill.phase === "channeling"
-        && activePlayer.skill.projectedPosition
-        && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)
-      ) {
-        grantRanniProjectedBombEgress(activePlayer, bomb.id);
-      }
-    }
+    notifyChampionBombPlaced(
+      this.activePlayerIds.map((playerId) => this.players[playerId]),
+      bomb.id,
+      (activePlayer) => Boolean(activePlayer.skill.projectedPosition && this.isProjectedPositionOverlappingTile(activePlayer.skill.projectedPosition, bomb.tile)),
+    );
     this.cachedBotDangerMap = null;
     this.nextBombId += 1;
     player.activeBombs += 1;
@@ -3633,7 +3524,7 @@ export class GameApp {
     }
 
     const [bomb] = this.bombs.splice(index, 1);
-    this.revokeRanniProjectedBombEgress(bomb.id);
+    notifyChampionBombRemoved(ALL_PLAYER_IDS.map((playerId) => this.players[playerId]), bomb.id);
     this.players[bomb.ownerId].activeBombs = Math.max(0, this.players[bomb.ownerId].activeBombs - 1);
     this.soundManager.playOneShot("bombExplode");
     this.triggerExplosionScreenShake();
@@ -3818,23 +3709,12 @@ export class GameApp {
       ));
     }
 
-    for (const playerId of this.activePlayerIds) {
-      const feedback = this.ranniBlinkFeedback[playerId];
-      if (!feedback) {
-        continue;
-      }
-      feedback.elapsedMs += deltaMs;
-      if (feedback.elapsedMs >= RANNI_BLINK_FEEDBACK_MS) {
-        this.ranniBlinkFeedback[playerId] = null;
-      }
-    }
+    this.championVisuals.advance(deltaMs, this.activePlayerIds);
 
-    if (this.magicBeams.length > 0) {
-      for (const beam of this.magicBeams) {
-        beam.remainingMs -= deltaMs;
-      }
-      this.magicBeams = this.magicBeams.filter((beam) => beam.remainingMs > 0);
-    }
+    this.championWorldEffects = this.championVisuals.advanceWorldEffects(
+      this.championWorldEffects,
+      deltaMs,
+    );
 
     if (this.suddenDeathClosureEffects.length === 0) {
       return;
@@ -4873,14 +4753,8 @@ export class GameApp {
       return { label: "DOWN", tone: "muted", critical: false, dangerEtaMs: null };
     }
     if (player.skill.phase === "channeling") {
-      if (this.ranniBlinkFeedback[playerId]?.kind === "blocked") {
-        return {
-          label: this.language === "pt" ? "BLOQUEADO" : "BLOCKED",
-          tone: "danger",
-          critical: true,
-          dangerEtaMs: null,
-        };
-      }
+      const championStatus = this.championVisuals.getHudStatus(player, this.language);
+      if (championStatus) return championStatus;
       return { label: "ICE", tone: "success", critical: false, dangerEtaMs: null };
     }
     if (player.flameGuardMs > 0) {
@@ -5115,8 +4989,8 @@ export class GameApp {
       this.drawPlayerSkillPreview(this.players[id]);
     }
 
-    for (const beam of this.magicBeams) {
-      this.drawMagicBeam(beam);
+    for (const effect of this.championWorldEffects) {
+      this.drawChampionWorldEffect(effect);
     }
 
     for (const id of ALL_PLAYER_IDS) {
@@ -5921,283 +5795,22 @@ export class GameApp {
     this.ctx.restore();
   }
 
-  private drawMagicBeam(beam: MagicBeamState): void {
-    const originCenter = {
-      x: beam.origin.x * TILE_SIZE + TILE_SIZE * 0.5,
-      y: beam.origin.y * TILE_SIZE + TILE_SIZE * 0.5,
-    };
-    const lastTile = beam.tiles[beam.tiles.length - 1] ?? beam.origin;
-    const endCenter = {
-      x: lastTile.x * TILE_SIZE + TILE_SIZE * 0.5,
-      y: lastTile.y * TILE_SIZE + TILE_SIZE * 0.5,
-    };
-    const progress = Math.max(0, Math.min(1, beam.remainingMs / NICO_BEAM_DURATION_MS));
-    const glowAlpha = 0.24 + progress * 0.32;
-    const coreAlpha = 0.48 + progress * 0.44;
-    const gradient = this.ctx.createLinearGradient(originCenter.x, originCenter.y, endCenter.x, endCenter.y);
-    gradient.addColorStop(0, `rgba(214, 169, 255, ${glowAlpha})`);
-    gradient.addColorStop(0.2, `rgba(171, 82, 255, ${glowAlpha + 0.08})`);
-    gradient.addColorStop(0.7, `rgba(118, 44, 255, ${glowAlpha + 0.1})`);
-    gradient.addColorStop(1, `rgba(234, 185, 255, ${glowAlpha})`);
-
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "lighter";
-    this.ctx.lineCap = "round";
-    this.ctx.lineJoin = "round";
-
-    this.ctx.strokeStyle = `rgba(153, 70, 255, ${glowAlpha * 0.25})`;
-    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX + TILE_SIZE * 0.7;
-    this.ctx.beginPath();
-    this.ctx.moveTo(originCenter.x, originCenter.y);
-    this.ctx.lineTo(endCenter.x, endCenter.y);
-    this.ctx.stroke();
-
-    this.ctx.strokeStyle = gradient;
-    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX;
-    this.ctx.beginPath();
-    this.ctx.moveTo(originCenter.x, originCenter.y);
-    this.ctx.lineTo(endCenter.x, endCenter.y);
-    this.ctx.stroke();
-
-    this.ctx.strokeStyle = `rgba(255, 241, 255, ${coreAlpha})`;
-    this.ctx.lineWidth = NICO_BEAM_CORE_WIDTH_PX;
-    this.ctx.beginPath();
-    this.ctx.moveTo(originCenter.x, originCenter.y);
-    this.ctx.lineTo(endCenter.x, endCenter.y);
-    this.ctx.stroke();
-
-    for (const tile of beam.tiles) {
-      const x = tile.x * TILE_SIZE;
-      const y = tile.y * TILE_SIZE;
-      this.ctx.fillStyle = `rgba(153, 58, 255, ${0.12 + progress * 0.14})`;
-      this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-      this.ctx.strokeStyle = `rgba(245, 219, 255, ${0.18 + progress * 0.2})`;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9);
-    }
-
-    const orbRadius = TILE_SIZE * (0.18 + (1 - progress) * 0.08);
-    this.ctx.fillStyle = `rgba(245, 230, 255, ${0.5 + progress * 0.25})`;
-    this.ctx.beginPath();
-    this.ctx.arc(originCenter.x, originCenter.y, orbRadius, 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.fillStyle = `rgba(128, 36, 255, ${0.26 + progress * 0.2})`;
-    this.ctx.beginPath();
-    this.ctx.arc(originCenter.x, originCenter.y, TILE_SIZE * 0.42, 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.restore();
+  private drawChampionWorldEffect(effect: ChampionWorldEffect): void {
+    this.championVisuals.drawWorldEffect(this.ctx, effect, TILE_SIZE);
   }
 
   private drawPlayerSkillPreview(player: PlayerState): void {
-    if (!player.active) {
-      return;
-    }
-    const ranniFeedback = this.ranniBlinkFeedback[player.id];
-    if (ranniFeedback) {
-      this.drawRanniBlinkFeedback(ranniFeedback);
-    }
-    if (!player.alive || player.skill.phase !== "channeling") {
-      return;
-    }
-    if (player.skill.id === "ranni-ice-blink") {
-      this.drawRanniBlinkPreview(player);
-      return;
-    }
-    if (player.skill.id === "nico-arcane-beam") {
-      this.drawNicoBeamPreview(player);
-      return;
-    }
-    if (player.skill.id === "crocodilo-emerald-surge") {
-      this.drawCrocodiloSurgePreview(player);
-    }
-  }
-
-  private drawRanniBlinkPreview(player: PlayerState): void {
-    const target = player.skill.projectedPosition ?? player.position;
-    const geometry = buildRanniProjectionFeedbackGeometry(player.position, target, false);
-    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / RANNI_SKILL_CHANNEL_MS));
-    const pulse = this.prefersReducedMotion
-      ? 0.72
-      : 0.66 + Math.sin(this.animationClockMs / 95) * 0.12;
-    const targetRadius = TILE_SIZE * (0.23 + chargeProgress * 0.04);
-
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "lighter";
-    this.ctx.lineCap = "round";
-    this.ctx.lineJoin = "round";
-
-    if (geometry.hasDisplacement) {
-      if (!this.prefersReducedMotion) {
-        this.ctx.setLineDash([5, 5]);
-        this.ctx.lineDashOffset = -(this.animationClockMs / 55) % 10;
-      }
-      this.ctx.strokeStyle = `rgba(143, 224, 255, ${0.28 + chargeProgress * 0.28})`;
-      this.ctx.lineWidth = 3;
-      this.ctx.beginPath();
-      this.ctx.moveTo(geometry.originX, geometry.originY);
-      this.ctx.lineTo(geometry.targetX, geometry.targetY);
-      this.ctx.stroke();
-      this.ctx.setLineDash([]);
-    }
-
-    this.ctx.fillStyle = `rgba(117, 211, 255, ${0.1 + chargeProgress * 0.12})`;
-    this.ctx.beginPath();
-    this.ctx.arc(geometry.targetX, geometry.targetY, targetRadius, 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.strokeStyle = `rgba(226, 249, 255, ${pulse})`;
-    this.ctx.lineWidth = 2;
-    this.ctx.stroke();
-
-    this.ctx.translate(geometry.targetX, geometry.targetY);
-    if (!this.prefersReducedMotion) {
-      this.ctx.rotate(Math.PI * 0.25 + this.animationClockMs / 1_400);
-    } else {
-      this.ctx.rotate(Math.PI * 0.25);
-    }
-    const diamondRadius = TILE_SIZE * 0.13;
-    this.ctx.strokeStyle = `rgba(179, 235, 255, ${0.45 + chargeProgress * 0.3})`;
-    this.ctx.lineWidth = 1.5;
-    this.ctx.strokeRect(-diamondRadius, -diamondRadius, diamondRadius * 2, diamondRadius * 2);
-    this.ctx.restore();
-  }
-
-  private drawRanniBlinkFeedback(feedback: RanniBlinkFeedback): void {
-    const progress = Math.max(0, Math.min(1, feedback.elapsedMs / RANNI_BLINK_FEEDBACK_MS));
-    const alpha = Math.max(0, 1 - progress);
-    const isFailed = feedback.kind === "failed";
-    const radius = this.prefersReducedMotion
-      ? TILE_SIZE * 0.28
-      : TILE_SIZE * (0.24 + progress * (isFailed ? 0.22 : 0.08));
-    const color = isFailed ? "255, 102, 118" : "255, 184, 92";
-    const label = feedback.kind === "failed"
-      ? (this.language === "pt" ? "SEM SALTO" : "NO BLINK")
-      : (this.language === "pt" ? "BLOQUEADO" : "BLOCKED");
-
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "lighter";
-    this.ctx.strokeStyle = `rgba(${color}, ${0.45 + alpha * 0.45})`;
-    this.ctx.lineWidth = isFailed ? 3 : 2;
-    this.ctx.beginPath();
-    this.ctx.arc(feedback.position.x, feedback.position.y, radius, 0, Math.PI * 2);
-    this.ctx.stroke();
-
-    const crossRadius = Math.max(6, radius * 0.52);
-    this.ctx.beginPath();
-    this.ctx.moveTo(feedback.position.x - crossRadius, feedback.position.y - crossRadius);
-    this.ctx.lineTo(feedback.position.x + crossRadius, feedback.position.y + crossRadius);
-    this.ctx.moveTo(feedback.position.x + crossRadius, feedback.position.y - crossRadius);
-    this.ctx.lineTo(feedback.position.x - crossRadius, feedback.position.y + crossRadius);
-    this.ctx.stroke();
-    this.ctx.restore();
-
-    this.ctx.save();
-    this.ctx.textAlign = "center";
-    this.ctx.textBaseline = "bottom";
-    this.ctx.font = "700 7px Inter";
-    this.ctx.lineWidth = 3;
-    this.ctx.strokeStyle = `rgba(16, 12, 24, ${0.78 * alpha})`;
-    this.ctx.strokeText(label, feedback.position.x, feedback.position.y - radius - 4);
-    this.ctx.fillStyle = `rgba(${color}, ${alpha})`;
-    this.ctx.fillText(label, feedback.position.x, feedback.position.y - radius - 4);
-    this.ctx.restore();
-  }
-
-  private drawNicoBeamPreview(player: PlayerState): void {
-    const direction = player.skill.projectedLastMoveDirection ?? player.lastMoveDirection ?? player.direction;
-    const origin = this.getTileFromPosition(player.position);
-    const tiles = collectNicoBeamTiles(
-      origin,
-      direction,
-      this.arena.solid,
-      this.arena.config.grid,
-    );
-    if (tiles.length === 0) {
-      return;
-    }
-    const lastTile = tiles[tiles.length - 1];
-    const originCenter = {
-      x: origin.x * TILE_SIZE + TILE_SIZE * 0.5,
-      y: origin.y * TILE_SIZE + TILE_SIZE * 0.5,
-    };
-    const endCenter = {
-      x: lastTile.x * TILE_SIZE + TILE_SIZE * 0.5,
-      y: lastTile.y * TILE_SIZE + TILE_SIZE * 0.5,
-    };
-    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / NICO_SKILL_CHANNEL_MS));
-    const pulse = 0.55 + Math.sin(this.animationClockMs / 90) * 0.18;
-    const tileAlpha = 0.05 + chargeProgress * 0.1 + pulse * 0.03;
-    const lineAlpha = 0.12 + chargeProgress * 0.18;
-
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "lighter";
-    this.ctx.setLineDash([6, 6]);
-    this.ctx.lineCap = "round";
-    this.ctx.lineJoin = "round";
-    this.ctx.strokeStyle = `rgba(197, 132, 255, ${lineAlpha})`;
-    this.ctx.lineWidth = NICO_BEAM_GLOW_WIDTH_PX * 0.66;
-    this.ctx.beginPath();
-    this.ctx.moveTo(originCenter.x, originCenter.y);
-    this.ctx.lineTo(endCenter.x, endCenter.y);
-    this.ctx.stroke();
-    this.ctx.setLineDash([]);
-
-    for (const tile of tiles) {
-      const x = tile.x * TILE_SIZE;
-      const y = tile.y * TILE_SIZE;
-      this.ctx.fillStyle = `rgba(145, 52, 255, ${tileAlpha})`;
-      this.ctx.fillRect(x + 5, y + 5, TILE_SIZE - 10, TILE_SIZE - 10);
-      this.ctx.strokeStyle = `rgba(245, 226, 255, ${lineAlpha * 0.85})`;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(x + 5.5, y + 5.5, TILE_SIZE - 11, TILE_SIZE - 11);
-    }
-
-    this.ctx.fillStyle = `rgba(245, 235, 255, ${0.18 + chargeProgress * 0.18})`;
-    this.ctx.beginPath();
-    this.ctx.arc(originCenter.x, originCenter.y, TILE_SIZE * (0.2 + chargeProgress * 0.08), 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.restore();
-  }
-
-  private drawCrocodiloSurgePreview(player: PlayerState): void {
-    const origin = this.getTileFromPosition(player.position);
-    const tiles = computeCrocodiloSurgeTiles(origin, this.createSkillContext());
-    if (tiles.length === 0) {
-      return;
-    }
-    const chargeProgress = Math.max(0, Math.min(1, player.skill.castElapsedMs / CROCODILO_SKILL_CHANNEL_MS));
-    const pulse = 0.52 + Math.sin(this.animationClockMs / 100) * 0.16;
-    const centerX = origin.x * TILE_SIZE + TILE_SIZE * 0.5;
-    const centerY = origin.y * TILE_SIZE + TILE_SIZE * 0.5;
-
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "lighter";
-    this.ctx.strokeStyle = `rgba(176, 255, 122, ${0.18 + chargeProgress * 0.24})`;
-    this.ctx.lineWidth = 2;
-
-    for (const tile of tiles) {
-      const x = tile.x * TILE_SIZE;
-      const y = tile.y * TILE_SIZE;
-      const tileCenterX = x + TILE_SIZE * 0.5;
-      const tileCenterY = y + TILE_SIZE * 0.5;
-      this.ctx.fillStyle = `rgba(86, 214, 95, ${0.07 + chargeProgress * 0.1 + pulse * 0.03})`;
-      this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-      this.ctx.strokeStyle = `rgba(221, 255, 192, ${0.12 + chargeProgress * 0.18})`;
-      this.ctx.strokeRect(x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9);
-      this.ctx.beginPath();
-      this.ctx.moveTo(centerX, centerY);
-      this.ctx.lineTo(tileCenterX, tileCenterY);
-      this.ctx.stroke();
-    }
-
-    this.ctx.fillStyle = `rgba(122, 255, 107, ${0.12 + chargeProgress * 0.15})`;
-    this.ctx.beginPath();
-    this.ctx.arc(centerX, centerY, TILE_SIZE * (0.34 + chargeProgress * 0.08), 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.strokeStyle = `rgba(232, 255, 196, ${0.18 + chargeProgress * 0.16})`;
-    this.ctx.beginPath();
-    this.ctx.arc(centerX, centerY, TILE_SIZE * (0.42 + pulse * 0.03), 0, Math.PI * 2);
-    this.ctx.stroke();
-    this.ctx.restore();
+    this.championVisuals.drawSkillPresentation({
+      ctx: this.ctx,
+      player,
+      arena: this.arena,
+      getTile: (position) => this.getTileFromPosition(position),
+      createSkillContext: () => this.createSkillContext(),
+      tileSize: TILE_SIZE,
+      clockMs: this.animationClockMs,
+      reducedMotion: this.prefersReducedMotion,
+      language: this.language,
+    });
   }
 
   private isSpeedSparkTrailActive(player: PlayerState, moving: boolean): boolean {
@@ -6268,7 +5881,6 @@ export class GameApp {
     const y = position.y;
     const renderDirection = deathState?.direction ?? player.direction;
     const alpha = player.alive ? 1 : (deathState ? 1 : 0.35);
-    const activeCharacter = this.getActiveCharacterEntry(player.id);
     const baseSprites = this.getPlayerSprites(player.id);
     this.drawRoundWinnerHalo(player, x, y);
     const idleFrames = baseSprites.idle?.[renderDirection] ?? [];
@@ -6277,10 +5889,7 @@ export class GameApp {
     const attackFrames = baseSprites.attack?.[renderDirection] ?? [];
     const castFrames = this.getAnimationFramesForDirection(baseSprites.cast, renderDirection);
     const deathFrames = this.getAnimationFramesForDirection(baseSprites.death, renderDirection);
-    const prefersRunMovement = activeCharacter.animations?.walk === false && activeCharacter.animations?.run !== false;
-    const movementFrames = prefersRunMovement
-      ? (runFrames.length > 0 ? runFrames : walkFrames)
-      : (walkFrames.length > 0 ? walkFrames : runFrames);
+    const movementFrames = walkFrames.length > 0 ? walkFrames : runFrames;
     const moving = Math.abs(player.velocity.x) > 0.02 || Math.abs(player.velocity.y) > 0.02;
     const deathElapsedMs = deathState
       ? Math.max(0, this.animationClockMs - deathState.startedAtMs)
@@ -6425,117 +6034,16 @@ export class GameApp {
     runFrames: HTMLImageElement[],
     attackFrames: HTMLImageElement[],
   ): { frames: HTMLImageElement[]; frameMs: number; playback: "loop" | "hold" } | null {
-    if (player.skill.id === "nico-arcane-beam") {
-      const exactCastFrames = this.getAnimationFramesForDirection(
-        this.getPlayerSprites(player.id).cast,
-        renderDirection,
-      );
-      const walkFrames = this.getAnimationFramesForDirection(
-        this.getPlayerSprites(player.id).walk,
-        renderDirection,
-      );
-      const idleFrames = this.getAnimationFramesForDirection(
-        this.getPlayerSprites(player.id).idle,
-        renderDirection,
-      );
-      const fallbackFrames = walkFrames.length > 0
-        ? walkFrames
-        : (idleFrames.length > 0 ? idleFrames : runFrames);
-      if (player.skill.phase === "channeling") {
-        const frames = exactCastFrames.length >= 3
-          ? exactCastFrames.slice(0, exactCastFrames.length - 1)
-          : (exactCastFrames.length > 0 ? exactCastFrames : fallbackFrames);
-        if (frames.length === 0) {
-          return null;
-        }
-        return {
-          frames,
-          frameMs: Math.max(SKILL_FRAME_MS, Math.floor(NICO_SKILL_CHANNEL_MS / Math.max(1, frames.length))),
-          playback: "hold",
-        };
-      }
-      if (player.skill.phase === "releasing") {
-        const frames = exactCastFrames.length >= 2
-          ? exactCastFrames.slice(Math.max(0, exactCastFrames.length - 2))
-          : (exactCastFrames.length > 0 ? exactCastFrames : fallbackFrames);
-        if (frames.length === 0) {
-          return null;
-        }
-        return {
-          frames,
-          frameMs: Math.max(60, Math.floor(NICO_SKILL_RELEASE_MS / Math.max(1, frames.length))),
-          playback: "hold",
-        };
-      }
-      return null;
-    }
-    if (player.skill.id === "crocodilo-emerald-surge") {
-      const exactCastFrames = this.getAnimationFramesForDirection(
-        this.getPlayerSprites(player.id).cast,
-        renderDirection,
-      );
-      const idleFrames = this.getAnimationFramesForDirection(
-        this.getPlayerSprites(player.id).idle,
-        renderDirection,
-      );
-      const fallbackFrames = exactCastFrames.length > 0
-        ? exactCastFrames
-        : (attackFrames.length > 0
-          ? attackFrames
-          : (runFrames.length > 0 ? runFrames : idleFrames));
-      if (player.skill.phase === "channeling") {
-        const frames = exactCastFrames.length >= 3
-          ? exactCastFrames.slice(0, exactCastFrames.length - 1)
-          : fallbackFrames;
-        if (frames.length === 0) {
-          return null;
-        }
-        return {
-          frames,
-          frameMs: Math.max(SKILL_FRAME_MS, Math.floor(CROCODILO_SKILL_CHANNEL_MS / Math.max(1, frames.length))),
-          playback: "hold",
-        };
-      }
-      if (player.skill.phase === "releasing") {
-        const frames = exactCastFrames.length >= 2
-          ? exactCastFrames.slice(Math.max(0, exactCastFrames.length - 2))
-          : fallbackFrames;
-        if (frames.length === 0) {
-          return null;
-        }
-        return {
-          frames,
-          frameMs: Math.max(60, Math.floor(CROCODILO_SKILL_RELEASE_MS / Math.max(1, frames.length))),
-          playback: "hold",
-        };
-      }
-      return null;
-    }
-    if (player.skill.phase !== "channeling") {
-      return null;
-    }
-    if (player.skill.id === "ranni-ice-blink" && castFrames.length > 0) {
-      return {
-        frames: castFrames,
-        frameMs: SKILL_FRAME_MS,
-        playback: "hold",
-      };
-    }
-    if (player.skill.id === "killer-bee-wing-dash") {
-      const exactCastFrames = this.getPlayerSprites(player.id).cast?.[renderDirection] ?? [];
-      const frames = exactCastFrames.length > 0
-        ? exactCastFrames
-        : (runFrames.length > 0 ? runFrames : attackFrames);
-      if (frames.length === 0) {
-        return null;
-      }
-      return {
-        frames,
-        frameMs: KILLER_BEE_DASH_FRAME_MS,
-        playback: "loop",
-      };
-    }
-    return null;
+    const sprites = this.getPlayerSprites(player.id);
+    return this.championVisuals.resolveAnimation({
+      player,
+      direction: renderDirection,
+      cycles: { idle: sprites.idle, walk: sprites.walk, cast: sprites.cast },
+      castFrames,
+      runFrames,
+      attackFrames,
+      skillFrameMs: SKILL_FRAME_MS,
+    });
   }
 
   private ensurePlayerDeathAnimationState(player: PlayerState): PlayerDeathAnimationState | null {
@@ -7053,7 +6561,7 @@ export class GameApp {
         tile: flame.tile,
         remainingMs: Math.round(flame.remainingMs),
       })),
-      magicBeams: this.magicBeams.map((beam) => ({
+      magicBeams: this.championWorldEffects.map((beam) => ({
         ownerId: beam.ownerId,
         origin: beam.origin,
         direction: beam.direction,

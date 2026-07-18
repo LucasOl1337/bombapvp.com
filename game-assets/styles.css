@@ -1,0 +1,5 @@
+:root {
+  --game-asset-launcher-match-bay: url("./ui/launcher/launcher-match-bay-v1.webp");
+  --game-asset-hero-arena-sigil: url("./marketing/hero-arena-sigil.webp");
+  --game-asset-hero-match-control: url("./marketing/hero-match-control-v2.webp");
+}

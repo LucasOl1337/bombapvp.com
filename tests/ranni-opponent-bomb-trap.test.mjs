@@ -5,7 +5,7 @@ import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
 import { getBombDecision } from "../src/original-game/Engine/bot-bomb.ts";
 import { getBotPingoDecision } from "../src/original-game/Engine/bot-pingo.ts";
-import { simulateProjectedMovement } from "../src/original-game/ultimate/skill-system.ts";
+import { simulateProjectedMovement } from "../Champions/ranni/skill.ts";
 import { playAdversarialMatch } from "./support/adversarial-bot-league.mjs";
 
 const DIRECTIONS = ["up", "down", "left", "right"];

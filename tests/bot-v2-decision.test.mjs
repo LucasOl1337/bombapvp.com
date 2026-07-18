@@ -68,7 +68,7 @@ function trappedContactContext() {
     botPendingReverseFrames: { 1: 0, 2: 0, 3: 0, 4: 0 },
     canOccupyPosition: () => false,
     evaluateMovementOption: () => ({}),
-    projectKillerBeeDashTarget: (candidate) => ({ ...candidate.position }),
+    projectSkillTarget: (candidate) => ({ ...candidate.position }),
     canMovementOptionAdvance: () => false,
     areOppositeDirections: () => false,
     isPlayerOverlappingTile: (candidate, tile) => candidate.tile.x === tile.x && candidate.tile.y === tile.y,
@@ -102,7 +102,7 @@ function safeDashContext() {
   context.players[2].tile = { x: 4, y: 2 };
   context.players[2].position = { x: 4 * TILE_SIZE + TILE_SIZE / 2, y: 2 * TILE_SIZE + TILE_SIZE / 2 };
   context.dangerMap = new Map();
-  context.projectKillerBeeDashTarget = (candidate, direction) => {
+  context.projectSkillTarget = (candidate, direction) => {
     const delta = {
       up: { x: 0, y: -4 },
       down: { x: 0, y: 4 },
@@ -176,7 +176,7 @@ describe("segurança do bot V2", () => {
 
   it("não usa o dash quando a projeção canônica não consegue avançar", () => {
     const context = safeDashContext();
-    context.projectKillerBeeDashTarget = (candidate) => ({ ...candidate.position });
+    context.projectSkillTarget = (candidate) => ({ ...candidate.position });
 
     expect(getBotV2Decision(context.players[1], context).useSkill).not.toBe(true);
   });

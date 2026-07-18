@@ -4,30 +4,21 @@ import type {
   CharacterSkillId,
   Direction,
   FlameStyle,
-  MagicBeamState,
   PixelCoord,
   PlayerId,
   PlayerState,
   TileCoord,
 } from "../Gameplay/types";
-import {
-  TILE_SIZE,
-} from "../PersonalConfig/config";
 import type { CharacterRosterEntry } from "../Engine/assets";
+import type { ChampionWorldEffect } from "../../../Champions/world-effects";
 
-export const directionDelta: Record<Direction, TileCoord> = {
-  up: { x: 0, y: -1 },
-  down: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 },
-};
-
+/** Engine services exposed to an individual Champion mechanic. */
 export interface SkillContext {
   arena: ArenaState;
   bombs: BombState[];
   players: Record<PlayerId, PlayerState>;
   activePlayerIds: PlayerId[];
-  magicBeams: MagicBeamState[];
+  addChampionWorldEffect: (effect: ChampionWorldEffect) => void;
   selectedCharacterIndex: Record<PlayerId, number>;
   characterRoster: CharacterRosterEntry[];
   canOccupyPosition: (player: PlayerState, position: PixelCoord) => boolean;
@@ -48,13 +39,23 @@ export interface SkillContext {
   ) => void;
   isPositionOverlappingTile: (position: PixelCoord, tile: TileCoord) => boolean;
   clonePlayerState: (player: PlayerState) => PlayerState;
-  tryAbsorbInstantHit: (player: PlayerState, attackerId?: PlayerId | null) => void;
+  tryAbsorbInstantHit: (
+    player: PlayerState,
+    attackerId?: PlayerId | null,
+  ) => void;
   breakCrateAtKey: (key: string) => boolean;
-  addFlame: (tile: TileCoord, durationMs: number, style: FlameStyle, ownerId: PlayerId | null) => void;
+  addFlame: (
+    tile: TileCoord,
+    durationMs: number,
+    style: FlameStyle,
+    ownerId: PlayerId | null,
+  ) => void;
   soundManager: { playOneShot: (name: string) => void };
 }
 
-export function createDefaultPlayerSkillState(skillId: CharacterSkillId | null) {
+export function createDefaultPlayerSkillState(
+  skillId: CharacterSkillId | null,
+) {
   return {
     id: skillId,
     phase: "idle" as const,
@@ -64,87 +65,5 @@ export function createDefaultPlayerSkillState(skillId: CharacterSkillId | null) 
     projectedPosition: null,
     projectedLastMoveDirection: null,
     projectedBombEgressIds: [],
-  };
-}
-
-export function retainOverlappingRanniProjectedBombEgress(
-  player: PlayerState,
-  overlappingBombIds: readonly number[],
-): void {
-  const overlapping = new Set(overlappingBombIds);
-  player.skill.projectedBombEgressIds = (player.skill.projectedBombEgressIds ?? [])
-    .filter((bombId) => overlapping.has(bombId));
-}
-
-export function addMagicBeam(beam: MagicBeamState, context: SkillContext): void {
-  context.magicBeams.push({
-    ...beam,
-    origin: { ...beam.origin },
-    tiles: beam.tiles.map((tile) => ({ ...tile })),
-  });
-}
-
-export function getDashDistancePx(
-  from: PixelCoord,
-  to: PixelCoord,
-  direction: Direction,
-  context: SkillContext,
-): number {
-  const arenaPixelWidth = context.arena.config.grid.width * TILE_SIZE;
-  const arenaPixelHeight = context.arena.config.grid.height * TILE_SIZE;
-  if (direction === "left" || direction === "right") {
-    return Math.abs(context.getWrappedDelta(to.x, from.x, arenaPixelWidth));
-  }
-  return Math.abs(context.getWrappedDelta(to.y, from.y, arenaPixelHeight));
-}
-
-export function hasReachedSkillTarget(
-  position: PixelCoord,
-  target: PixelCoord,
-  context: SkillContext,
-): boolean {
-  const arenaPixelWidth = context.arena.config.grid.width * TILE_SIZE;
-  const arenaPixelHeight = context.arena.config.grid.height * TILE_SIZE;
-  const deltaX = context.getWrappedDelta(target.x, position.x, arenaPixelWidth);
-  const deltaY = context.getWrappedDelta(target.y, position.y, arenaPixelHeight);
-  return Math.hypot(deltaX, deltaY) <= 0.5;
-}
-
-export function simulateProjectedMovement(
-  player: PlayerState,
-  startPosition: PixelCoord,
-  desiredDirection: Direction,
-  projectedLastMoveDirection: Direction | null,
-  deltaMs: number,
-  context: SkillContext,
-): {
-  position: PixelCoord;
-  lastMoveDirection: Direction | null;
-  direction: Direction;
-  projectedBombEgressIds: number[];
-} {
-  const ghost = context.clonePlayerState(player);
-  ghost.position = { ...startPosition };
-  ghost.tile = context.getTileFromPosition(startPosition);
-  ghost.velocity = { x: 0, y: 0 };
-  ghost.lastMoveDirection = projectedLastMoveDirection;
-  const actualDirection = context.resolveMovementDirection(
-    ghost,
-    desiredDirection,
-    deltaMs,
-    ghost.skill.projectedBombEgressIds ?? [],
-  );
-  ghost.direction = actualDirection;
-  context.movePlayerSimulated(ghost, actualDirection, deltaMs, ghost.skill.projectedBombEgressIds ?? []);
-  const overlappingBombIds = (ghost.skill.projectedBombEgressIds ?? []).filter((bombId) => {
-    const bomb = context.bombs.find((item) => item.id === bombId);
-    return Boolean(bomb && context.isPositionOverlappingTile(ghost.position, bomb.tile));
-  });
-  retainOverlappingRanniProjectedBombEgress(ghost, overlappingBombIds);
-  return {
-    position: { ...ghost.position },
-    lastMoveDirection: ghost.lastMoveDirection,
-    direction: ghost.direction,
-    projectedBombEgressIds: [...(ghost.skill.projectedBombEgressIds ?? [])],
   };
 }

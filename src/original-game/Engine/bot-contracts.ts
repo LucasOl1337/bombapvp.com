@@ -47,7 +47,7 @@ export interface BotContext {
   canOccupyPosition: (position: PixelCoord, tile: TileCoord) => boolean;
   evaluateMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
   evaluateProjectedMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
-  projectKillerBeeDashTarget: (player: PlayerState, direction: Direction) => PixelCoord;
+  projectSkillTarget: (player: PlayerState, direction: Direction) => PixelCoord;
   canMovementOptionAdvance: (position: PixelCoord, movementOption: any) => boolean;
   areOppositeDirections: (first: Direction, second: Direction) => boolean;
   isPlayerOverlappingTile: (player: PlayerState, tile: TileCoord) => boolean;

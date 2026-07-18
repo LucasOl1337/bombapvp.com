@@ -2,8 +2,11 @@ import type { Direction, PlayerId, PowerUpType } from "../Gameplay/types";
 import { assetUrl } from "./asset-url";
 import type { ArenaThemeDefinition } from "../Arenas/arena-theme-library";
 import { getArenaThemeById, resolveArenaTheme } from "../Arenas/arena-theme-library";
-import { CHARACTER_ROSTER_MANIFEST } from "../Characters/Animations/character-roster-manifest";
+import { listCharacterDefinitions } from "../../../Champions";
+import type { ChampionAssets } from "../../../Champions/assets";
+import { getChampionAssets } from "../../../Champions/assets-catalog";
 import { listPowerUpDefinitions } from "../Gameplay/powerups";
+import { resolveGameAsset } from "../../../game-assets";
 
 export interface DirectionalSprites {
   up: HTMLImageElement | null;
@@ -21,18 +24,10 @@ export interface DirectionalSprites {
 export interface CharacterRosterEntry {
   id: string;
   name: string;
-  size: { width: number; height: number } | null;
+  size: Readonly<{ width: number; height: number }> | null;
   selectionIndex?: number;
-  assetVersion?: string;
+  assets?: ChampionAssets;
   sprites?: DirectionalSprites;
-  animations?: {
-    idle?: boolean;
-    walk?: boolean;
-    run?: boolean;
-    cast?: boolean;
-    attack?: boolean;
-    death?: boolean;
-  };
   pinned?: boolean;
   defaultSlot?: PlayerId;
   order?: number;
@@ -65,28 +60,6 @@ export interface GameAssets {
   powerUps: Partial<Record<PowerUpType, HTMLImageElement | null>>;
 }
 
-export interface CharacterManifestEntry {
-  id: string;
-  name: string;
-  size?: { width: number; height: number } | null;
-  animations?: {
-    idle?: boolean;
-    walk?: boolean;
-    run?: boolean;
-    cast?: boolean;
-    attack?: boolean;
-    death?: boolean;
-  };
-  pinned?: boolean;
-  defaultSlot?: PlayerId;
-  order?: number;
-}
-
-export interface CharacterManifestPayload {
-  generatedAt?: string;
-  characters?: CharacterManifestEntry[];
-}
-
 function createEmptyDirectionalFrameSet(): Record<Direction, HTMLImageElement[]> {
   return { up: [], down: [], left: [], right: [] };
 }
@@ -104,14 +77,6 @@ function createEmptyDirectionalSprites(): DirectionalSprites {
     attack: createEmptyDirectionalFrameSet(),
     death: createEmptyDirectionalFrameSet(),
   };
-}
-
-function appendAssetVersion(path: string, assetVersion?: string): string {
-  if (!assetVersion) {
-    return path;
-  }
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}v=${encodeURIComponent(assetVersion)}`;
 }
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -182,77 +147,26 @@ async function loadDirectionalSprites(prefix: string, baseVariants: string[] = [
   };
 }
 
-async function loadStaticDirectionalSprites(
-  basePath: string,
-  animations?: {
-    idle?: boolean;
-    walk?: boolean;
-    run?: boolean;
-    cast?: boolean;
-    attack?: boolean;
-    death?: boolean;
-  },
-  assetVersion?: string,
-): Promise<DirectionalSprites> {
-  const loadOptionalCycle = (
-    animationName: "idle" | "walk" | "run" | "cast" | "attack" | "death",
-  ): Promise<Record<Direction, HTMLImageElement[]>> => (
-    animations?.[animationName]
-      ? loadCharacterCycle(basePath, animationName, assetVersion)
-      : Promise.resolve(createEmptyDirectionalFrameSet())
-  );
-  const [
-    down,
-    right,
-    up,
-    left,
-    idleFrames,
-    walkFrames,
-    runFrames,
-    castFrames,
-    attackFrames,
-    deathFrames,
-  ] = await Promise.all([
-    loadImage(appendAssetVersion(`${basePath}/south.png`, assetVersion)),
-    loadImage(appendAssetVersion(`${basePath}/east.png`, assetVersion)),
-    loadImage(appendAssetVersion(`${basePath}/north.png`, assetVersion)),
-    loadImage(appendAssetVersion(`${basePath}/west.png`, assetVersion)),
-    loadOptionalCycle("idle"),
-    loadOptionalCycle("walk"),
-    loadOptionalCycle("run"),
-    loadOptionalCycle("cast"),
-    loadOptionalCycle("attack"),
-    loadOptionalCycle("death"),
-  ]);
-  return {
-    up,
-    down,
-    left,
-    right,
-    idle: idleFrames,
-    walk: {
-      up: walkFrames.up.length > 0 ? walkFrames.up : runFrames.up,
-      down: walkFrames.down.length > 0 ? walkFrames.down : runFrames.down,
-      left: walkFrames.left.length > 0 ? walkFrames.left : runFrames.left,
-      right: walkFrames.right.length > 0 ? walkFrames.right : runFrames.right,
-    },
-    run: runFrames,
-    cast: castFrames,
-    attack: attackFrames,
-    death: deathFrames,
-  };
-}
-
 async function loadWalkCycle(prefix: string): Promise<Record<Direction, HTMLImageElement[]>> {
   return loadCycleFromTemplate((suffix, index) => `${prefix}-walk-${suffix}-${index}.png`);
 }
 
-async function loadCharacterCycle(
-  basePath: string,
-  animationName: "idle" | "walk" | "run" | "cast" | "attack" | "death",
-  assetVersion?: string,
-): Promise<Record<Direction, HTMLImageElement[]>> {
-  return loadCycleFromTemplate((suffix, index) => appendAssetVersion(`${basePath}/${animationName}-${suffix}-${index}.png`, assetVersion));
+async function loadChampionSprites(assets: ChampionAssets): Promise<DirectionalSprites> {
+  const loadFrames = async (urls: readonly string[]) => (await Promise.all(urls.map(loadImage))).filter((image): image is HTMLImageElement => image !== null);
+  const loadSet = async (set: Readonly<Record<Direction, readonly string[]>>) => ({
+    up: await loadFrames(set.up), down: await loadFrames(set.down),
+    left: await loadFrames(set.left), right: await loadFrames(set.right),
+  });
+  const [up, down, left, right, idle, walk, run, cast, attack, death] = await Promise.all([
+    loadImage(assets.staticSprites.up), loadImage(assets.staticSprites.down),
+    loadImage(assets.staticSprites.left), loadImage(assets.staticSprites.right),
+    loadSet(assets.animations.idle), loadSet(assets.animations.walk), loadSet(assets.animations.run),
+    loadSet(assets.animations.cast), loadSet(assets.animations.attack), loadSet(assets.animations.death),
+  ]);
+  return { up, down, left, right, idle, walk: {
+    up: walk.up.length ? walk.up : run.up, down: walk.down.length ? walk.down : run.down,
+    left: walk.left.length ? walk.left : run.left, right: walk.right.length ? walk.right : run.right,
+  }, run, cast, attack, death };
 }
 
 async function loadCycleFromTemplate(
@@ -283,18 +197,6 @@ async function loadCycleFromTemplate(
   return walk;
 }
 
-async function loadCharacterManifest(): Promise<CharacterManifestPayload> {
-  try {
-    const response = await fetch(assetUrl("/Assets/Characters/Animations/manifest.json"), { cache: "no-store" });
-    if (!response.ok) {
-      return {};
-    }
-    return await response.json() as CharacterManifestPayload;
-  } catch {
-    return {};
-  }
-}
-
 function hasLoadedSpriteImage(sprites: DirectionalSprites): boolean {
   if (sprites.up || sprites.down || sprites.left || sprites.right) {
     return true;
@@ -310,45 +212,17 @@ function hasLoadedSpriteImage(sprites: DirectionalSprites): boolean {
   ].some((framesByDirection) => Object.values(framesByDirection).some((frames) => frames.length > 0));
 }
 
-export function composeCharacterRoster(
-  manifestPayload: CharacterManifestPayload = {},
-): CharacterRosterEntry[] {
-  const publicManifestEntries = Array.isArray(manifestPayload.characters) ? manifestPayload.characters : [];
-  const canonicalIds = new Set(CHARACTER_ROSTER_MANIFEST.map(({ id }) => id));
-  const physicalEntryById = new Map<string, CharacterManifestEntry>();
-  for (const entry of publicManifestEntries) {
-    if (!canonicalIds.has(entry.id) || physicalEntryById.has(entry.id)) continue;
-    physicalEntryById.set(entry.id, entry);
-  }
-  const assetVersion = physicalEntryById.size > 0 ? manifestPayload.generatedAt ?? undefined : undefined;
-  const sortedEntries = [...CHARACTER_ROSTER_MANIFEST]
-    .sort((left, right) => {
-      const orderA = typeof left.order === "number" ? left.order : Number.MAX_SAFE_INTEGER;
-      const orderB = typeof right.order === "number" ? right.order : Number.MAX_SAFE_INTEGER;
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-      return left.name.localeCompare(right.name);
-    });
-
-  return sortedEntries.map((entry, selectionIndex) => {
-    const physicalEntry = physicalEntryById.get(entry.id);
-    return {
-      id: entry.id,
-      name: entry.name,
-      size: physicalEntry?.size ?? null,
-      selectionIndex,
-      pinned: entry.defaultSlot !== undefined,
-      ...(assetVersion === undefined ? {} : { assetVersion }),
-      ...(physicalEntry?.animations === undefined ? {} : { animations: physicalEntry.animations }),
-      ...(entry.defaultSlot === undefined ? {} : { defaultSlot: entry.defaultSlot }),
-      ...(entry.order === undefined ? {} : { order: entry.order }),
-    } satisfies CharacterRosterEntry;
-  });
+export function composeCharacterRoster(): CharacterRosterEntry[] {
+  return listCharacterDefinitions().map((entry, selectionIndex) => ({
+    id: entry.id, name: entry.name, size: getChampionAssets(entry.id).size, assets: getChampionAssets(entry.id),
+    selectionIndex, pinned: entry.roster.defaultSlot !== undefined,
+    ...(entry.roster.defaultSlot === undefined ? {} : { defaultSlot: entry.roster.defaultSlot }),
+    order: entry.roster.order,
+  }));
 }
 
 async function loadCharacterRoster(): Promise<CharacterRosterEntry[]> {
-  return composeCharacterRoster(await loadCharacterManifest());
+  return composeCharacterRoster();
 }
 
 function getFallbackSpritesForRosterEntry(
@@ -384,11 +258,7 @@ function createCharacterSpriteLoader(
       return cached;
     }
 
-    const loaded = loadStaticDirectionalSprites(
-      assetUrl(`/Assets/Characters/Animations/${entry.id}`),
-      entry.animations,
-      entry.assetVersion,
-    ).then((sprites) => {
+    const loaded = (entry.assets ? loadChampionSprites(entry.assets) : Promise.resolve(createEmptyDirectionalSprites())).then((sprites) => {
       const fallback = getFallbackSpritesForRosterEntry(entry, playerSprites);
       return hasLoadedSpriteImage(sprites)
         ? fillMissingStaticDirections(sprites, fallback)
@@ -410,33 +280,33 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player2")),
       loadCharacterRoster(),
       arenaTilePaths
-        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.base), assetUrl("/Assets/TileMaps/floor-base.png")])
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.base), resolveGameAsset("arena.shared.floor.base")])
         : Promise.resolve(null),
       arenaTilePaths
-        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.lane), assetUrl("/Assets/TileMaps/floor-alt.png")])
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.lane), resolveGameAsset("arena.shared.floor.lane")])
         : Promise.resolve(null),
       arenaTilePaths
-        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.spawn), assetUrl("/Assets/TileMaps/floor-spawn.png")])
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.spawn), resolveGameAsset("arena.shared.floor.spawn")])
         : Promise.resolve(null),
       arenaTilePaths
-        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.wall), assetUrl("/Assets/TileMaps/wall.png")])
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wall), resolveGameAsset("arena.shared.wall")])
         : Promise.resolve(null),
       arenaTilePaths
-        ? loadFirstAvailableImage([assetUrl(arenaTilePaths.crate), assetUrl("/Assets/TileMaps/crate.png")])
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crate), resolveGameAsset("gameplay.crate.sprite")])
         : Promise.resolve(null),
-      loadImage(assetUrl("/Assets/TileMaps/crate-break-0.png")),
-      loadImage(assetUrl("/Assets/TileMaps/crate-break-1.png")),
-      loadImage(assetUrl("/Assets/TileMaps/crate-break-2.png")),
-      loadImage(assetUrl("/Assets/TileMaps/crate-break-3.png")),
-      loadImage(assetUrl("/Assets/VisualEffects/bomb.png")),
-      loadImage(assetUrl("/Assets/VisualEffects/flame.png")),
-      loadImage(assetUrl("/Assets/VisualEffects/speed-spark-trail.png")),
-      loadImage(assetUrl("/Assets/UiLayouts/arena-victory-emblem.webp")),
-      loadImage(assetUrl("/Assets/UiLayouts/arena-stalemate-emblem.png")),
+      loadImage(resolveGameAsset("gameplay.crate.break.0")),
+      loadImage(resolveGameAsset("gameplay.crate.break.1")),
+      loadImage(resolveGameAsset("gameplay.crate.break.2")),
+      loadImage(resolveGameAsset("gameplay.crate.break.3")),
+      loadImage(resolveGameAsset("gameplay.bomb.sprite")),
+      loadImage(resolveGameAsset("gameplay.bomb.flame")),
+      loadImage(resolveGameAsset("effect.movement.speed-spark-trail")),
+      loadImage(resolveGameAsset("ui.arena.victory-emblem")),
+      loadImage(resolveGameAsset("ui.arena.stalemate-emblem")),
     ]),
     Promise.all(powerUpDefinitions.map(async (definition) => ([
       definition.type,
-      await loadImage(assetUrl(definition.asset.path)),
+      await loadImage(resolveGameAsset(definition.asset.id)),
     ] as const))),
   ]);
   const [

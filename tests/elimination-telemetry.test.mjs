@@ -6,7 +6,7 @@ import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.
 import {
   CROCODILO_SURGE_DURATION_MS,
   fireCrocodiloEmeraldSurge,
-} from "../src/original-game/Characters/CustomMechanics/crocodilo-skill.ts";
+} from "../Champions/crocodilo-arcano/skill.ts";
 
 function arena(playerTwoTile = { x: 5, y: 5 }) {
   const border = [];
