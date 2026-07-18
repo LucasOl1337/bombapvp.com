@@ -5,7 +5,7 @@
 | Caminho | Conteudo |
 | --- | --- |
 | `src/app/` | Estado, catalogo e interface do launcher. |
-| `Champions/` | Modulos verticais e assets privados dos personagens, incluindo Nix Ember no roster ao vivo e seus pacotes-fonte de laboratorio. Consulte `Champions/README.md`. |
+| `Champions/` | Modulos verticais e assets privados dos personagens, incluindo Nix Ember no roster ao vivo e seus pacotes-fonte de laboratorio. Consulte `Champions/README.md` e `docs/champion-sprite-pipeline.md`. |
 | `src/matches/` | Contrato puro de launch request e adaptador de URL entre launcher e arena. |
 | `src/lab/` | Cliente, observacao, runtime, telemetria e adapters do Laboratorio. |
 | `src/original-game/` | Motor original, bots e regras genericas da arena; consome Champions por adapters. |
@@ -28,6 +28,7 @@
 | --- | --- |
 | `README.md` | SOMENTE ao chegar sem contexto do produto ou da stack. |
 | `docs/gameplay.md` | SOMENTE ao alterar launcher, selecao, arena, bots, personagens ou assets. |
+| `docs/champion-sprite-pipeline.md` | ANTES de criar/regenerar/plugar personagem (sprites, direcoes, alpha, plant, ultimate, roster). |
 | `docs/design-system.md` | Ao criar ou refatorar qualquer interface, HUD, animacao ou componente visual. |
 | `docs/release.md` | SOMENTE ao alterar build, dominios ou publicacao. |
 | `DocsDev/` | SOMENTE para consulta historica pontual; nao use como fonte de verdade. |

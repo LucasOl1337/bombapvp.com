@@ -53,10 +53,12 @@ Pacotes experimentais que pertencem inequivocamente a um personagem também fica
 
 ## Adicionando um personagem
 
+**Antes de gerar arte ou frames**, leia `docs/champion-sprite-pipeline.md` (direções reais, alpha/transparente, plant sem bomba, naming do loader, anti-padrões do Nix Ember).
+
 1. Crie `Champions/<slug>/` usando a estrutura acima.
-2. Coloque retrato e animações dentro de `assets/`.
+2. Coloque retrato e animações dentro de `assets/` (PNG com fundo transparente; 4 dirs reais).
 3. Declare a definição e o bundle de assets.
-4. Implemente adapters de skill e visuals na própria pasta.
+4. Implemente adapters de skill e visuals na própria pasta (uma ultimate, meta de bombas).
 5. Registre a definição em `catalog.ts` e os adapters nos runtimes.
 6. Adicione testes do contrato, contagem de assets e comportamento específico.
 7. Confirme que nenhuma busca por nome/ID do novo personagem aparece no engine genérico.
