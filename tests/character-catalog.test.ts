@@ -93,6 +93,42 @@ describe("character catalog", () => {
         order: 5,
         defaultSlot: undefined,
       },
+      {
+        id: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
+        name: "Mirelle",
+        order: 6,
+        defaultSlot: undefined,
+      },
+      {
+        id: "b2c3d4e5-f6a7-4890-b123-456789abcde2",
+        name: "Bram",
+        order: 7,
+        defaultSlot: undefined,
+      },
+      {
+        id: "c3d4e5f6-a7b8-4901-c234-56789abcdef3",
+        name: "Zephyr",
+        order: 8,
+        defaultSlot: undefined,
+      },
+      {
+        id: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+        name: "Hexa",
+        order: 9,
+        defaultSlot: undefined,
+      },
+      {
+        id: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
+        name: "Aegis",
+        order: 10,
+        defaultSlot: undefined,
+      },
+      {
+        id: "f6a7b8c9-d0e1-4234-f567-89abcdef0123",
+        name: "Lumen",
+        order: 11,
+        defaultSlot: undefined,
+      },
     ]);
   });
 
@@ -146,6 +182,54 @@ describe("character catalog", () => {
         label: "Character 6",
         description: "Clockwork ballerina · Command: Pull",
       },
+      {
+        id: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
+        name: "Mirelle",
+        assetPath: expect.stringContaining("/Champions/mirelle/assets/portrait.png"),
+        accent: "blue",
+        label: "Character 7",
+        description: "Tide siren · Tide Swap",
+      },
+      {
+        id: "b2c3d4e5-f6a7-4890-b123-456789abcde2",
+        name: "Bram",
+        assetPath: expect.stringContaining("/Champions/bram/assets/portrait.png"),
+        accent: "gold",
+        label: "Character 8",
+        description: "Stone golem · Seismic Crack",
+      },
+      {
+        id: "c3d4e5f6-a7b8-4901-c234-56789abcdef3",
+        name: "Zephyr",
+        assetPath: expect.stringContaining("/Champions/zephyr/assets/portrait.png"),
+        accent: "green",
+        label: "Character 9",
+        description: "Wind spirit · Gale Scatter",
+      },
+      {
+        id: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+        name: "Hexa",
+        assetPath: expect.stringContaining("/Champions/hexa/assets/portrait.png"),
+        accent: "red",
+        label: "Character 10",
+        description: "Fuse witch · Fuse Hex",
+      },
+      {
+        id: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
+        name: "Aegis",
+        assetPath: expect.stringContaining("/Champions/aegis/assets/portrait.png"),
+        accent: "gold",
+        label: "Character 11",
+        description: "Bastion knight · Bastion Pulse",
+      },
+      {
+        id: "f6a7b8c9-d0e1-4234-f567-89abcdef0123",
+        name: "Lumen",
+        assetPath: expect.stringContaining("/Champions/lumen/assets/portrait.png"),
+        accent: "blue",
+        label: "Character 12",
+        description: "Light fairy · Flash Step",
+      },
     ]);
   });
 
@@ -183,6 +267,36 @@ describe("character catalog", () => {
         name: "Pendula",
         order: 5,
       },
+      {
+        id: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
+        name: "Mirelle",
+        order: 6,
+      },
+      {
+        id: "b2c3d4e5-f6a7-4890-b123-456789abcde2",
+        name: "Bram",
+        order: 7,
+      },
+      {
+        id: "c3d4e5f6-a7b8-4901-c234-56789abcdef3",
+        name: "Zephyr",
+        order: 8,
+      },
+      {
+        id: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+        name: "Hexa",
+        order: 9,
+      },
+      {
+        id: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
+        name: "Aegis",
+        order: 10,
+      },
+      {
+        id: "f6a7b8c9-d0e1-4234-f567-89abcdef0123",
+        name: "Lumen",
+        order: 11,
+      },
     ]);
   });
 
@@ -217,6 +331,36 @@ describe("character catalog", () => {
         characterId: "c4a8e2f1-9b3d-4c7a-8e5f-1a2b3c4d5e6f",
         skillId: "pendula-command-shockwave",
         cooldownMs: 7_500,
+      },
+      {
+        characterId: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
+        skillId: "mirelle-tide-swap",
+        cooldownMs: 8_000,
+      },
+      {
+        characterId: "b2c3d4e5-f6a7-4890-b123-456789abcde2",
+        skillId: "bram-seismic-crack",
+        cooldownMs: 9_000,
+      },
+      {
+        characterId: "c3d4e5f6-a7b8-4901-c234-56789abcdef3",
+        skillId: "zephyr-gale-scatter",
+        cooldownMs: 7_500,
+      },
+      {
+        characterId: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+        skillId: "hexa-fuse-hex",
+        cooldownMs: 8_000,
+      },
+      {
+        characterId: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
+        skillId: "aegis-bastion-pulse",
+        cooldownMs: 8_500,
+      },
+      {
+        characterId: "f6a7b8c9-d0e1-4234-f567-89abcdef0123",
+        skillId: "lumen-flash-step",
+        cooldownMs: 7_000,
       },
     ]);
   });
