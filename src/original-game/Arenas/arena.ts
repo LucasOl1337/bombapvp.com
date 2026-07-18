@@ -79,7 +79,10 @@ export function buildArenaRuntimeConfig(definition: ArenaDefinition): ArenaRunti
   const solid = new Set(normalized.tiles.solid);
   const suddenDeathPath = buildSuddenDeathPath(normalized.grid.width, normalized.grid.height, solid);
   const spawnMap = ALL_PLAYER_IDS.reduce((result, playerId) => {
-    const spawn = normalized.spawns.find((entry) => entry.playerId === playerId) ?? normalized.spawns[0];
+    const spawn =
+      normalized.spawns.find((entry) => entry.playerId === playerId) ??
+      normalized.spawns[0] ??
+      { playerId, direction: "down" as const, tile: { x: 1, y: 1 } };
     result[playerId] = {
       playerId,
       direction: spawn.direction,
@@ -249,7 +252,10 @@ function sanitizeTileList(
 function normalizeSpawns(spawns: ArenaSpawnDefinition[], width: number, height: number): ArenaSpawnDefinition[] {
   const defaults = createDefaultSpawns(width, height);
   const resolved = ALL_PLAYER_IDS.map((playerId, index) => {
-    const input = spawns.find((spawn) => spawn.playerId === playerId) ?? defaults[index];
+    const input =
+      spawns.find((spawn) => spawn.playerId === playerId) ??
+      defaults[index] ??
+      { playerId, direction: "down" as const, tile: { x: 1, y: 1 } };
     return {
       playerId,
       direction: input.direction,
@@ -356,9 +362,12 @@ function createPowerUpsFromBreakables(breakable: Set<string>, config: ArenaRunti
 
   const dropPairCount = Math.floor(pairEntries.length * BREAKABLE_POWERUP_DROP_RATE);
   for (let index = 0; index < dropPairCount; index += 1) {
-    const { pairKey, pair } = pairEntries[index];
+    const entry = pairEntries[index];
+    if (!entry) continue;
+    const { pairKey, pair } = entry;
     const typeIndex = Math.floor(hashToUnit(`${distributionSeed}|${pairKey}|type`) * dropPool.length);
-    const type = dropPool[Math.max(0, Math.min(dropPool.length - 1, typeIndex))];
+    const type = dropPool[Math.max(0, Math.min(dropPool.length - 1, typeIndex))] ?? dropPool[0];
+    if (!type) continue;
     powerUps.push({
       tile: { ...pair.tile },
       type,
@@ -564,6 +573,9 @@ function hasReachableOpenField(definition: ArenaDefinition): boolean {
   }
 
   const start = openTiles[0];
+  if (!start) {
+    return false;
+  }
   const visited = new Set<string>([tileKey(start.x, start.y)]);
   const queue: TileCoord[] = [start];
   while (queue.length > 0) {
