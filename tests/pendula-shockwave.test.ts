@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { ArenaState } from "../src/original-game/Gameplay/types";
+import type { ArenaState, PlayerState } from "../src/original-game/Gameplay/types";
 import type { SkillContext } from "../src/original-game/ultimate/shared";
 import {
-  firePendulaShockwave,
-  tryPushBombAway,
+  firePendulaPull,
+  pullPlayerToward,
+  PENDULA_SKILL_CHANNEL_MS,
 } from "../Champions/pendula/skill";
 import { PENDULA_SKILL_ID } from "../Champions/pendula/definition";
 import { createDefaultPlayerSkillState } from "../src/original-game/ultimate/shared";
 
-function emptyArena(width = 7, height = 7): ArenaState {
+function emptyArena(width = 9, height = 9): ArenaState {
   return {
     solid: new Set(),
     breakable: new Set(),
@@ -18,28 +19,41 @@ function emptyArena(width = 7, height = 7): ArenaState {
   } as unknown as ArenaState;
 }
 
-function makeContext(overrides: Partial<SkillContext> & { bombs: SkillContext["bombs"] }): SkillContext {
-  const arena = emptyArena();
-  const player = {
-    id: 1 as const,
+function makePlayer(
+  id: number,
+  tileX: number,
+  tileY: number,
+): PlayerState {
+  return {
+    id: id as PlayerState["id"],
     alive: true,
-    position: { x: 32 * 3 + 16, y: 32 * 3 + 16 },
-    tile: { x: 3, y: 3 },
-    direction: "down" as const,
-    lastMoveDirection: "down" as const,
+    position: { x: 32 * tileX + 16, y: 32 * tileY + 16 },
+    tile: { x: tileX, y: tileY },
+    direction: "down",
+    lastMoveDirection: "down",
     velocity: { x: 0, y: 0 },
     skill: {
       ...createDefaultPlayerSkillState(PENDULA_SKILL_ID),
-      projectedLastMoveDirection: "down" as const,
+      projectedLastMoveDirection: "down",
     },
-  };
+  } as unknown as PlayerState;
+}
+
+function makeContext(
+  players: Record<number, PlayerState>,
+  overrides: Partial<SkillContext> = {},
+): SkillContext {
+  const arena = emptyArena();
+  const activePlayerIds = Object.keys(players).map(Number) as SkillContext["activePlayerIds"];
   const base = {
     arena,
-    bombs: overrides.bombs,
-    players: { 1: player, 2: player, 3: player, 4: player } as unknown as SkillContext["players"],
-    activePlayerIds: [1] as const,
+    bombs: [] as SkillContext["bombs"],
+    players: players as unknown as SkillContext["players"],
+    activePlayerIds,
     addChampionWorldEffect: (() => {}) as SkillContext["addChampionWorldEffect"],
-    selectedCharacterIndex: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    selectedCharacterIndex: Object.fromEntries(
+      activePlayerIds.map((id) => [id, 0]),
+    ) as SkillContext["selectedCharacterIndex"],
     characterRoster: [],
     canOccupyPosition: () => true,
     getTileFromPosition: (position: { x: number; y: number }) => ({
@@ -56,95 +70,68 @@ function makeContext(overrides: Partial<SkillContext> & { bombs: SkillContext["b
     ) =>
       Math.floor(position.x / 32) === tile.x &&
       Math.floor(position.y / 32) === tile.y,
-    clonePlayerState: (p: typeof player) => structuredClone(p),
+    clonePlayerState: (p: PlayerState) => structuredClone(p),
     tryAbsorbInstantHit: () => {},
     breakCrateAtKey: () => false,
     addFlame: () => {},
     soundManager: { playOneShot: () => {} },
   };
-  return { ...base, ...overrides, bombs: overrides.bombs } as unknown as SkillContext;
+  return { ...base, ...overrides } as unknown as SkillContext;
 }
 
-describe("Pendula Command: Shockwave", () => {
-  it("pushes a bomb one tile away from the epicenter", () => {
-    const bombs = [
-      {
-        id: 10,
-        ownerId: 1 as const,
-        tile: { x: 4, y: 3 },
-        fuseMs: 2000,
-        ownerCanPass: true,
-        flameRange: 2,
-      },
-    ];
-    const context = makeContext({ bombs });
-    const moved = tryPushBombAway(10, { x: 3, y: 3 }, "down", context);
+describe("Pendula Command: Pull", () => {
+  it("uses a 300ms channel (3× faster than the old 900ms cast)", () => {
+    expect(PENDULA_SKILL_CHANNEL_MS).toBe(300);
+  });
+
+  it("pulls an enemy adjacent to Pendula", () => {
+    const pendula = makePlayer(1, 4, 4);
+    const enemy = makePlayer(2, 7, 4);
+    const context = makeContext({ 1: pendula, 2: enemy });
+    const reserved = new Set<string>(["4,4"]);
+    reserved.add("7,4");
+    reserved.delete("7,4");
+    const moved = pullPlayerToward(enemy, { x: 4, y: 4 }, context, reserved);
     expect(moved).toBe(true);
-    expect(bombs[0]!.tile).toEqual({ x: 5, y: 3 });
-    expect(bombs[0]!.ownerCanPass).toBe(false);
+    expect(enemy.tile).toEqual({ x: 5, y: 4 });
   });
 
-  it("does not push into solid tiles", () => {
-    const bombs = [
-      {
-        id: 11,
-        ownerId: 1 as const,
-        tile: { x: 4, y: 3 },
-        fuseMs: 2000,
-        ownerCanPass: true,
-        flameRange: 2,
-      },
-    ];
-    const context = makeContext({ bombs });
-    context.arena.solid.add("5,3");
-    expect(tryPushBombAway(11, { x: 3, y: 3 }, "down", context)).toBe(false);
-    expect(bombs[0]!.tile).toEqual({ x: 4, y: 3 });
+  it("does not pull through solid tiles", () => {
+    const pendula = makePlayer(1, 4, 4);
+    const enemy = makePlayer(2, 7, 4);
+    const context = makeContext({ 1: pendula, 2: enemy });
+    context.arena.solid.add("6,4");
+    context.arena.solid.add("5,4");
+    const reserved = new Set<string>(["4,4"]);
+    expect(pullPlayerToward(enemy, { x: 4, y: 4 }, context, reserved)).toBe(
+      false,
+    );
+    expect(enemy.tile).toEqual({ x: 7, y: 4 });
   });
 
-  it("fires a radial scatter and spawns a visual ring effect", () => {
+  it("fires a radial pull and spawns an inward ring effect", () => {
     const effects: unknown[] = [];
-    const bombs = [
+    const pendula = makePlayer(1, 4, 4);
+    const near = makePlayer(2, 6, 4);
+    const far = makePlayer(3, 4, 7);
+    const outOfRange = makePlayer(4, 0, 0);
+    const context = makeContext(
+      { 1: pendula, 2: near, 3: far, 4: outOfRange },
       {
-        id: 1,
-        ownerId: 1 as const,
-        tile: { x: 3, y: 2 },
-        fuseMs: 1500,
-        ownerCanPass: true,
-        flameRange: 1,
+        addChampionWorldEffect: (effect) => {
+          effects.push(effect);
+        },
       },
-      {
-        id: 2,
-        ownerId: 2 as const,
-        tile: { x: 5, y: 3 },
-        fuseMs: 1500,
-        ownerCanPass: true,
-        flameRange: 1,
-      },
-      {
-        id: 3,
-        ownerId: 1 as const,
-        tile: { x: 0, y: 0 },
-        fuseMs: 1500,
-        ownerCanPass: true,
-        flameRange: 1,
-      },
-    ];
-    const context = makeContext({
-      bombs,
-      addChampionWorldEffect: (effect) => {
-        effects.push(effect);
-      },
-    });
-    const player = context.players[1]!;
-    const pushed = firePendulaShockwave(player, context);
-    expect(pushed).toBe(2);
-    expect(bombs[0]!.tile).toEqual({ x: 3, y: 1 });
-    expect(bombs[1]!.tile).toEqual({ x: 6, y: 3 });
-    expect(bombs[2]!.tile).toEqual({ x: 0, y: 0 });
+    );
+    const pulled = firePendulaPull(pendula, context);
+    expect(pulled).toBe(2);
+    expect(near.tile).toEqual({ x: 5, y: 4 });
+    expect(far.tile).toEqual({ x: 4, y: 5 });
+    expect(outOfRange.tile).toEqual({ x: 0, y: 0 });
     expect(effects).toHaveLength(1);
     expect(effects[0]).toMatchObject({
-      kind: "pendula-shockwave",
-      origin: { x: 3, y: 3 },
+      kind: "pendula-pull",
+      origin: { x: 4, y: 4 },
     });
   });
 });

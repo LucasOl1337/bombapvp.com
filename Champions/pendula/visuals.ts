@@ -3,24 +3,16 @@ import type {
   ChampionAnimationResult,
   ChampionVisualAdapter,
 } from "../visual-contracts";
-import type { ChampionWorldEffect } from "../world-effects";
-import type { PendulaShockwaveEffect } from "./contracts";
+import {
+  isPendulaPullEffect,
+  type ChampionWorldEffect,
+} from "../world-effects";
+import type { PendulaPullEffect } from "./contracts";
 import {
   PENDULA_SKILL_CHANNEL_MS,
-  PENDULA_SHOCKWAVE_VISUAL_MS,
+  PENDULA_PULL_VISUAL_MS,
 } from "./skill";
 import { PENDULA_SKILL_ID } from "./definition";
-
-function isPendulaShockwave(
-  effect: ChampionWorldEffect,
-): effect is PendulaShockwaveEffect {
-  return (
-    typeof effect === "object" &&
-    effect !== null &&
-    "kind" in effect &&
-    (effect as PendulaShockwaveEffect).kind === "pendula-shockwave"
-  );
-}
 
 export function resolvePendulaAnimation(
   c: ChampionAnimationContext,
@@ -46,28 +38,36 @@ export function resolvePendulaAnimation(
   };
 }
 
-export function drawPendulaShockwave(
+/** Inward-sucking brass/cyan rings (Orianna-style Command: Pull). */
+export function drawPendulaPull(
   ctx: CanvasRenderingContext2D,
-  effect: PendulaShockwaveEffect,
+  effect: PendulaPullEffect,
   tileSize: number,
 ): void {
-  const progress = 1 - Math.max(0, Math.min(1, effect.remainingMs / PENDULA_SHOCKWAVE_VISUAL_MS));
+  const progress = 1 - Math.max(0, Math.min(1, effect.remainingMs / PENDULA_PULL_VISUAL_MS));
   const cx = effect.origin.x * tileSize + tileSize * 0.5;
   const cy = effect.origin.y * tileSize + tileSize * 0.5;
-  const radius =
-    tileSize * (0.35 + progress * (effect.maxRadiusTiles + 0.35));
-  const alpha = 0.55 * (1 - progress);
+  // Rings collapse inward toward Pendula.
+  const outer =
+    tileSize * (effect.maxRadiusTiles + 0.55) * (1 - progress * 0.85);
+  const inner = Math.max(tileSize * 0.25, outer * 0.55);
+  const alpha = 0.6 * (1 - progress);
   ctx.save();
   ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(212, 175, 55, ${alpha})`;
-  ctx.lineWidth = 3 + (1 - progress) * 4;
+  ctx.arc(cx, cy, outer, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(120, 220, 255, ${alpha})`;
+  ctx.lineWidth = 3 + (1 - progress) * 3;
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(120, 220, 255, ${alpha * 0.75})`;
+  ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(212, 175, 55, ${alpha * 0.85})`;
   ctx.lineWidth = 2;
   ctx.stroke();
+  // Small core pulse at center
+  ctx.beginPath();
+  ctx.arc(cx, cy, tileSize * (0.18 + progress * 0.12), 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(120, 220, 255, ${0.35 * (1 - progress)})`;
+  ctx.fill();
   ctx.restore();
 }
 
@@ -77,7 +77,7 @@ export function advancePendulaWorldEffects(
 ): ChampionWorldEffect[] {
   return effects
     .map((effect) => {
-      if (!isPendulaShockwave(effect)) {
+      if (!isPendulaPullEffect(effect)) {
         return effect;
       }
       return {
@@ -87,7 +87,7 @@ export function advancePendulaWorldEffects(
     })
     .filter(
       (effect) =>
-        !isPendulaShockwave(effect) || effect.remainingMs > 0,
+        !isPendulaPullEffect(effect) || effect.remainingMs > 0,
     );
 }
 
@@ -96,8 +96,8 @@ export const PENDULA_VISUAL_ADAPTER: ChampionVisualAdapter = {
   resolveAnimation: resolvePendulaAnimation,
   advanceWorldEffects: advancePendulaWorldEffects,
   drawWorldEffect: (ctx, effect, tileSize) => {
-    if (isPendulaShockwave(effect)) {
-      drawPendulaShockwave(ctx, effect, tileSize);
+    if (isPendulaPullEffect(effect)) {
+      drawPendulaPull(ctx, effect, tileSize);
     }
   },
 };

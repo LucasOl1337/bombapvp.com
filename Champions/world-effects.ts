@@ -1,23 +1,24 @@
 import type { NicoBeamEffect } from "./nico/contracts";
-import type { PendulaShockwaveEffect } from "./pendula/contracts";
+import type { PendulaPullEffect } from "./pendula/contracts";
 
 /** Extensible union of character-owned effects persisted by the generic engine. */
-export type ChampionWorldEffect = NicoBeamEffect | PendulaShockwaveEffect;
+export type ChampionWorldEffect = NicoBeamEffect | PendulaPullEffect;
 
-export function isPendulaShockwaveEffect(
+export function isPendulaPullEffect(
   effect: ChampionWorldEffect,
-): effect is PendulaShockwaveEffect {
-  return (
-    typeof effect === "object" &&
-    effect !== null &&
-    "kind" in effect &&
-    (effect as PendulaShockwaveEffect).kind === "pendula-shockwave"
-  );
+): effect is PendulaPullEffect {
+  return effect.kind === "pendula-pull";
 }
 
-/** Nico beams are the legacy shape without a kind tag. */
+/** @deprecated Use isPendulaPullEffect */
+export function isPendulaShockwaveEffect(
+  effect: ChampionWorldEffect,
+): effect is PendulaPullEffect {
+  return effect.kind === "pendula-pull" || (effect as { kind?: string }).kind === "pendula-shockwave";
+}
+
 export function isNicoBeamEffect(
   effect: ChampionWorldEffect,
 ): effect is NicoBeamEffect {
-  return !isPendulaShockwaveEffect(effect);
+  return effect.kind === "nico-beam";
 }

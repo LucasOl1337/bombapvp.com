@@ -36,7 +36,7 @@ describe("Champions module", () => {
       },
       { name: "Nico", size: { width: 116, height: 116 }, fileCount: 130 },
       { name: "Nix Ember", size: { width: 124, height: 124 }, fileCount: 124 },
-      { name: "Pendula", size: { width: 124, height: 124 }, fileCount: 124 },
+      { name: "Pendula", size: { width: 124, height: 124 }, fileCount: 156 },
     ]);
     for (const { assets } of entries) {
       expect(assets.portraitUrl).toContain("/Champions/");
@@ -56,9 +56,10 @@ describe("Champions module", () => {
     expect(getChampionAssets(NIX_EMBER_CHARACTER_ID).animations.attack.down.length).toBe(6);
     expect(getChampionAssets(NIX_EMBER_CHARACTER_ID).animations.cast.down.length).toBe(4);
     expect(getChampionAssets(NIX_EMBER_CHARACTER_ID).animations.walk.down.length).toBe(8);
-    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.down.length).toBe(8);
-    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.cast.down.length).toBe(4);
-    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.right.length).toBe(8);
-    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.up.length).toBe(8);
+    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.down.length).toBe(12);
+    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.cast.down.length).toBe(6);
+    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.idle.down.length).toBe(6);
+    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.right.length).toBe(12);
+    expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.up.length).toBe(12);
   });
 });

@@ -16,11 +16,11 @@ export const PENDULA_DEFINITION = deepFreeze({
     localized: {
       "pt-BR": {
         label: "Personagem 6",
-        description: "Autômata de relojoaria · Command: Shockwave",
+        description: "Autômata de relojoaria · Command: Pull",
       },
       en: {
         label: "Character 6",
-        description: "Clockwork ballerina · Command: Shockwave",
+        description: "Clockwork ballerina · Command: Pull",
       },
     },
   },

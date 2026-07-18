@@ -24,24 +24,25 @@
 | Crocodilo | Emerald Surge | Channel immune + surge |
 | Nico | Arcane Beam | Long-range line beam |
 
-## Ultimate — **Command: Shockwave**
+## Ultimate — **Command: Pull**
 
-**Id:** `pendula-command-shockwave`  
+**Id:** `pendula-command-shockwave` (stable id; presentation name is Pull)  
 **Cooldown:** 7500 ms  
-**Channel:** 900 ms wind-up (cancel early → short CD 500 ms)  
-**Release:** instant radial **bomb scatter** + visual ring
+**Channel:** **300 ms** wind-up (3× faster than the old 900 ms; cancel early → short CD 200 ms)  
+**Release:** instant **enemy pull** toward Pendula + inward visual ring (Orianna-style)
 
 ### Logic
 
-1. **Activate** → `channeling`, face aim dir, freeze velocity, Ball “charges” at feet.
-2. **Hold** until channel ends (or release at 0). No voluntary early fire required; full channel auto-fires.
+1. **Activate** → `channeling`, face aim dir, freeze velocity, Ball charges.
+2. **Hold** until channel ends (or release at 0 cancels). Full channel auto-fires.
 3. **Fire** at end of channel:
-   - Center = player tile.
-   - For every bomb with Chebyshev distance ≤ **2** from center:
-     - Push direction = unit vector away from center (cardinal preferred; if on center, use player facing).
-     - Attempt move **1 tile** if free (not solid, not crate, not other bomb, not living player).
-     - On success: `ownerCanPass = false`, clear body egress; optional tiny fuse penalty (−80 ms, floor 400).
-   - Spawn world effect ring (visual only, ~320 ms).
+   - Center = Pendula tile.
+   - For every **living enemy** with Chebyshev distance ≤ **3** from center (farthest first):
+     - Step tile-by-tile toward center (cardinal preferred on diagonals).
+     - Stop at free tiles only (not solid, crate, bomb, or other living player).
+     - Land as close as possible, preferably **adjacent** (stop distance 1).
+     - Instant reposition (no multi-frame travel) — the pull itself is snappy/OP.
+   - Spawn inward cyan/brass ring visual (~280 ms).
 4. Enter **cooldown**.
 
 ### Why it’s distinct
@@ -49,7 +50,7 @@
 - Not a self-dash/blink (Bee / Nix / Ranni).
 - Not a damage beam (Nico).
 - Not personal immunity surge (Crocodilo).
-- **Spatial bomb control**: rearranges the fuse puzzle for everyone — classic Orianna “Ball owns the zone” fantasy in bomb rules.
+- **Enemy displacement**: yanks opponents into Pendula’s space — classic Orianna “Ball owns the zone” fantasy.
 
 ### Animation map
 

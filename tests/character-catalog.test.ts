@@ -144,7 +144,7 @@ describe("character catalog", () => {
         assetPath: expect.stringContaining("/Champions/pendula/assets/portrait.png"),
         accent: "gold",
         label: "Character 6",
-        description: "Clockwork ballerina · Command: Shockwave",
+        description: "Clockwork ballerina · Command: Pull",
       },
     ]);
   });

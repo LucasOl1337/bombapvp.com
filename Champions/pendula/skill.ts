@@ -1,12 +1,13 @@
 import type {
   Direction,
+  PixelCoord,
   PlayerState,
   TileCoord,
 } from "../../src/original-game/Gameplay/types";
 import { tileKey } from "../../src/original-game/Arenas/arena";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
-import type { PendulaShockwaveEffect } from "./contracts";
+import type { PendulaPullEffect } from "./contracts";
 import {
   PENDULA_SKILL_COOLDOWN_MS,
   PENDULA_SKILL_ID,
@@ -17,20 +18,14 @@ export {
   PENDULA_SKILL_COOLDOWN_MS,
 } from "./definition";
 
-export const PENDULA_SKILL_CHANNEL_MS = 900;
-export const PENDULA_VOLUNTARY_CANCEL_COOLDOWN_MS = 500;
-export const PENDULA_SHOCKWAVE_RANGE = 2;
-export const PENDULA_SHOCKWAVE_PUSH_TILES = 1;
-export const PENDULA_SHOCKWAVE_VISUAL_MS = 320;
-export const PENDULA_SHOCKWAVE_FUSE_PENALTY_MS = 80;
-export const PENDULA_SHOCKWAVE_FUSE_FLOOR_MS = 400;
-
-const directionDelta: Record<Direction, TileCoord> = {
-  up: { x: 0, y: -1 },
-  down: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 },
-};
+/** Short wind-up before the Ball yanks enemies in (3× faster than the old 900 ms cast). */
+export const PENDULA_SKILL_CHANNEL_MS = 300;
+export const PENDULA_VOLUNTARY_CANCEL_COOLDOWN_MS = 200;
+/** Chebyshev radius: enemies within this range of Pendula are pulled. */
+export const PENDULA_PULL_RANGE = 3;
+/** Prefer landing targets this far from Pendula (1 = adjacent tile). */
+export const PENDULA_PULL_STOP_DISTANCE = 1;
+export const PENDULA_PULL_VISUAL_MS = 280;
 
 function chebyshev(a: TileCoord, b: TileCoord): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -42,131 +37,175 @@ function sign(n: number): number {
   return 0;
 }
 
-function isTileBlockedForBomb(
+function tileSizeOf(context: SkillContext): number {
+  return context.arena.config.grid.tileSize;
+}
+
+function tileCenter(tile: TileCoord, context: SkillContext): PixelCoord {
+  const size = tileSizeOf(context);
+  return {
+    x: tile.x * size + size * 0.5,
+    y: tile.y * size + size * 0.5,
+  };
+}
+
+function isTileBlockedForPlayer(
   tile: TileCoord,
-  bombId: number,
+  subject: PlayerState,
   context: SkillContext,
+  reserved: ReadonlySet<string>,
 ): boolean {
   const key = tileKey(tile.x, tile.y);
   if (context.arena.solid.has(key) || context.arena.breakable.has(key)) {
     return true;
   }
-  if (
-    context.bombs.some(
-      (item) =>
-        item.id !== bombId && item.tile.x === tile.x && item.tile.y === tile.y,
-    )
-  ) {
+  if (reserved.has(key)) {
+    return true;
+  }
+  if (context.bombs.some((bomb) => bomb.tile.x === tile.x && bomb.tile.y === tile.y)) {
     return true;
   }
   for (const playerId of context.activePlayerIds) {
+    if (playerId === subject.id) continue;
     const other = context.players[playerId];
-    if (
-      other?.alive &&
-      context.isPositionOverlappingTile(other.position, tile)
-    ) {
+    if (!other?.alive) continue;
+    if (other.tile.x === tile.x && other.tile.y === tile.y) {
       return true;
     }
   }
   return false;
 }
 
-function pushDirectionFromCenter(
+/**
+ * Step the victim tile-by-tile toward `center`, stopping at the closest free
+ * tile that is still outside / on the stop ring. Instant (no multi-frame travel).
+ */
+export function pullPlayerToward(
+  victim: PlayerState,
   center: TileCoord,
-  bombTile: TileCoord,
-  fallback: Direction,
-): TileCoord {
-  const dx = sign(bombTile.x - center.x);
-  const dy = sign(bombTile.y - center.y);
-  if (dx === 0 && dy === 0) {
-    return directionDelta[fallback];
-  }
-  // Prefer pure cardinals when diagonal (more readable bomb slides).
-  if (dx !== 0 && dy !== 0) {
-    return Math.abs(bombTile.x - center.x) >= Math.abs(bombTile.y - center.y)
-      ? { x: dx, y: 0 }
-      : { x: 0, y: dy };
-  }
-  return { x: dx, y: dy };
-}
-
-export function tryPushBombAway(
-  bombId: number,
-  center: TileCoord,
-  fallbackDirection: Direction,
   context: SkillContext,
+  reserved: Set<string>,
 ): boolean {
-  const bomb = context.bombs.find((item) => item.id === bombId);
-  if (!bomb) {
+  if (!victim.alive) {
     return false;
   }
-  const delta = pushDirectionFromCenter(center, bomb.tile, fallbackDirection);
-  let target = { ...bomb.tile };
-  let moved = 0;
-  for (let step = 0; step < PENDULA_SHOCKWAVE_PUSH_TILES; step += 1) {
-    const next = {
-      x: target.x + delta.x,
-      y: target.y + delta.y,
-    };
-    if (isTileBlockedForBomb(next, bomb.id, context)) {
+  let tile = { ...victim.tile };
+  if (chebyshev(center, tile) > PENDULA_PULL_RANGE) {
+    return false;
+  }
+  if (chebyshev(center, tile) <= PENDULA_PULL_STOP_DISTANCE) {
+    return false;
+  }
+
+  let moved = false;
+  // Hard cap steps so a pathological map cannot loop.
+  for (let step = 0; step < PENDULA_PULL_RANGE * 2; step += 1) {
+    const dist = chebyshev(center, tile);
+    if (dist <= PENDULA_PULL_STOP_DISTANCE) {
       break;
     }
-    target = next;
-    moved += 1;
+    const dx = sign(center.x - tile.x);
+    const dy = sign(center.y - tile.y);
+    // Prefer pure cardinals when diagonal — more readable pulls.
+    const candidates: TileCoord[] =
+      dx !== 0 && dy !== 0
+        ? [
+            { x: tile.x + dx, y: tile.y },
+            { x: tile.x, y: tile.y + dy },
+            { x: tile.x + dx, y: tile.y + dy },
+          ]
+        : [{ x: tile.x + dx, y: tile.y + dy }];
+
+    let advanced: TileCoord | null = null;
+    for (const next of candidates) {
+      if (isTileBlockedForPlayer(next, victim, context, reserved)) {
+        continue;
+      }
+      const nextPos = tileCenter(next, context);
+      if (!context.canOccupyPosition(victim, nextPos)) {
+        continue;
+      }
+      advanced = next;
+      break;
+    }
+    if (!advanced) {
+      break;
+    }
+    tile = advanced;
+    moved = true;
   }
-  if (moved <= 0) {
+
+  if (!moved) {
     return false;
   }
-  bomb.tile = target;
-  bomb.ownerCanPass = false;
-  bomb.bodyEgressPlayerIds = [];
-  bomb.fuseMs = Math.max(
-    PENDULA_SHOCKWAVE_FUSE_FLOOR_MS,
-    bomb.fuseMs - moved * PENDULA_SHOCKWAVE_FUSE_PENALTY_MS,
-  );
+
+  const landing = tileCenter(tile, context);
+  const normalized = context.normalizeArenaPosition(landing);
+  victim.position = { ...normalized };
+  victim.tile = context.getTileFromPosition(victim.position);
+  victim.velocity.x = 0;
+  victim.velocity.y = 0;
+  reserved.add(tileKey(victim.tile.x, victim.tile.y));
   return true;
 }
 
-export function firePendulaShockwave(
+export function firePendulaPull(
   player: PlayerState,
   context: SkillContext,
 ): number {
   const center = context.getTileFromPosition(player.position);
-  const facing =
-    player.skill.projectedLastMoveDirection ??
-    player.lastMoveDirection ??
-    player.direction;
-  let pushed = 0;
-  // Snapshot ids so concurrent tile moves do not skip bombs.
-  const bombIds = context.bombs.map((bomb) => bomb.id);
-  for (const bombId of bombIds) {
-    const bomb = context.bombs.find((item) => item.id === bombId);
-    if (!bomb) continue;
-    if (chebyshev(center, bomb.tile) > PENDULA_SHOCKWAVE_RANGE) continue;
-    if (tryPushBombAway(bomb.id, center, facing, context)) {
-      pushed += 1;
+  const reserved = new Set<string>([tileKey(center.x, center.y)]);
+  // Reserve other living players' current tiles so we do not stomp them mid-pull
+  // unless we deliberately move that player this cast.
+  for (const playerId of context.activePlayerIds) {
+    if (playerId === player.id) continue;
+    const other = context.players[playerId];
+    if (other?.alive) {
+      reserved.add(tileKey(other.tile.x, other.tile.y));
     }
   }
-  const effect: PendulaShockwaveEffect = {
-    kind: "pendula-shockwave",
+
+  // Pull farthest first so closer tiles free up for nearer victims less often race.
+  const victims = context.activePlayerIds
+    .filter((id) => id !== player.id)
+    .map((id) => context.players[id])
+    .filter((other): other is PlayerState => Boolean(other?.alive))
+    .filter((other) => chebyshev(center, other.tile) <= PENDULA_PULL_RANGE)
+    .sort(
+      (a, b) => chebyshev(center, b.tile) - chebyshev(center, a.tile),
+    );
+
+  let pulled = 0;
+  for (const victim of victims) {
+    // Free their current tile before moving so another pull can land there if needed.
+    reserved.delete(tileKey(victim.tile.x, victim.tile.y));
+    if (pullPlayerToward(victim, center, context, reserved)) {
+      pulled += 1;
+    } else {
+      reserved.add(tileKey(victim.tile.x, victim.tile.y));
+    }
+  }
+
+  const effect: PendulaPullEffect = {
+    kind: "pendula-pull",
     ownerId: player.id,
     origin: { ...center },
-    remainingMs: PENDULA_SHOCKWAVE_VISUAL_MS,
-    maxRadiusTiles: PENDULA_SHOCKWAVE_RANGE,
+    remainingMs: PENDULA_PULL_VISUAL_MS,
+    maxRadiusTiles: PENDULA_PULL_RANGE,
   };
   context.addChampionWorldEffect(effect);
   context.soundManager.playOneShot("bomb_place");
-  return pushed;
+  return pulled;
 }
 
 export const PENDULA_SKILL_ADAPTER: ChampionSkillAdapter = {
   skillId: PENDULA_SKILL_ID,
-  activate: (player, direction) => startPendulaShockwave(player, direction),
+  activate: (player, direction) => startPendulaPull(player, direction),
   update: (player, direction, _pressed, held, deltaMs, context) =>
-    updatePendulaShockwaveChannel(player, direction, held, deltaMs, context),
+    updatePendulaPullChannel(player, direction, held, deltaMs, context),
 };
 
-export function startPendulaShockwave(
+export function startPendulaPull(
   player: PlayerState,
   desiredDirection: Direction | null,
 ): void {
@@ -187,7 +226,7 @@ export function startPendulaShockwave(
   player.velocity.y = 0;
 }
 
-export function updatePendulaShockwaveChannel(
+export function updatePendulaPullChannel(
   player: PlayerState,
   desiredDirection: Direction | null,
   skillHeld: boolean,
@@ -206,9 +245,9 @@ export function updatePendulaShockwaveChannel(
     player.direction = desiredDirection;
     player.skill.projectedLastMoveDirection = desiredDirection;
   }
-  // Early release cancels with short cooldown (like Nico/Crocodilo patterns).
+  // Early release cancels with short cooldown.
   if (!skillHeld && player.skill.castElapsedMs > 0) {
-    cancelPendulaShockwave(player);
+    cancelPendulaPull(player);
     return true;
   }
   player.skill.channelRemainingMs = Math.max(
@@ -217,13 +256,13 @@ export function updatePendulaShockwaveChannel(
   );
   player.skill.castElapsedMs += deltaMs;
   if (player.skill.channelRemainingMs <= 0) {
-    firePendulaShockwave(player, context);
-    finishPendulaShockwave(player);
+    firePendulaPull(player, context);
+    finishPendulaPull(player);
   }
   return true;
 }
 
-export function cancelPendulaShockwave(player: PlayerState): void {
+export function cancelPendulaPull(player: PlayerState): void {
   if (player.skill.id !== PENDULA_SKILL_ID) {
     return;
   }
@@ -237,7 +276,7 @@ export function cancelPendulaShockwave(player: PlayerState): void {
   player.skill.projectedLastMoveDirection = null;
 }
 
-export function finishPendulaShockwave(player: PlayerState): void {
+export function finishPendulaPull(player: PlayerState): void {
   if (player.skill.id !== PENDULA_SKILL_ID) {
     return;
   }
@@ -250,3 +289,13 @@ export function finishPendulaShockwave(player: PlayerState): void {
   player.skill.projectedPosition = null;
   player.skill.projectedLastMoveDirection = null;
 }
+
+// ---- Backward-compatible aliases (tests / older call sites) ----
+/** @deprecated Use firePendulaPull */
+export const firePendulaShockwave = firePendulaPull;
+/** @deprecated Use startPendulaPull */
+export const startPendulaShockwave = startPendulaPull;
+/** @deprecated Use PENDULA_PULL_RANGE */
+export const PENDULA_SHOCKWAVE_RANGE = PENDULA_PULL_RANGE;
+/** @deprecated Use PENDULA_PULL_VISUAL_MS */
+export const PENDULA_SHOCKWAVE_VISUAL_MS = PENDULA_PULL_VISUAL_MS;
