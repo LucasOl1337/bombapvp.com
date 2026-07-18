@@ -1369,9 +1369,15 @@ export class GameApp {
       return;
     }
     const storage = this.getLocalStorage();
-    const storedVolume = Number(this.readStorageItem(storage, AUDIO_VOLUME_STORAGE_KEY));
-    if (Number.isFinite(storedVolume)) {
-      this.soundManager.setVolume(storedVolume);
+    // IMPORTANT: readStorageItem returns null when unset. Number(null) === 0, so
+    // never coerce null/empty into a volume — that forced mute-by-volume for every
+    // first-time (or cleared-storage) visitor.
+    const rawVolume = this.readStorageItem(storage, AUDIO_VOLUME_STORAGE_KEY);
+    if (rawVolume !== null && rawVolume.trim() !== "") {
+      const storedVolume = Number(rawVolume);
+      if (Number.isFinite(storedVolume)) {
+        this.soundManager.setVolume(storedVolume);
+      }
     }
     this.soundManager.setMuted(this.readStorageItem(storage, AUDIO_MUTED_STORAGE_KEY) === "true");
     void this.soundManager.loadSounds(SFX_MANIFEST);
