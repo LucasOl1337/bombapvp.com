@@ -11,7 +11,6 @@ import type {
   ChampionPlayerSkillState,
   ChampionSkillPhase,
 } from "../../../Champions/runtime-contracts";
-import type { ChampionWorldEffect } from "../../../Champions/world-effects";
 export type SkillPhase = ChampionSkillPhase;
 export type PowerUpType =
   | "bomb-up"
@@ -81,8 +80,11 @@ export interface FlameState {
   ownerId: PlayerId | null;
 }
 
-/** @deprecated Wire-compatible alias for Champion-owned world effects. */
-export type MagicBeamState = ChampionWorldEffect;
+/**
+ * Network/telemetry beam payload (Nico shape).
+ * Runtime may hold a wider ChampionWorldEffect union; only Nico beams serialize here.
+ */
+export type MagicBeamState = import("../../../Champions/nico/contracts").NicoBeamEffect;
 
 export interface SuddenDeathClosingTileState {
   tile: TileCoord;

@@ -87,6 +87,12 @@ describe("character catalog", () => {
         order: 4,
         defaultSlot: undefined,
       },
+      {
+        id: "c4a8e2f1-9b3d-4c7a-8e5f-1a2b3c4d5e6f",
+        name: "Pendula",
+        order: 5,
+        defaultSlot: undefined,
+      },
     ]);
   });
 
@@ -132,6 +138,14 @@ describe("character catalog", () => {
         label: "Character 5",
         description: "Ember saboteur · survival vault hop",
       },
+      {
+        id: "c4a8e2f1-9b3d-4c7a-8e5f-1a2b3c4d5e6f",
+        name: "Pendula",
+        assetPath: expect.stringContaining("/Champions/pendula/assets/portrait.png"),
+        accent: "gold",
+        label: "Character 6",
+        description: "Clockwork ballerina · Command: Shockwave",
+      },
     ]);
   });
 
@@ -164,6 +178,11 @@ describe("character catalog", () => {
         name: "Nix Ember",
         order: 4,
       },
+      {
+        id: "c4a8e2f1-9b3d-4c7a-8e5f-1a2b3c4d5e6f",
+        name: "Pendula",
+        order: 5,
+      },
     ]);
   });
 
@@ -193,6 +212,11 @@ describe("character catalog", () => {
         characterId: "9f3e2c1a-8b7d-4e6f-a0c1-2d3e4f5a6b7c",
         skillId: "nix-ember-vault",
         cooldownMs: 7_000,
+      },
+      {
+        characterId: "c4a8e2f1-9b3d-4c7a-8e5f-1a2b3c4d5e6f",
+        skillId: "pendula-command-shockwave",
+        cooldownMs: 7_500,
       },
     ]);
   });

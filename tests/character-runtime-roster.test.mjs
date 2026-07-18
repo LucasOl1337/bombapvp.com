@@ -4,6 +4,7 @@ import {
   KILLER_BEE_CHARACTER_ID,
   NICO_CHARACTER_ID,
   NIX_EMBER_CHARACTER_ID,
+  PENDULA_CHARACTER_ID,
   RANNI_CHARACTER_ID,
 } from "../Champions/index.ts";
 import { composeCharacterRoster } from "../src/original-game/Engine/assets.ts";
@@ -55,12 +56,20 @@ describe("runtime character roster", () => {
         order: 4,
         defaultSlot: undefined,
       },
+      {
+        id: PENDULA_CHARACTER_ID,
+        name: "Pendula",
+        selectionIndex: 5,
+        order: 5,
+        defaultSlot: undefined,
+      },
     ]);
     expect(roster.map((entry) => entry.size)).toEqual([
       { width: 160, height: 160 },
       { width: 124, height: 124 },
       { width: 156, height: 156 },
       { width: 116, height: 116 },
+      { width: 124, height: 124 },
       { width: 124, height: 124 },
     ]);
     for (const entry of roster) {

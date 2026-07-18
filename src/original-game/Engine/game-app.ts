@@ -150,7 +150,10 @@ import {
 import { SITE_COPY, type SiteLanguage } from "../UiLayouts/i18n";
 import { createChampionVisualRuntime } from "../../../Champions/visual-runtime";
 import { championSkillAllowsPlayerOverlap, getChampionProjectedMovementIgnoredBombIds, notifyChampionBombPlaced, notifyChampionBombRemoved, projectChampionSkillTarget } from "../../../Champions/runtime";
-import type { ChampionWorldEffect } from "../../../Champions/world-effects";
+import {
+  isNicoBeamEffect,
+  type ChampionWorldEffect,
+} from "../../../Champions/world-effects";
 
 const KICK_SLIDE_MAX_TILES = 3;
 const KICK_FUSE_PENALTY_MS_PER_TILE = 250;
@@ -1007,7 +1010,7 @@ export class GameApp {
     this.championWorldEffects = (snapshot.magicBeams ?? []).map((beam) => ({
       ...beam,
       origin: { ...beam.origin },
-      tiles: beam.tiles.map((tile) => ({ ...tile })),
+      tiles: beam.tiles.map((tile: { x: number; y: number }) => ({ ...tile })),
     }));
     this.nextBombId = snapshot.nextBombId;
     this.score = { ...snapshot.score };
@@ -1674,7 +1677,7 @@ export class GameApp {
         ...flame,
         tile: { ...flame.tile },
       })),
-      magicBeams: this.championWorldEffects.map((beam) => ({
+      magicBeams: this.championWorldEffects.filter(isNicoBeamEffect).map((beam) => ({
         ...beam,
         origin: { ...beam.origin },
         tiles: beam.tiles.map((tile) => ({ ...tile })),
@@ -6561,7 +6564,7 @@ export class GameApp {
         tile: flame.tile,
         remainingMs: Math.round(flame.remainingMs),
       })),
-      magicBeams: this.championWorldEffects.map((beam) => ({
+      magicBeams: this.championWorldEffects.filter(isNicoBeamEffect).map((beam) => ({
         ownerId: beam.ownerId,
         origin: beam.origin,
         direction: beam.direction,

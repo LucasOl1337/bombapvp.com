@@ -8,7 +8,7 @@ import type {
   ChampionAnimationResult,
   ChampionVisualAdapter,
 } from "../visual-contracts";
-import type { ChampionWorldEffect } from "../world-effects";
+import { isNicoBeamEffect, type ChampionWorldEffect } from "../world-effects";
 import type { NicoBeamEffect } from "./contracts";
 import {
   NICO_BEAM_CORE_WIDTH_PX,
@@ -217,5 +217,9 @@ export const NICO_VISUAL_ADAPTER: ChampionVisualAdapter = {
       );
   },
   advanceWorldEffects: advanceNicoBeamEffects,
-  drawWorldEffect: drawNicoBeam,
+  drawWorldEffect: (ctx, effect, tileSize) => {
+    if (isNicoBeamEffect(effect)) {
+      drawNicoBeam(ctx, effect, tileSize);
+    }
+  },
 };

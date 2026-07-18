@@ -10,6 +10,7 @@ import { KILLER_BEE_SKILL_ADAPTER } from "./killer-bee/skill";
 import { CROCODILO_SKILL_ADAPTER } from "./crocodilo-arcano/skill";
 import { NICO_SKILL_ADAPTER } from "./nico/skill";
 import { NIX_EMBER_SKILL_ADAPTER } from "./nix-ember/skill";
+import { PENDULA_SKILL_ADAPTER } from "./pendula/skill";
 import {
   getCharacterSkillDefinition,
   getCharacterSkillId,
@@ -22,6 +23,7 @@ const adapters: readonly ChampionSkillAdapter[] = Object.freeze([
   CROCODILO_SKILL_ADAPTER,
   NICO_SKILL_ADAPTER,
   NIX_EMBER_SKILL_ADAPTER,
+  PENDULA_SKILL_ADAPTER,
 ]);
 const adaptersBySkillId = new Map(
   adapters.map((adapter) => [adapter.skillId, adapter]),

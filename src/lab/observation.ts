@@ -63,7 +63,7 @@ export function buildLabObservation(snapshot: OnlineGameSnapshot, playerId: Play
       ownerId: beam.ownerId,
       origin: beam.origin,
       direction: beam.direction,
-      tiles: beam.tiles,
+      tiles: beam.tiles.map((tile) => ({ ...tile })),
       remainingMs: Math.round(beam.remainingMs),
     })),
     powerUps: snapshot.powerUps

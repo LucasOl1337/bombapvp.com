@@ -7,6 +7,7 @@ import { KILLER_BEE_VISUAL_ADAPTER } from "./killer-bee/visuals";
 import { CROCODILO_VISUAL_ADAPTER } from "./crocodilo-arcano/visuals";
 import { NICO_VISUAL_ADAPTER } from "./nico/visuals";
 import { NIX_EMBER_VISUAL_ADAPTER } from "./nix-ember/visuals";
+import { PENDULA_VISUAL_ADAPTER } from "./pendula/visuals";
 
 export function createChampionVisualRuntime(): ChampionVisualRuntime {
   const adapters: readonly ChampionVisualAdapter[] = Object.freeze([
@@ -15,6 +16,7 @@ export function createChampionVisualRuntime(): ChampionVisualRuntime {
     CROCODILO_VISUAL_ADAPTER,
     NICO_VISUAL_ADAPTER,
     NIX_EMBER_VISUAL_ADAPTER,
+    PENDULA_VISUAL_ADAPTER,
   ]);
   const adaptersBySkillId = new Map(
     adapters.map((adapter) => [adapter.skillId, adapter]),

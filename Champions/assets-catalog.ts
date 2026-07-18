@@ -10,6 +10,8 @@ import { NICO_CHARACTER_ID } from "./nico/definition";
 import { NICO_ASSETS } from "./nico/assets";
 import { NIX_EMBER_CHARACTER_ID } from "./nix-ember/definition";
 import { NIX_EMBER_ASSETS } from "./nix-ember/assets";
+import { PENDULA_CHARACTER_ID } from "./pendula/definition";
+import { PENDULA_ASSETS } from "./pendula/assets";
 
 export type ChampionAssetEntry = Readonly<{
   characterId: CharacterId;
@@ -22,6 +24,7 @@ const ASSET_ENTRIES: readonly ChampionAssetEntry[] = Object.freeze([
   { characterId: CROCODILO_CHARACTER_ID, assets: CROCODILO_ASSETS },
   { characterId: NICO_CHARACTER_ID, assets: NICO_ASSETS },
   { characterId: NIX_EMBER_CHARACTER_ID, assets: NIX_EMBER_ASSETS },
+  { characterId: PENDULA_CHARACTER_ID, assets: PENDULA_ASSETS },
 ]);
 const ASSETS_BY_ID = new Map(
   ASSET_ENTRIES.map(({ characterId, assets }) => [characterId, assets]),

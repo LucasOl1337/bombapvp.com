@@ -10,6 +10,7 @@ import { KILLER_BEE_DEFINITION } from "./killer-bee/definition";
 import { CROCODILO_DEFINITION } from "./crocodilo-arcano/definition";
 import { NICO_DEFINITION } from "./nico/definition";
 import { NIX_EMBER_DEFINITION } from "./nix-ember/definition";
+import { PENDULA_DEFINITION } from "./pendula/definition";
 const DEFINITIONS = Object.freeze(
   [
     RANNI_DEFINITION,
@@ -17,6 +18,7 @@ const DEFINITIONS = Object.freeze(
     CROCODILO_DEFINITION,
     NICO_DEFINITION,
     NIX_EMBER_DEFINITION,
+    PENDULA_DEFINITION,
   ].sort((a, b) => a.roster.order - b.roster.order),
 );
 const BY_ID = new Map<string, CharacterDefinition>(
