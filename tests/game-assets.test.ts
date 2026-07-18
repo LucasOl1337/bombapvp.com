@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveGameAsset } from "../game-assets/index.ts";
+import { getArenaThemeById } from "../src/original-game/Arenas/arena-theme-library.ts";
 
 describe("game assets", () => {
+  it("plugs the promoted Citadel pieces into the playable Arcane Citadel theme", () => {
+    expect(getArenaThemeById("arcane-citadel")?.tilePaths).toMatchObject({
+      lane: "arena.shared.citadel-conduit-floor",
+      wall: "arena.shared.citadel-gate-obstacle",
+      crate: "arena.shared.citadel-reactor-block",
+    });
+  });
+
   it.each([
     ["gameplay.bomb.sprite", "bomb.png"],
     ["gameplay.bomb.sprite.ruins", "bomb-ruins.png"],
@@ -69,6 +78,27 @@ describe("game assets", () => {
     ["ui.launcher.match-bay", "ui/launcher/launcher-match-bay-v1.webp"],
     ["marketing.hero.arena-sigil", "marketing/hero-arena-sigil.webp"],
     ["marketing.hero.match-control", "marketing/hero-match-control-v2.webp"],
+    ["arena.shared.arc-rune-danger-telegraph", "arenas/shared/arc-rune-danger-telegraph-v1.png"],
+    ["arena.shared.citadel-reactor-block", "arenas/shared/citadel-breach-reactor-block-v1-20260718-1527.png"],
+    ["arena.shared.citadel-conduit-floor", "arenas/shared/citadel-conduit-floor-tile-v2-20260718-1635.png"],
+    ["arena.shared.citadel-gate-obstacle", "arenas/shared/citadel-gate-obstacle-v2-20260718-1752.png"],
+    ["effect.explosion.arc-flare-impact", "effects/explosions/arc-flare-impact-sheet-v1.png"],
+    ["effect.combo.chain-pulse", "effects/combo/chain-combo-pulse-sheet-20260718-1509-v1.png"],
+    ["effect.structural.rupture-burst", "effects/structural/structural-rupture-burst-sheet-20260718-1558-v2.png"],
+    ["effect.alert.fuse-critical-pulse", "effects/alerts/fuse-critical-pulse-sheet-20260718-1716-v2.png"],
+    ["effect.activation.echo-charge", "effects/activation/echo-charge-activation-burst-v1-20260718-1625.png"],
+    ["effect.obstacle.citadel-gate-lock-pulse", "effects/obstacles/citadel-gate-lock-pulse-v1-20260718-1756.png"],
+    ["gameplay.feedback.bomb-kick", "gameplay/feedback/bomb-kick-telegraph-v1-20260718.png"],
+    ["gameplay.feedback.bomb-plant-confirmation", "gameplay/feedback/bomb-plant-confirmation-marker-v2-20260718-1736.png"],
+    ["gameplay.power-up.chain-reaction.icon", "gameplay/power-ups/icons/power-chain-reaction-v1.png"],
+    ["gameplay.power-up.breach-shard.icon", "gameplay/power-ups/icons/power-breach-shard-v1.png"],
+    ["gameplay.power-up.echo-charge.icon", "gameplay/power-ups/icons/power-echo-charge-v1-20260718-1606.png"],
+    ["ui.hud.chain-combo-meter", "ui/hud/chain-combo-meter-v1.png"],
+    ["ui.hud.breach-status", "ui/hud/breach-status-badge-v1-20260718-1545.png"],
+    ["ui.hud.echo-charge-ready", "ui/hud/echo-charge-ready-badge-v1-20260718-1616.png"],
+    ["ui.hud.fuse-heat-meter", "ui/hud/fuse-heat-meter-v1-20260718-1705.png"],
+    ["marketing.citadel-breach.key-art", "marketing/citadel-breach-key-art-v1-20260718-1517.png"],
+    ["marketing.citadel-breach.launcher-banner", "marketing/citadel-breach-launcher-banner-v1-20260718-1726.png"],
   ] as const)("resolves %s through the root module", (assetId, expectedFileName) => {
     const resolvedUrl = resolveGameAsset(assetId);
 

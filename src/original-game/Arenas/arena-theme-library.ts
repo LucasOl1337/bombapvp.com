@@ -142,10 +142,10 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     renderMode: "sprite",
     tilePaths: {
       base: "arena.theme.arcane-citadel.floor.base",
-      lane: "arena.theme.arcane-citadel.floor.lane",
+      lane: "arena.shared.citadel-conduit-floor",
       spawn: "arena.theme.arcane-citadel.floor.spawn",
-      wall: "arena.theme.arcane-citadel.wall",
-      crate: "arena.theme.arcane-citadel.crate",
+      wall: "arena.shared.citadel-gate-obstacle",
+      crate: "arena.shared.citadel-reactor-block",
     },
     palette: {
       floorBase: "#10233d",

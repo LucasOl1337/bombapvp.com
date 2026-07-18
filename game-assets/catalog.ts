@@ -39,7 +39,19 @@ import verdantRuinsFloorBaseUrl from "./arenas/themes/verdant-ruins/floor-base.p
 import verdantRuinsFloorLaneUrl from "./arenas/themes/verdant-ruins/floor-lane.png?url";
 import verdantRuinsFloorSpawnUrl from "./arenas/themes/verdant-ruins/floor-spawn.png?url";
 import verdantRuinsWallUrl from "./arenas/themes/verdant-ruins/wall.png?url";
+import arcRuneDangerTelegraphUrl from "./arenas/shared/arc-rune-danger-telegraph-v1.png?url";
+import citadelReactorBlockUrl from "./arenas/shared/citadel-breach-reactor-block-v1-20260718-1527.png?url";
+import citadelConduitFloorUrl from "./arenas/shared/citadel-conduit-floor-tile-v2-20260718-1635.png?url";
+import citadelGateObstacleUrl from "./arenas/shared/citadel-gate-obstacle-v2-20260718-1752.png?url";
+import echoChargeActivationUrl from "./effects/activation/echo-charge-activation-burst-v1-20260718-1625.png?url";
+import fuseCriticalPulseUrl from "./effects/alerts/fuse-critical-pulse-sheet-20260718-1716-v2.png?url";
+import chainComboPulseUrl from "./effects/combo/chain-combo-pulse-sheet-20260718-1509-v1.png?url";
+import arcFlareImpactUrl from "./effects/explosions/arc-flare-impact-sheet-v1.png?url";
+import citadelGateLockPulseUrl from "./effects/obstacles/citadel-gate-lock-pulse-v1-20260718-1756.png?url";
+import structuralRuptureBurstUrl from "./effects/structural/structural-rupture-burst-sheet-20260718-1558-v2.png?url";
 import speedSparkTrailUrl from "./effects/movement/speed-spark-trail.png?url";
+import bombKickTelegraphUrl from "./gameplay/feedback/bomb-kick-telegraph-v1-20260718.png?url";
+import bombPlantConfirmationUrl from "./gameplay/feedback/bomb-plant-confirmation-marker-v2-20260718-1736.png?url";
 import flameRuinsUrl from "./gameplay/bomb/explosion/flame-ruins.png?url";
 import flameUrl from "./gameplay/bomb/explosion/flame.png?url";
 import bombRuinsUrl from "./gameplay/bomb/sprites/bomb-ruins.png?url";
@@ -58,11 +70,20 @@ import powerShieldUrl from "./gameplay/power-ups/icons/power-shield.png?url";
 import powerShortFuseUrl from "./gameplay/power-ups/icons/power-short-fuse-v2.png?url";
 import powerSpeedSimpleUrl from "./gameplay/power-ups/icons/power-speed.png?url";
 import powerSpeedUrl from "./gameplay/power-ups/icons/power-speed-rastro-relampago.png?url";
+import powerBreachShardUrl from "./gameplay/power-ups/icons/power-breach-shard-v1.png?url";
+import powerChainReactionUrl from "./gameplay/power-ups/icons/power-chain-reaction-v1.png?url";
+import powerEchoChargeUrl from "./gameplay/power-ups/icons/power-echo-charge-v1-20260718-1606.png?url";
+import citadelBreachKeyArtUrl from "./marketing/citadel-breach-key-art-v1-20260718-1517.png?url";
+import citadelBreachLauncherBannerUrl from "./marketing/citadel-breach-launcher-banner-v1-20260718-1726.png?url";
 import heroArenaSigilUrl from "./marketing/hero-arena-sigil.webp?url";
 import heroMatchControlUrl from "./marketing/hero-match-control-v2.webp?url";
 import arenaStalemateEmblemUrl from "./ui/arena/arena-stalemate-emblem.png?url";
 import arenaVictoryEmblemUrl from "./ui/arena/arena-victory-emblem.webp?url";
 import launcherMatchBayUrl from "./ui/launcher/launcher-match-bay-v1.webp?url";
+import breachStatusBadgeUrl from "./ui/hud/breach-status-badge-v1-20260718-1545.png?url";
+import chainComboMeterUrl from "./ui/hud/chain-combo-meter-v1.png?url";
+import echoChargeReadyBadgeUrl from "./ui/hud/echo-charge-ready-badge-v1-20260718-1616.png?url";
+import fuseHeatMeterUrl from "./ui/hud/fuse-heat-meter-v1-20260718-1705.png?url";
 
 const GAME_ASSET_CATALOG = Object.freeze({
   "gameplay.bomb.sprite": bombUrl,
@@ -130,6 +151,27 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "ui.launcher.match-bay": launcherMatchBayUrl,
   "marketing.hero.arena-sigil": heroArenaSigilUrl,
   "marketing.hero.match-control": heroMatchControlUrl,
+  "arena.shared.arc-rune-danger-telegraph": arcRuneDangerTelegraphUrl,
+  "arena.shared.citadel-reactor-block": citadelReactorBlockUrl,
+  "arena.shared.citadel-conduit-floor": citadelConduitFloorUrl,
+  "arena.shared.citadel-gate-obstacle": citadelGateObstacleUrl,
+  "effect.explosion.arc-flare-impact": arcFlareImpactUrl,
+  "effect.combo.chain-pulse": chainComboPulseUrl,
+  "effect.structural.rupture-burst": structuralRuptureBurstUrl,
+  "effect.alert.fuse-critical-pulse": fuseCriticalPulseUrl,
+  "effect.activation.echo-charge": echoChargeActivationUrl,
+  "effect.obstacle.citadel-gate-lock-pulse": citadelGateLockPulseUrl,
+  "gameplay.feedback.bomb-kick": bombKickTelegraphUrl,
+  "gameplay.feedback.bomb-plant-confirmation": bombPlantConfirmationUrl,
+  "gameplay.power-up.chain-reaction.icon": powerChainReactionUrl,
+  "gameplay.power-up.breach-shard.icon": powerBreachShardUrl,
+  "gameplay.power-up.echo-charge.icon": powerEchoChargeUrl,
+  "ui.hud.chain-combo-meter": chainComboMeterUrl,
+  "ui.hud.breach-status": breachStatusBadgeUrl,
+  "ui.hud.echo-charge-ready": echoChargeReadyBadgeUrl,
+  "ui.hud.fuse-heat-meter": fuseHeatMeterUrl,
+  "marketing.citadel-breach.key-art": citadelBreachKeyArtUrl,
+  "marketing.citadel-breach.launcher-banner": citadelBreachLauncherBannerUrl,
 } as const);
 
 export type GameAssetId = keyof typeof GAME_ASSET_CATALOG;

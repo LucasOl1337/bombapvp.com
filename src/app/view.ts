@@ -1,4 +1,5 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
+import { CITADEL_BREACH_VISUALS, type CitadelBreachVisual } from "../../game-assets";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
 import {
   LAB_BOMB_MODEL,
@@ -173,6 +174,87 @@ function renderRosterPanel(document: Document, snapshot: AppSnapshot): HTMLEleme
   return panel;
 }
 
+function createCitadelVisual(
+  document: Document,
+  visual: CitadelBreachVisual,
+  className: string,
+): HTMLImageElement {
+  const image = document.createElement("img");
+  image.src = visual.url;
+  image.alt = "";
+  image.className = className;
+  image.loading = "lazy";
+  image.decoding = "async";
+  image.draggable = false;
+  image.dataset.assetId = visual.id;
+  return image;
+}
+
+function renderCitadelFeature(document: Document, snapshot: AppSnapshot): HTMLElement {
+  const isPortuguese = snapshot.locale === "pt-BR";
+  const feature = element(document, "section", "citadel-feature");
+  feature.setAttribute("aria-label", "Citadel Breach");
+
+  const media = element(document, "div", "citadel-feature__media");
+  media.setAttribute("aria-hidden", "true");
+  media.append(
+    createCitadelVisual(document, CITADEL_BREACH_VISUALS.marketing.banner, "citadel-feature__banner"),
+    createCitadelVisual(document, CITADEL_BREACH_VISUALS.marketing.keyArt, "citadel-feature__key-art"),
+  );
+
+  const systems = element(document, "div", "citadel-feature__systems");
+  const groups = [
+    ["arena", CITADEL_BREACH_VISUALS.arena],
+    ["power", CITADEL_BREACH_VISUALS.powerUps],
+    ["hud", CITADEL_BREACH_VISUALS.hud],
+    ["feedback", CITADEL_BREACH_VISUALS.feedback],
+    ["effects", CITADEL_BREACH_VISUALS.effects],
+  ] as const;
+  for (const [groupName, visuals] of groups) {
+    const group = element(document, "span", `citadel-feature__asset-group citadel-feature__asset-group--${groupName}`);
+    group.dataset.visualGroup = groupName;
+    for (const visual of visuals) {
+      group.append(createCitadelVisual(document, visual, "citadel-feature__asset"));
+    }
+    systems.append(group);
+  }
+  media.append(systems);
+
+  const copy = element(document, "div", "citadel-feature__copy");
+  copy.append(
+    element(document, "p", "citadel-feature__kicker", isPortuguese ? "PACOTE VISUAL INTEGRADO" : "INTEGRATED VISUAL PACK"),
+    element(document, "h3", "citadel-feature__title", "Citadel Breach"),
+    element(
+      document,
+      "p",
+      "citadel-feature__description",
+      isPortuguese
+        ? "Nova linguagem visual para a Cidadela Arcana: piso, obstáculos, reator, alertas, HUD e efeitos agora fazem parte do build do jogo."
+        : "A new visual language for the Arcane Citadel: floor, obstacles, reactor, alerts, HUD, and effects are now part of the game build.",
+    ),
+  );
+  const tags = element(document, "p", "citadel-feature__tags");
+  for (const label of isPortuguese
+    ? ["ARENA", "COMBATE", "HUD", "EFEITOS"]
+    : ["ARENA", "COMBAT", "HUD", "EFFECTS"]) {
+    tags.append(element(document, "span", "citadel-feature__tag", label));
+  }
+  const link = element(
+    document,
+    "a",
+    "action action--primary citadel-feature__action",
+    isPortuguese ? "Entrar na Cidadela" : "Enter the Citadel",
+  );
+  link.href = "/arena/?mode=training&bot=v3&arenaTheme=arcane-citadel";
+  const arrow = element(document, "span", "action__arrow", "→");
+  arrow.setAttribute("aria-hidden", "true");
+  link.append(arrow);
+  copy.append(tags, link);
+
+  feature.append(media, copy);
+  return feature;
+}
+
 function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const region = element(document, "section", "experience-region");
   region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
@@ -220,7 +302,7 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
     article.append(meta, copy, action);
     grid.append(article);
   });
-  region.append(hero, grid);
+  region.append(hero, grid, renderCitadelFeature(document, snapshot));
   return region;
 }
 

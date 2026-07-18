@@ -500,6 +500,148 @@ a.brand__language:hover {
   gap: 1.25rem;
 }
 
+.citadel-feature {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 0.75fr);
+  min-height: 27rem;
+  margin-top: 1.25rem;
+  overflow: hidden;
+  border: 1px solid rgb(142 193 255 / 18%);
+  border-radius: 0.8rem;
+  background: #090c14;
+  box-shadow: 0 2rem 5rem -3rem rgb(0 0 0 / 90%);
+  animation: rise-in 900ms 610ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.citadel-feature::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 48%, rgb(7 9 16 / 42%) 67%, rgb(7 9 16 / 94%) 100%);
+  content: "";
+}
+
+.citadel-feature__media {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.citadel-feature__banner {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.9) contrast(1.04);
+  user-select: none;
+}
+
+.citadel-feature__key-art {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: clamp(5rem, 10vw, 7.25rem);
+  aspect-ratio: 1;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 0.55rem;
+  object-fit: cover;
+  box-shadow: 0 0.85rem 2rem rgb(0 0 0 / 55%);
+}
+
+.citadel-feature__systems {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  display: flex;
+  align-items: end;
+  gap: 0.35rem;
+}
+
+.citadel-feature__asset-group {
+  display: flex;
+  min-width: 0;
+  gap: 0.16rem;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.45rem;
+  padding: 0.28rem;
+  background: rgb(5 8 15 / 78%);
+  box-shadow: 0 0.55rem 1.5rem rgb(0 0 0 / 42%);
+  backdrop-filter: blur(10px);
+}
+
+.citadel-feature__asset {
+  width: clamp(1.4rem, 2.2vw, 2rem);
+  height: clamp(1.4rem, 2.2vw, 2rem);
+  flex: 0 1 auto;
+  border-radius: 0.22rem;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.citadel-feature__copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(2rem, 4vw, 3.75rem) clamp(1.7rem, 3vw, 3rem);
+}
+
+.citadel-feature__kicker,
+.citadel-feature__tags {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+}
+
+.citadel-feature__kicker {
+  color: #89c8ff;
+}
+
+.citadel-feature__title {
+  margin: 0.85rem 0 0;
+  font-family: var(--display);
+  font-size: clamp(2.2rem, 4vw, 4rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.citadel-feature__description {
+  margin: 1.15rem 0 0;
+  color: #b2bac9;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.citadel-feature__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+  color: #8995aa;
+  letter-spacing: 0.13em;
+}
+
+.citadel-feature__tag {
+  border: 1px solid rgb(142 193 255 / 16%);
+  border-radius: 999px;
+  padding: 0.38rem 0.55rem;
+  background: rgb(129 178 231 / 5%);
+}
+
+.citadel-feature__action {
+  align-self: flex-start;
+  margin-top: 1.65rem;
+  text-decoration: none;
+}
+
 .experience-card {
   --card-accent: var(--red);
   position: relative;
@@ -1279,6 +1421,14 @@ a.brand__language:hover {
   .laboratory__form {
     max-width: 42rem;
   }
+
+  .citadel-feature {
+    grid-template-columns: minmax(0, 1.2fr) minmax(17rem, 0.8fr);
+  }
+
+  .citadel-feature__systems {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 800px) {
@@ -1296,6 +1446,22 @@ a.brand__language:hover {
 
   .action--card {
     margin-top: 2rem;
+  }
+
+  .citadel-feature {
+    grid-template-columns: 1fr;
+  }
+
+  .citadel-feature::after {
+    background: linear-gradient(0deg, rgb(7 9 16 / 98%) 0%, rgb(7 9 16 / 55%) 38%, transparent 66%);
+  }
+
+  .citadel-feature__media {
+    min-height: 23rem;
+  }
+
+  .citadel-feature__copy {
+    margin-top: -5rem;
   }
 }
 
@@ -1365,6 +1531,19 @@ a.brand__language:hover {
 
   .experience-card__copy {
     margin-top: 2rem;
+  }
+
+  .citadel-feature__media {
+    min-height: 18rem;
+  }
+
+  .citadel-feature__asset-group--effects,
+  .citadel-feature__asset-group--feedback {
+    display: none;
+  }
+
+  .citadel-feature__copy {
+    padding: 1.6rem 1.35rem 2rem;
   }
 
   .selection,

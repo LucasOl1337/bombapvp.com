@@ -61,6 +61,10 @@ describe("Bomba PvP app", () => {
     ).toBeTruthy();
     expect(within(portugueseRoot).getByRole("group", { name: "Idioma" })).toBeTruthy();
     expect(portugueseRoot.querySelector(".experience-region")).not.toBeNull();
+    const citadelFeature = within(portugueseRoot).getByRole("region", { name: "Citadel Breach" });
+    expect(within(citadelFeature).getByRole("heading", { name: "Citadel Breach" })).toBeTruthy();
+    expect(within(citadelFeature).getByRole("link", { name: "Entrar na Cidadela" }).getAttribute("href"))
+      .toBe("/arena/?mode=training&bot=v3&arenaTheme=arcane-citadel");
 
     app.dispose();
     const englishRoot = createRoot();
