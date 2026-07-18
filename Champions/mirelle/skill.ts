@@ -1,11 +1,13 @@
 import type {
   Direction,
+  PixelCoord,
   PlayerState,
   TileCoord,
 } from "../../src/original-game/Gameplay/types";
 import { TILE_SIZE } from "../../src/original-game/PersonalConfig/config";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { MirelleTideSwapEffect } from "./contracts";
 import {
   MIRELLE_SKILL_COOLDOWN_MS,
   MIRELLE_SKILL_ID,
@@ -16,8 +18,14 @@ export {
   MIRELLE_SKILL_COOLDOWN_MS,
 } from "./definition";
 
-export const MIRELLE_SKILL_CHANNEL_MS = 280;
+/** Short wind-up; always completes once started (tap is enough). */
+export const MIRELLE_SKILL_CHANNEL_MS = 220;
+/** Chebyshev range for nearest living enemy. */
 export const MIRELLE_SWAP_RANGE = 4;
+/** Miss / no-target cooldown so a dry cast is not full 8s. */
+export const MIRELLE_MISS_COOLDOWN_MS = 1_200;
+/** How long the tide ribbon VFX lasts. */
+export const MIRELLE_SWAP_VISUAL_MS = 420;
 
 export type MirelleSkillContext = Pick<
   SkillContext,
@@ -26,6 +34,7 @@ export type MirelleSkillContext = Pick<
   | "getTileFromPosition"
   | "normalizeArenaPosition"
   | "canOccupyPosition"
+  | "addChampionWorldEffect"
   | "soundManager"
 >;
 
@@ -33,14 +42,14 @@ function chebyshev(a: TileCoord, b: TileCoord): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
-function tileCenter(tile: TileCoord) {
+export function tileCenter(tile: TileCoord): PixelCoord {
   return {
     x: tile.x * TILE_SIZE + TILE_SIZE * 0.5,
     y: tile.y * TILE_SIZE + TILE_SIZE * 0.5,
   };
 }
 
-/** Find nearest living enemy within Chebyshev range (ties: lower player id). */
+/** Nearest living enemy within Chebyshev range (ties → lower player id). */
 export function findTideSwapTarget(
   caster: PlayerState,
   context: MirelleSkillContext,
@@ -66,7 +75,10 @@ export function findTideSwapTarget(
   return best;
 }
 
-/** Swap caster and target positions if both landings remain occupiable. */
+/**
+ * Instant position swap to tile centers.
+ * Returns false when no valid enemy is in range.
+ */
 export function fireTideSwap(
   caster: PlayerState,
   context: MirelleSkillContext,
@@ -75,22 +87,24 @@ export function fireTideSwap(
   if (!target) {
     return false;
   }
-  const aPos = { ...caster.position };
-  const bPos = { ...target.position };
-  const aLanding = context.normalizeArenaPosition(bPos);
-  const bLanding = context.normalizeArenaPosition(aPos);
-  if (
-    !context.canOccupyPosition(caster, aLanding) ||
-    !context.canOccupyPosition(target, bLanding)
-  ) {
-    // Landing checks can fail due to bombs under feet of the other player —
-    // still allow pure tile-center swap when tiles differ.
-    const aTile = context.getTileFromPosition(aPos);
-    const bTile = context.getTileFromPosition(bPos);
-    if (aTile.x === bTile.x && aTile.y === bTile.y) {
-      return false;
-    }
+
+  const aTile = context.getTileFromPosition(caster.position);
+  const bTile = context.getTileFromPosition(target.position);
+  if (aTile.x === bTile.x && aTile.y === bTile.y) {
+    return false;
   }
+
+  // Land on clean tile centers so both players settle on grid.
+  const aLanding = context.normalizeArenaPosition(tileCenter(bTile));
+  const bLanding = context.normalizeArenaPosition(tileCenter(aTile));
+
+  // Soft occupy check: bombs under the other player should not hard-block a swap
+  // (tide fantasy = phase through), but solid geometry is already encoded in tiles.
+  void context.canOccupyPosition;
+
+  const fromPx: PixelCoord = { ...caster.position };
+  const toPx: PixelCoord = { ...target.position };
+
   caster.position = aLanding;
   target.position = bLanding;
   caster.tile = context.getTileFromPosition(caster.position);
@@ -99,6 +113,28 @@ export function fireTideSwap(
   caster.velocity.y = 0;
   target.velocity.x = 0;
   target.velocity.y = 0;
+
+  // Face each other after swap for readable body language.
+  if (caster.tile.x !== target.tile.x) {
+    caster.direction = caster.tile.x < target.tile.x ? "right" : "left";
+    target.direction = target.tile.x < caster.tile.x ? "right" : "left";
+  } else if (caster.tile.y !== target.tile.y) {
+    caster.direction = caster.tile.y < target.tile.y ? "down" : "up";
+    target.direction = target.tile.y < caster.tile.y ? "down" : "up";
+  }
+  caster.lastMoveDirection = caster.direction;
+  target.lastMoveDirection = target.direction;
+
+  const effect: MirelleTideSwapEffect = {
+    kind: "mirelle-tide-swap",
+    ownerId: caster.id,
+    from: fromPx,
+    to: toPx,
+    fromTile: { ...aTile },
+    toTile: { ...bTile },
+    remainingMs: MIRELLE_SWAP_VISUAL_MS,
+  };
+  context.addChampionWorldEffect(effect);
   context.soundManager.playOneShot("powerCollect");
   return true;
 }
@@ -150,15 +186,14 @@ export function updateMirelleTideSwap(
   );
   player.skill.castElapsedMs += deltaMs;
   if (player.skill.channelRemainingMs <= 0) {
-    fireTideSwap(player, context);
+    const hit = fireTideSwap(player, context);
     player.skill.phase = "cooldown";
-    player.skill.cooldownRemainingMs = MIRELLE_SKILL_COOLDOWN_MS;
+    player.skill.cooldownRemainingMs = hit
+      ? MIRELLE_SKILL_COOLDOWN_MS
+      : MIRELLE_MISS_COOLDOWN_MS;
     player.skill.castElapsedMs = 0;
     player.skill.projectedPosition = null;
     player.skill.projectedLastMoveDirection = null;
   }
   return true;
 }
-
-// silence unused helper for tests that want tile centers
-export { tileCenter };

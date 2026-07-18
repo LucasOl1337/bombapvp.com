@@ -84,6 +84,7 @@ describe("wave-2 champion skills (real entry points)", () => {
     const near = makePlayer(2, 6, 4, MIRELLE_SKILL_ID);
     const far = makePlayer(3, 10, 10, MIRELLE_SKILL_ID);
     const players = { 1: caster, 2: near, 3: far } as never;
+    const effects: unknown[] = [];
     const context = {
       players,
       activePlayerIds: [1, 2, 3] as number[],
@@ -93,6 +94,9 @@ describe("wave-2 champion skills (real entry points)", () => {
       }),
       normalizeArenaPosition: (p: { x: number; y: number }) => p,
       canOccupyPosition: () => true,
+      addChampionWorldEffect: (e: unknown) => {
+        effects.push(e);
+      },
       soundManager: { playOneShot: () => {} },
     };
     expect(findTideSwapTarget(caster, context as never)?.id).toBe(2);
@@ -101,6 +105,8 @@ describe("wave-2 champion skills (real entry points)", () => {
     expect(caster.tile).toEqual({ x: 6, y: 4 });
     expect(near.tile).toEqual({ x: 4, y: 4 });
     expect(far.tile).toEqual({ x: 10, y: 10 });
+    expect(effects).toHaveLength(1);
+    expect(effects[0]).toMatchObject({ kind: "mirelle-tide-swap" });
   });
 
   it("Bram Seismic Crack breaks crates within range only", () => {
