@@ -6,13 +6,16 @@ import type {
 import { tileKey } from "../../src/original-game/Arenas/arena";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { ZephyrGaleEffect } from "./contracts";
 import { ZEPHYR_SKILL_COOLDOWN_MS, ZEPHYR_SKILL_ID } from "./definition";
 
 export { ZEPHYR_CHARACTER_ID, ZEPHYR_SKILL_COOLDOWN_MS } from "./definition";
 
-export const ZEPHYR_SKILL_CHANNEL_MS = 250;
+export const ZEPHYR_SKILL_CHANNEL_MS = 220;
 export const ZEPHYR_GALE_RANGE = 2;
 export const ZEPHYR_PUSH_TILES = 1;
+export const ZEPHYR_MISS_COOLDOWN_MS = 1_200;
+export const ZEPHYR_GALE_VISUAL_MS = 360;
 
 export type ZephyrSkillContext = Pick<
   SkillContext,
@@ -22,8 +25,10 @@ export type ZephyrSkillContext = Pick<
   | "activePlayerIds"
   | "getTileFromPosition"
   | "isPositionOverlappingTile"
+  | "addChampionWorldEffect"
   | "soundManager"
 >;
+
 
 function chebyshev(a: TileCoord, b: TileCoord): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -124,7 +129,16 @@ export function fireGaleScatter(
       pushed += 1;
     }
   }
-  context.soundManager.playOneShot("bombPlace");
+  const effect: ZephyrGaleEffect = {
+    kind: "zephyr-gale",
+    ownerId: player.id,
+    origin: { ...center },
+    remainingMs: ZEPHYR_GALE_VISUAL_MS,
+    maxRadiusTiles: ZEPHYR_GALE_RANGE,
+    pushedCount: pushed,
+  };
+  context.addChampionWorldEffect(effect);
+  context.soundManager.playOneShot(pushed > 0 ? "bombPlace" : "powerCollect");
   return pushed;
 }
 
@@ -175,9 +189,10 @@ export function updateZephyrGaleScatter(
   );
   player.skill.castElapsedMs += deltaMs;
   if (player.skill.channelRemainingMs <= 0) {
-    fireGaleScatter(player, context);
+    const pushed = fireGaleScatter(player, context);
     player.skill.phase = "cooldown";
-    player.skill.cooldownRemainingMs = ZEPHYR_SKILL_COOLDOWN_MS;
+    player.skill.cooldownRemainingMs =
+      pushed > 0 ? ZEPHYR_SKILL_COOLDOWN_MS : ZEPHYR_MISS_COOLDOWN_MS;
     player.skill.castElapsedMs = 0;
     player.skill.projectedPosition = null;
     player.skill.projectedLastMoveDirection = null;

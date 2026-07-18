@@ -7,12 +7,14 @@ import type {
 import { TILE_SIZE } from "../../src/original-game/PersonalConfig/config";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { LumenFlashEffect } from "./contracts";
 import { LUMEN_SKILL_COOLDOWN_MS, LUMEN_SKILL_ID } from "./definition";
 
 export { LUMEN_CHARACTER_ID, LUMEN_SKILL_COOLDOWN_MS } from "./definition";
 
 export const LUMEN_FLASH_MAX_TILES = 2;
-export const LUMEN_BLOCKED_COOLDOWN_MS = 400;
+export const LUMEN_BLOCKED_COOLDOWN_MS = 500;
+export const LUMEN_FLASH_VISUAL_MS = 280;
 
 export type LumenSkillContext = Pick<
   SkillContext,
@@ -20,6 +22,7 @@ export type LumenSkillContext = Pick<
   | "getTileFromPosition"
   | "normalizeArenaPosition"
   | "canOccupyPosition"
+  | "addChampionWorldEffect"
   | "soundManager"
 >;
 
@@ -71,6 +74,7 @@ export function fireFlashStep(
   if (landing.x === start.x && landing.y === start.y) {
     return false;
   }
+  const from = { ...player.position };
   const pos = context.normalizeArenaPosition(tileCenter(landing));
   player.position = { ...pos };
   player.tile = context.getTileFromPosition(player.position);
@@ -78,6 +82,14 @@ export function fireFlashStep(
   player.lastMoveDirection = direction;
   player.velocity.x = 0;
   player.velocity.y = 0;
+  const effect: LumenFlashEffect = {
+    kind: "lumen-flash",
+    ownerId: player.id,
+    from,
+    to: { ...player.position },
+    remainingMs: LUMEN_FLASH_VISUAL_MS,
+  };
+  context.addChampionWorldEffect(effect);
   context.soundManager.playOneShot("matchStart");
   return true;
 }

@@ -113,6 +113,7 @@ describe("wave-2 champion skills (real entry points)", () => {
     const player = makePlayer(1, 5, 5, BRAM_SKILL_ID);
     const arena = emptyArena();
     const broken: string[] = [];
+    const effects: unknown[] = [];
     const context = {
       arena,
       getTileFromPosition: (p: { x: number; y: number }) => ({
@@ -125,6 +126,9 @@ describe("wave-2 champion skills (real entry points)", () => {
         broken.push(key);
         return true;
       },
+      addChampionWorldEffect: (e: unknown) => {
+        effects.push(e);
+      },
       soundManager: { playOneShot: () => {} },
     };
     const targets = listSeismicCrackTargets({ x: 5, y: 5 }, context);
@@ -134,6 +138,7 @@ describe("wave-2 champion skills (real entry points)", () => {
     expect(fireSeismicCrack(player, context)).toBeGreaterThanOrEqual(2);
     expect(broken).toEqual(expect.arrayContaining(["5,5", "6,5"]));
     expect(broken).not.toContain("1,1");
+    expect(effects[0]).toMatchObject({ kind: "bram-seismic" });
   });
 
   it("Zephyr Gale Scatter pushes nearby bombs away from caster", () => {
@@ -170,6 +175,7 @@ describe("wave-2 champion skills (real entry points)", () => {
         y: Math.floor(p.y / TS),
       }),
       isPositionOverlappingTile: () => false,
+      addChampionWorldEffect: () => {},
       soundManager: { playOneShot: () => {} },
     };
     expect(ZEPHYR_GALE_RANGE).toBe(2);
@@ -203,16 +209,21 @@ describe("wave-2 champion skills (real entry points)", () => {
         flameRange: 1,
       },
     ];
+    const effects: unknown[] = [];
     const context = {
       bombs,
       getTileFromPosition: (p: { x: number; y: number }) => ({
         x: Math.floor(p.x / TS),
         y: Math.floor(p.y / TS),
       }),
+      addChampionWorldEffect: (e: unknown) => {
+        effects.push(e);
+      },
       soundManager: { playOneShot: () => {} },
     };
     expect(HEXA_HEX_RANGE).toBe(3);
     expect(fireFuseHex(player, context)).toBe(1);
+    expect(effects[0]).toMatchObject({ kind: "hexa-hex", hexedCount: 1 });
     expect(bombs[0]!.fuseMs).toBe(1000);
     expect(bombs[1]!.fuseMs).toBe(2000);
     bombs[0]!.fuseMs = 500;
@@ -224,8 +235,19 @@ describe("wave-2 champion skills (real entry points)", () => {
     const player = makePlayer(1, 3, 3, AEGIS_SKILL_ID);
     player.skill.phase = "channeling";
     expect(isAegisImmuneDuringChannel(player)).toBe(true);
-    fireBastionPulse(player, { soundManager: { playOneShot: () => {} } });
+    const effects: unknown[] = [];
+    fireBastionPulse(player, {
+      getTileFromPosition: (p: { x: number; y: number }) => ({
+        x: Math.floor(p.x / TS),
+        y: Math.floor(p.y / TS),
+      }),
+      addChampionWorldEffect: (e: unknown) => {
+        effects.push(e);
+      },
+      soundManager: { playOneShot: () => {} },
+    });
     expect(player.flameGuardMs).toBe(AEGIS_GUARD_MS);
+    expect(effects[0]).toMatchObject({ kind: "aegis-bastion" });
   });
 
   it("Lumen Flash Step blinks up to two free tiles along facing", () => {
@@ -233,6 +255,7 @@ describe("wave-2 champion skills (real entry points)", () => {
     const arena = emptyArena();
     arena.breakable.clear();
     arena.solid.add("5,2");
+    const effects: unknown[] = [];
     const context = {
       arena,
       getTileFromPosition: (p: { x: number; y: number }) => ({
@@ -241,6 +264,9 @@ describe("wave-2 champion skills (real entry points)", () => {
       }),
       normalizeArenaPosition: (p: { x: number; y: number }) => p,
       canOccupyPosition: () => true,
+      addChampionWorldEffect: (e: unknown) => {
+        effects.push(e);
+      },
       soundManager: { playOneShot: () => {} },
     };
     expect(LUMEN_FLASH_MAX_TILES).toBe(2);
@@ -250,5 +276,6 @@ describe("wave-2 champion skills (real entry points)", () => {
     });
     expect(fireFlashStep(player, "right", context)).toBe(true);
     expect(player.tile).toEqual({ x: 4, y: 2 });
+    expect(effects[0]).toMatchObject({ kind: "lumen-flash" });
   });
 });

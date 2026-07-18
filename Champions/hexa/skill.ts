@@ -5,17 +5,20 @@ import type {
 } from "../../src/original-game/Gameplay/types";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { HexaHexEffect } from "./contracts";
 import { HEXA_SKILL_COOLDOWN_MS, HEXA_SKILL_ID } from "./definition";
 
 export { HEXA_CHARACTER_ID, HEXA_SKILL_COOLDOWN_MS } from "./definition";
 
-export const HEXA_SKILL_CHANNEL_MS = 300;
+export const HEXA_SKILL_CHANNEL_MS = 260;
 export const HEXA_HEX_RANGE = 3;
 export const HEXA_FUSE_FLOOR_MS = 400;
+export const HEXA_MISS_COOLDOWN_MS = 1_300;
+export const HEXA_HEX_VISUAL_MS = 400;
 
 export type HexaSkillContext = Pick<
   SkillContext,
-  "bombs" | "getTileFromPosition" | "soundManager"
+  "bombs" | "getTileFromPosition" | "addChampionWorldEffect" | "soundManager"
 >;
 
 function chebyshev(a: TileCoord, b: TileCoord): number {
@@ -29,6 +32,7 @@ export function fireFuseHex(
 ): number {
   const origin = context.getTileFromPosition(player.position);
   let hexed = 0;
+  const bombTiles: TileCoord[] = [];
   for (const bomb of context.bombs) {
     if (chebyshev(origin, bomb.tile) > HEXA_HEX_RANGE) continue;
     const next = Math.max(
@@ -38,9 +42,20 @@ export function fireFuseHex(
     if (next < bomb.fuseMs) {
       bomb.fuseMs = next;
       hexed += 1;
+      bombTiles.push({ ...bomb.tile });
     }
   }
-  context.soundManager.playOneShot("powerCollect");
+  const effect: HexaHexEffect = {
+    kind: "hexa-hex",
+    ownerId: player.id,
+    origin: { ...origin },
+    remainingMs: HEXA_HEX_VISUAL_MS,
+    maxRadiusTiles: HEXA_HEX_RANGE,
+    hexedCount: hexed,
+    bombTiles,
+  };
+  context.addChampionWorldEffect(effect);
+  context.soundManager.playOneShot(hexed > 0 ? "powerCollect" : "bombPlace");
   return hexed;
 }
 
@@ -91,9 +106,10 @@ export function updateHexaFuseHex(
   );
   player.skill.castElapsedMs += deltaMs;
   if (player.skill.channelRemainingMs <= 0) {
-    fireFuseHex(player, context);
+    const hexed = fireFuseHex(player, context);
     player.skill.phase = "cooldown";
-    player.skill.cooldownRemainingMs = HEXA_SKILL_COOLDOWN_MS;
+    player.skill.cooldownRemainingMs =
+      hexed > 0 ? HEXA_SKILL_COOLDOWN_MS : HEXA_MISS_COOLDOWN_MS;
     player.skill.castElapsedMs = 0;
     player.skill.projectedPosition = null;
     player.skill.projectedLastMoveDirection = null;

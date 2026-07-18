@@ -1,20 +1,37 @@
-import type { Direction, PlayerState } from "../../src/original-game/Gameplay/types";
+import type {
+  Direction,
+  PlayerState,
+  TileCoord,
+} from "../../src/original-game/Gameplay/types";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { AegisBastionEffect } from "./contracts";
 import { AEGIS_SKILL_COOLDOWN_MS, AEGIS_SKILL_ID } from "./definition";
 
 export { AEGIS_CHARACTER_ID, AEGIS_SKILL_COOLDOWN_MS } from "./definition";
 
-export const AEGIS_SKILL_CHANNEL_MS = 250;
-export const AEGIS_GUARD_MS = 900;
+export const AEGIS_SKILL_CHANNEL_MS = 220;
+export const AEGIS_GUARD_MS = 1_100;
+export const AEGIS_BASTION_VISUAL_MS = 340;
 
-export type AegisSkillContext = Pick<SkillContext, "soundManager">;
+export type AegisSkillContext = Pick<
+  SkillContext,
+  "getTileFromPosition" | "addChampionWorldEffect" | "soundManager"
+>;
 
 export function fireBastionPulse(
   player: PlayerState,
   context: AegisSkillContext,
 ): void {
   player.flameGuardMs = Math.max(player.flameGuardMs, AEGIS_GUARD_MS);
+  const origin = context.getTileFromPosition(player.position);
+  const effect: AegisBastionEffect = {
+    kind: "aegis-bastion",
+    ownerId: player.id,
+    origin: { ...origin },
+    remainingMs: AEGIS_BASTION_VISUAL_MS,
+  };
+  context.addChampionWorldEffect(effect);
   context.soundManager.playOneShot("shieldBlock");
 }
 

@@ -43,11 +43,11 @@ describe("Champions module", () => {
       { name: "Nix Ember", size: { width: 124, height: 124 }, fileCount: 124 },
       { name: "Pendula", size: { width: 124, height: 124 }, fileCount: 156 },
       { name: "Mirelle", size: { width: 124, height: 124 }, fileCount: 244 },
-      { name: "Bram", size: { width: 124, height: 124 }, fileCount: 116 },
-      { name: "Zephyr", size: { width: 124, height: 124 }, fileCount: 116 },
-      { name: "Hexa", size: { width: 124, height: 124 }, fileCount: 116 },
-      { name: "Aegis", size: { width: 124, height: 124 }, fileCount: 116 },
-      { name: "Lumen", size: { width: 124, height: 124 }, fileCount: 116 },
+      { name: "Bram", size: { width: 124, height: 124 }, fileCount: 244 },
+      { name: "Zephyr", size: { width: 124, height: 124 }, fileCount: 244 },
+      { name: "Hexa", size: { width: 124, height: 124 }, fileCount: 244 },
+      { name: "Aegis", size: { width: 124, height: 124 }, fileCount: 244 },
+      { name: "Lumen", size: { width: 124, height: 124 }, fileCount: 244 },
     ]);
     for (const { assets } of entries) {
       expect(assets.portraitUrl).toContain("/Champions/");

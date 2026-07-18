@@ -6,23 +6,32 @@ import type {
 import { tileKey } from "../../src/original-game/Arenas/arena";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
+import type { BramSeismicEffect } from "./contracts";
 import { BRAM_SKILL_COOLDOWN_MS, BRAM_SKILL_ID } from "./definition";
 
 export { BRAM_CHARACTER_ID, BRAM_SKILL_COOLDOWN_MS } from "./definition";
 
-export const BRAM_SKILL_CHANNEL_MS = 350;
+/** Short stomp wind-up; always completes once started. */
+export const BRAM_SKILL_CHANNEL_MS = 300;
 export const BRAM_CRACK_RANGE = 2;
+/** No crates broken → short CD instead of full. */
+export const BRAM_MISS_COOLDOWN_MS = 1_400;
+export const BRAM_SEISMIC_VISUAL_MS = 380;
 
 export type BramSkillContext = Pick<
   SkillContext,
-  "arena" | "getTileFromPosition" | "breakCrateAtKey" | "soundManager"
+  | "arena"
+  | "getTileFromPosition"
+  | "breakCrateAtKey"
+  | "addChampionWorldEffect"
+  | "soundManager"
 >;
 
 function chebyshev(a: TileCoord, b: TileCoord): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
-/** List breakable crate tiles within Chebyshev range of origin. */
+/** Breakable crate tiles within Chebyshev range of origin. */
 export function listSeismicCrackTargets(
   origin: TileCoord,
   context: BramSkillContext,
@@ -51,7 +60,16 @@ export function fireSeismicCrack(
       broken += 1;
     }
   }
-  context.soundManager.playOneShot("crateBreak");
+  const effect: BramSeismicEffect = {
+    kind: "bram-seismic",
+    ownerId: player.id,
+    origin: { ...origin },
+    remainingMs: BRAM_SEISMIC_VISUAL_MS,
+    maxRadiusTiles: BRAM_CRACK_RANGE,
+    brokenCount: broken,
+  };
+  context.addChampionWorldEffect(effect);
+  context.soundManager.playOneShot(broken > 0 ? "crateBreak" : "bombPlace");
   return broken;
 }
 
@@ -102,9 +120,10 @@ export function updateBramSeismicCrack(
   );
   player.skill.castElapsedMs += deltaMs;
   if (player.skill.channelRemainingMs <= 0) {
-    fireSeismicCrack(player, context);
+    const broken = fireSeismicCrack(player, context);
     player.skill.phase = "cooldown";
-    player.skill.cooldownRemainingMs = BRAM_SKILL_COOLDOWN_MS;
+    player.skill.cooldownRemainingMs =
+      broken > 0 ? BRAM_SKILL_COOLDOWN_MS : BRAM_MISS_COOLDOWN_MS;
     player.skill.castElapsedMs = 0;
     player.skill.projectedPosition = null;
     player.skill.projectedLastMoveDirection = null;
