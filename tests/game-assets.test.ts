@@ -4,11 +4,13 @@ import { resolveGameAsset } from "../game-assets/index.ts";
 import { getArenaThemeById } from "../src/original-game/Arenas/arena-theme-library.ts";
 
 describe("game assets", () => {
-  it("plugs the promoted Citadel pieces into the playable Arcane Citadel theme", () => {
+  it("uses the cohesive Arcane Citadel theme tile pack (not motif-heavy shared props)", () => {
     expect(getArenaThemeById("arcane-citadel")?.tilePaths).toMatchObject({
-      lane: "arena.shared.citadel-conduit-floor",
-      wall: "arena.shared.citadel-gate-obstacle",
-      crate: "arena.shared.citadel-reactor-block",
+      base: "arena.theme.arcane-citadel.floor.base",
+      lane: "arena.theme.arcane-citadel.floor.lane",
+      spawn: "arena.theme.arcane-citadel.floor.spawn",
+      wall: "arena.theme.arcane-citadel.wall",
+      crate: "arena.theme.arcane-citadel.crate",
     });
   });
 

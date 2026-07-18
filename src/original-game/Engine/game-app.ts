@@ -4375,31 +4375,44 @@ export class GameApp {
     this.ctx.fillStyle = CANVAS_UI_PANEL_BG;
     this.ctx.fillRect(x, y, width, height);
     this.ctx.fillStyle = accent;
-    this.ctx.fillRect(x, y, width, 3);
+    this.ctx.fillRect(x, y, 3, height);
     this.ctx.strokeStyle = CANVAS_UI_BORDER;
-    this.ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+  }
+
+  private formatHudStatLine(player: PlayerState, includeShortFuse: boolean): string {
+    // Use spaced tokens so 0 never collides with adjacent letters (S0 → “S 0”).
+    const parts = [
+      `B ${player.maxBombs}`,
+      `F ${player.flameRange}`,
+      `S ${player.speedLevel}`,
+    ];
+    if (includeShortFuse) {
+      parts.push(`Q ${player.shortFuseLevel}`);
+    }
+    return parts.join(" · ");
   }
 
   private renderCompactPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
     const player = this.players[playerId];
     const palette = PLAYER_COLORS[playerId];
-    const compactWidth = Math.max(108, width);
+    const compactWidth = Math.max(120, width);
     const status = this.getPlayerHudStatus(playerId);
     const scoreText = this.onlineRoomMode === "endless"
       ? `K${this.endlessKills[playerId]} W${this.endlessRoundWins[playerId]}`
       : `W${this.score[playerId]}`;
-    const statText = `B${player.maxBombs} F${player.flameRange} S${player.speedLevel}`;
+    const statText = this.formatHudStatLine(player, false);
 
-    this.drawHudPanel(x, y, compactWidth, 18, palette.glow);
+    this.drawHudPanel(x, y, compactWidth, 22, palette.glow);
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 7px Inter";
-    this.drawHudText(this.getPlayerSlotLabel(playerId), x + 6, y + 7, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "700 6px Inter";
-    this.drawHudText(scoreText, x + 30, y + 7, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 9px Inter";
+    this.drawHudText(this.getPlayerSlotLabel(playerId), x + 8, y + 9, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 8px Inter";
+    this.drawHudText(scoreText, x + 34, y + 9, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
     this.ctx.textAlign = "right";
-    this.drawHudText(status.label, x + compactWidth - 6, y + 7, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
-    this.ctx.font = "500 6px Inter";
-    this.drawHudText(statText, x + compactWidth - 6, y + 14, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
+    this.drawHudText(status.label, x + compactWidth - 6, y + 9, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "600 7px Inter";
+    this.drawHudText(statText, x + compactWidth - 6, y + 18, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
   }
 
   private renderCompactHud(): void {
@@ -4552,81 +4565,78 @@ export class GameApp {
     const player = this.players[playerId];
     const palette = PLAYER_COLORS[playerId];
     const title = this.getPlayerSlotLabel(playerId);
-    const statLine = `B${player.maxBombs} F${player.flameRange} S${player.speedLevel} Q${player.shortFuseLevel}`;
+    const statLine = this.formatHudStatLine(player, true);
     const status = this.getPlayerHudStatus(playerId);
-    const compact = width < 230;
     const recentPickup = this.getLatestPowerUpPickupNotice(playerId);
+    const nameBudget = width < 170 ? 10 : 14;
     const subtitleText = recentPickup
-      ? this.formatPowerUpPickupNotice(recentPickup, compact ? 8 : 12)
-      : this.shortenCharacterName(this.getCharacterLabel(playerId, compact ? 8 : 12), compact ? 8 : 12);
+      ? this.formatPowerUpPickupNotice(recentPickup, nameBudget)
+      : this.shortenCharacterName(this.getCharacterLabel(playerId, nameBudget), nameBudget);
     const subtitleColor = recentPickup
       ? recentPickup.chainGuard ? CANVAS_UI_GOLD_BRIGHT : getPowerUpDefinition(recentPickup.type).tint
       : CANVAS_UI_TEXT;
-    const allSkillSlots = this.getHudSkillSlots(playerId);
-    const skillSlots = compact
-      ? this.getCompactHudSkillSlots(allSkillSlots)
-      : allSkillSlots;
+    // Always compact the power row: show only owned powers + dedicated ULT chip.
+    // Avoids the old "SPC OK" soup of empty slots + status + key labels.
+    const skillSlots = this.getCompactHudSkillSlots(this.getHudSkillSlots(playerId));
+    const panelHeight = 46;
 
-    this.drawHudPanel(x, y, width, 42, palette.glow);
+    this.drawHudPanel(x, y, width, panelHeight, palette.glow);
+
+    // Row 1: P# · name ........................ status
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 8px Inter";
-    this.drawHudText(title, x + 6, y + 10, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "500 6px Inter";
-    this.drawHudText(
-      subtitleText,
-      x + 6,
-      y + 18,
-      subtitleColor,
-      CANVAS_UI_SHADOW,
-    );
+    this.ctx.font = "700 10px Inter";
+    this.drawHudText(title, x + 8, y + 12, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 9px Inter";
+    this.drawHudText(subtitleText, x + 30, y + 12, subtitleColor, CANVAS_UI_SHADOW);
     this.ctx.textAlign = "right";
+    this.ctx.font = "700 9px Inter";
     this.drawHudText(
-      compact ? statLine : status.label,
-      x + width - 6,
-      y + 10,
-      compact
-        ? (player.alive ? CANVAS_UI_SUCCESS : CANVAS_UI_MUTED_SOFT)
-        : this.getHudStatusColor(status),
+      status.label,
+      x + width - 8,
+      y + 12,
+      this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
-    this.drawHudText(
-      compact ? status.label : statLine,
-      x + width - 6,
-      y + 18,
-      compact ? this.getHudStatusColor(status) : CANVAS_UI_MUTED,
-      CANVAS_UI_SHADOW,
-    );
-    if (this.onlineRoomMode === "endless") {
-      this.drawEndlessHudStats(x + 6, y + 28, playerId, palette);
-    } else {
-      this.drawRoundPips(x + 6, y + 25, this.score[playerId], palette);
-    }
 
-    const insetX = x + 4;
-    const insetY = compact
-      ? y + 29
-      : (this.onlineRoomMode === "endless" ? y + 32 : y + 30);
-    const insetWidth = Math.max(12, width - 8);
-    const gap = 2;
-    // Leave a dedicated ultimate chip on the right when the player has a skill.
+    // Row 2: score pips ............... B F S Q
+    if (this.onlineRoomMode === "endless") {
+      this.drawEndlessHudStats(x + 8, y + 22, playerId, palette);
+    } else {
+      this.drawRoundPips(x + 8, y + 20, this.score[playerId], palette);
+    }
+    this.ctx.textAlign = "right";
+    this.ctx.font = "600 8px Inter";
+    this.drawHudText(
+      statLine,
+      x + width - 8,
+      y + 24,
+      player.alive ? CANVAS_UI_MUTED : CANVAS_UI_MUTED_SOFT,
+      CANVAS_UI_SHADOW,
+    );
+
+    // Row 3: power icons + ULT chip only (no key spam)
+    const insetX = x + 6;
+    const insetY = y + 30;
+    const insetWidth = Math.max(12, width - 12);
+    const gap = 3;
     const hasUltimate = Boolean(player.skill.id);
-    const ultChipWidth = hasUltimate ? Math.min(34, Math.max(28, Math.floor(insetWidth * 0.22))) : 0;
+    const ultChipWidth = hasUltimate ? Math.min(42, Math.max(34, Math.floor(insetWidth * 0.28))) : 0;
     const powerInsetWidth = hasUltimate
       ? Math.max(12, insetWidth - ultChipWidth - gap)
       : insetWidth;
-    const slotCount = skillSlots.length;
-    const slotWidth = Math.max(10, Math.floor((powerInsetWidth - gap * (slotCount - 1)) / slotCount));
-    for (let index = 0; index < slotCount; index += 1) {
+    const slotCount = Math.max(1, skillSlots.length);
+    const slotWidth = Math.max(14, Math.floor((powerInsetWidth - gap * (slotCount - 1)) / slotCount));
+    for (let index = 0; index < skillSlots.length; index += 1) {
       const slot = skillSlots[index];
       const slotX = insetX + index * (slotWidth + gap);
-      this.drawHudSkillSlot(slotX, insetY, slotWidth, 10, slot);
+      this.drawHudSkillSlot(slotX, insetY, slotWidth, 12, slot);
     }
     if (hasUltimate) {
       this.drawHudUltimateChip(
         insetX + powerInsetWidth + gap,
         insetY,
         ultChipWidth,
-        10,
+        12,
         playerId,
       );
     }
@@ -4687,24 +4697,20 @@ export class GameApp {
     this.ctx.lineWidth = 1;
     this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
 
-    const keyLabel = this.getSkillHudKeyLabel(playerId);
+    // Never concatenate keybind + status ("SPC OK") — unreadable soup.
+    // Chip is status only; keybind is implied for the local player.
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 6px Inter";
-    const text = keyLabel && width >= 30 ? `${keyLabel} ${label}` : label;
-    this.drawHudText(text, x + width / 2, y + 7, ready || casting ? CANVAS_UI_TEXT : CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
-  }
-
-  private getSkillHudKeyLabel(playerId: PlayerId): string | null {
-    if (this.onlineSession) {
-      if (playerId !== this.onlineLocalPlayerId) {
-        return null;
-      }
-      return formatControlKey(KEY_BINDINGS[1].skill);
-    }
-    if (MENU_PLAYER_IDS.includes(playerId as MenuPlayerId)) {
-      return formatControlKey(KEY_BINDINGS[playerId as MenuPlayerId].skill);
-    }
-    return null;
+    this.ctx.font = "700 8px Inter";
+    const text = ready
+      ? (this.language === "pt" ? "ULT" : "ULT")
+      : label;
+    this.drawHudText(
+      text,
+      x + width / 2,
+      y + Math.max(8, height - 3),
+      ready || casting ? CANVAS_UI_TEXT : CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
+    );
   }
 
   private getCharacterSkillCooldownMs(playerId: PlayerId): number {
@@ -4763,30 +4769,19 @@ export class GameApp {
   }
 
   private getCompactHudSkillSlots(allSkillSlots: HudSkillSlot[]): HudSkillSlot[] {
+    // Show only acquired powers (plus bomb/flame/speed base row so empty
+    // starts still read B/F/S). Never pad with every empty power type.
     const basicTypes: readonly SkillPowerUpType[] = ["bomb-up", "flame-up", "speed-up"];
-    const acquiredBasicTypes = new Set(
-      allSkillSlots
-        .filter((slot) => slot.acquired && basicTypes.includes(slot.type))
-        .map((slot) => slot.type),
-    );
-    const selectedTypes = new Set<SkillPowerUpType>(acquiredBasicTypes);
-
-    for (const slot of allSkillSlots) {
-      if (selectedTypes.size >= 4) {
-        break;
-      }
-      if (slot.acquired && !basicTypes.includes(slot.type)) {
-        selectedTypes.add(slot.type);
-      }
+    const acquired = allSkillSlots.filter((slot) => slot.acquired);
+    if (acquired.length === 0) {
+      return allSkillSlots.filter((slot) => basicTypes.includes(slot.type));
     }
-    for (const slot of allSkillSlots) {
-      if (selectedTypes.size >= 4) {
-        break;
-      }
-      selectedTypes.add(slot.type);
+    const selected = new Set<SkillPowerUpType>(basicTypes);
+    for (const slot of acquired) {
+      selected.add(slot.type);
+      if (selected.size >= 5) break;
     }
-
-    return allSkillSlots.filter((slot) => selectedTypes.has(slot.type));
+    return allSkillSlots.filter((slot) => selected.has(slot.type));
   }
 
   private getHudSkillSlot(playerId: PlayerId, type: SkillPowerUpType): HudSkillSlot {
@@ -4994,26 +4989,35 @@ export class GameApp {
     this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
     this.ctx.lineWidth = 1;
 
+    const iconSize = Math.min(10, height - 2);
     const icon = this.assets.powerUps[slot.type];
     if (icon) {
-      this.ctx.globalAlpha = slot.acquired ? 1 : 0.4;
-      this.ctx.drawImage(icon, x + 1, y + 1, 8, 8);
+      this.ctx.globalAlpha = slot.acquired ? 1 : 0.45;
+      this.ctx.drawImage(
+        icon,
+        x + 2,
+        y + Math.max(1, (height - iconSize) / 2),
+        iconSize,
+        iconSize,
+      );
       this.ctx.globalAlpha = 1;
     } else {
-      this.ctx.textAlign = "center";
-      this.ctx.font = "700 6px Inter";
-      this.drawHudText(definition.shortLabel, x + 5, y + 7, tint, CANVAS_UI_SHADOW);
+      this.ctx.textAlign = "left";
+      this.ctx.font = "700 7px Inter";
+      this.drawHudText(
+        definition.shortLabel.slice(0, 1),
+        x + 3,
+        y + height - 3,
+        tint,
+        CANVAS_UI_SHADOW,
+      );
     }
 
-    this.ctx.textAlign = "left";
-    this.ctx.font = "700 6px Inter";
+    // Value only — key labels in chips caused the "SPC OK" overlay mess.
+    this.ctx.textAlign = "right";
+    this.ctx.font = "700 8px Inter";
     const valueColor = slot.acquired ? CANVAS_UI_TEXT : CANVAS_UI_MUTED_SOFT;
-    this.drawHudText(slot.valueLabel, x + 11, y + 7, valueColor, CANVAS_UI_SHADOW);
-    if (slot.keyLabel && width >= 24) {
-      this.ctx.textAlign = "right";
-      this.ctx.font = "500 6px Inter";
-      this.drawHudText(slot.keyLabel, x + width - 2, y + 7, tint, CANVAS_UI_SHADOW);
-    }
+    this.drawHudText(slot.valueLabel, x + width - 3, y + height - 3, valueColor, CANVAS_UI_SHADOW);
   }
 
   private rebuildArenaStaticCache(): void {
@@ -6317,11 +6321,20 @@ export class GameApp {
   }
 
   private drawHudText(text: string, x: number, y: number, fillColor: string, outlineColor: string): void {
-    this.ctx.lineWidth = 1;
+    // Soft dual-pass outline keeps tiny HUD labels legible without the old
+    // 1px stroke that turned "S0" into mud when the canvas was scaled up.
+    this.ctx.save();
+    this.ctx.lineJoin = "round";
+    this.ctx.miterLimit = 2;
+    this.ctx.lineWidth = 2.5;
     this.ctx.strokeStyle = outlineColor;
+    this.ctx.strokeText(text, x, y);
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
     this.ctx.strokeText(text, x, y);
     this.ctx.fillStyle = fillColor;
     this.ctx.fillText(text, x, y);
+    this.ctx.restore();
   }
 
   private getSuddenDeathHudState(): { label: string; progress: number; active: boolean } {

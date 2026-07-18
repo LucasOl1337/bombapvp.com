@@ -141,11 +141,13 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     pixellabDescription: "1). cool blue-gray fortress floor tile with subtle wear and clean center 2). brighter combat-lane slab tile with clearer edge cuts and readable path rhythm 3). protected spawn tile with restrained cyan-gold rune ring and open center 4). thick carved stone wall tile with clear top lip and strong silhouette 5). reinforced wooden crate with iron bands, readable crack seams and low-top-down depth 6). optional accent tile with faint rune fracture and moss only on the edge",
     renderMode: "sprite",
     tilePaths: {
+      // Cohesive 128px citadel pack — avoid motif-heavy conduit/gate props as
+      // base tiles (they create noisy repetition and low-readability floors).
       base: "arena.theme.arcane-citadel.floor.base",
-      lane: "arena.shared.citadel-conduit-floor",
+      lane: "arena.theme.arcane-citadel.floor.lane",
       spawn: "arena.theme.arcane-citadel.floor.spawn",
-      wall: "arena.shared.citadel-gate-obstacle",
-      crate: "arena.shared.citadel-reactor-block",
+      wall: "arena.theme.arcane-citadel.wall",
+      crate: "arena.theme.arcane-citadel.crate",
     },
     palette: {
       floorBase: "#10233d",
