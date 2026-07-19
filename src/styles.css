@@ -2933,7 +2933,7 @@ a.brand__language:hover {
   min-height: 0;
   max-width: none;
   gap: 0.45rem;
-  align-content: center;
+  align-content: start;
   padding: clamp(0.85rem, 2vw, 1.5rem);
   text-align: left;
 }
@@ -2958,8 +2958,8 @@ a.brand__language:hover {
 
 .app-shell--launcher .roster-showcase__label {
   color: var(--ember);
-  font-size: 0.55rem;
-  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
 }
 
 .app-shell--launcher .roster-showcase__name {
@@ -2976,26 +2976,26 @@ a.brand__language:hover {
 .app-shell--launcher .roster-showcase__skill-summary,
 .app-shell--launcher .roster-showcase__analysis {
   display: -webkit-box;
-  max-width: 33rem;
+  max-width: 36rem;
   margin: 0;
   overflow: hidden;
   color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.015em;
-  line-height: 1.45;
+  font-family: Inter, var(--mono), ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(0.95rem, 1.15vw, 1.08rem);
+  letter-spacing: 0.01em;
+  line-height: 1.55;
   -webkit-box-orient: vertical;
 }
 
 .app-shell--launcher .roster-showcase__description {
-  margin-top: 0.2rem;
-  -webkit-line-clamp: 3;
+  margin-top: 0.35rem;
+  -webkit-line-clamp: 4;
 }
 
 .app-shell--launcher .roster-showcase__skill {
   display: grid;
-  gap: 0.35rem;
-  margin-top: 0.25rem;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   padding: 0.55rem 0;
