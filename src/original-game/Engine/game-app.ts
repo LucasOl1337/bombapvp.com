@@ -5244,18 +5244,19 @@ export class GameApp {
         const isWrapPortal = isWrapPortalTile(x, y, this.arena.config);
         const isCenterLane = x === centerX || y === centerY;
         const isSideLane = x === sideColumn || x === farSideColumn || y === sideRow || y === farSideRow;
-        const isSpawnBay = (x <= 2 && y <= 2)
-          || (x >= arenaWidth - 3 && y <= 2)
-          || (x <= 2 && y >= arenaHeight - 3)
-          || (x >= arenaWidth - 3 && y >= arenaHeight - 3);
-        const floorVariant = isSpawnBay
+        // Only the exact spawn pads get the ring tile — full 3x3 corner bays
+        // used to stamp 9 rings and read as gold polka-dots (playtest G6g).
+        const isSpawnPad = Object.values(this.arena.config.spawnMap).some(
+          (spawn) => spawn.tile.x === x && spawn.tile.y === y,
+        );
+        const floorVariant = isSpawnPad
           ? "spawn"
           : isWrapPortal
             ? "portal"
             : isCenterLane || isSideLane
               ? "lane"
               : "base";
-        const floorSprite = isSpawnBay
+        const floorSprite = isSpawnPad
           ? this.assets.floor.spawn
           : isWrapPortal || isCenterLane || isSideLane
             ? this.assets.floor.lane
