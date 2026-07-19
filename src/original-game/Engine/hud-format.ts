@@ -5,7 +5,7 @@ import type { PlayerId, PlayerState } from "../Gameplay/types";
 
 /** Shared two-row match HUD geometry (windowed + fullscreen). */
 export const HUD_LAYOUT = {
-  /** Total HUD band height; keep in sync with PersonalConfig HUD_HEIGHT. */
+  /** Visual match HUD height; independent from stable world-space geometry. */
   height: 78,
   /** Top strip: rival slots + match center. */
   topRowY: 4,
