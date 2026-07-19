@@ -5258,11 +5258,13 @@ export class GameApp {
               : "base";
         const floorSprite = isSpawnPad
           ? this.assets.floor.spawn
-          : isWrapPortal || isCenterLane || isSideLane
-            ? this.assets.floor.lane
-            : (x + y) % 2 === 1 && this.assets.floor.baseAlt
-              ? this.assets.floor.baseAlt
-              : this.assets.floor.base;
+          : isWrapPortal
+            ? (this.assets.floor.portal ?? this.assets.floor.lane)
+            : isCenterLane || isSideLane
+              ? this.assets.floor.lane
+              : (x + y) % 2 === 1 && this.assets.floor.baseAlt
+                ? this.assets.floor.baseAlt
+                : this.assets.floor.base;
         if (floorSprite) {
           c.drawImage(floorSprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
         } else {
@@ -5277,7 +5279,8 @@ export class GameApp {
           }
         } else if (this.arena.breakable.has(key)) {
           this.drawCrate(screenX, screenY);
-        } else if (isWrapPortal) {
+        } else if (isWrapPortal && !this.assets.floor.portal) {
+          // Fallback only when theme has no portal sprite (legacy stroke square).
           c.strokeStyle = this.getArenaPalette().portalRing;
           c.strokeRect(screenX + 7.5, screenY + 7.5, TILE_SIZE - 15, TILE_SIZE - 15);
         }

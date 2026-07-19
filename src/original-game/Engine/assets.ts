@@ -44,6 +44,8 @@ export interface GameAssets {
     baseAlt?: HTMLImageElement | null;
     lane: HTMLImageElement | null;
     spawn: HTMLImageElement | null;
+    /** Optional wrap-portal floor (open dashed ring). */
+    portal?: HTMLImageElement | null;
   };
   props: {
     wall: HTMLImageElement | null;
@@ -305,6 +307,9 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.spawn), resolveGameAsset("arena.shared.floor.spawn")])
         : Promise.resolve(null),
+      arenaTilePaths?.portal
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.portal)])
+        : Promise.resolve(null),
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wall), resolveGameAsset("arena.shared.wall")])
         : Promise.resolve(null),
@@ -342,6 +347,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     floorBaseAlt,
     floorLane,
     floorSpawn,
+    floorPortal,
     wall,
     crate,
     crateBreak0,
@@ -402,6 +408,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       baseAlt: floorBaseAlt,
       lane: floorLane,
       spawn: floorSpawn,
+      portal: floorPortal,
     },
     props: {
       wall,

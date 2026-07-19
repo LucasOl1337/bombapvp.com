@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v2.6 matched floor alt)
+# Tournament Clean — top-down sprite tile pack (v2.7 portal tile)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -9,7 +9,8 @@ Default continuous arena (`tournament-clean`). Warm limestone cobble, textured c
 | `floor-base.png` | `arena.theme.tournament-clean.floor.base` | Toroidal Voronoi cobble — seamless, finer stones |
 | `floor-base-alt.png` | `…floor.base-alt` | 2nd layout; **mean-matched** to base (no tone checker) |
 | `floor-lane.png` | `…floor.lane` | Brighter cobble only (no sticker frame) |
-| `floor-spawn.png` | `…floor.spawn` | Cobble + open gold ring |
+| `floor-spawn.png` | `…floor.spawn` | Cobble + solid open gold ring |
+| `floor-portal.png` | `…floor.portal` | Cobble + **dashed** open gold ring (wrap gates) |
 | `wall.png` | `…wall` | Charcoal stone slab, soft dark rim + top lip only (no gold frame) |
 | `crate.png` | `…crate` | Top-down wood lid, iron cross-bands, RGBA |
 

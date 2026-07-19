@@ -6,6 +6,8 @@ export interface ArenaThemeTilePaths {
   baseAlt?: GameAssetId;
   lane: GameAssetId;
   spawn: GameAssetId;
+  /** Optional wrap-portal floor (open dashed ring). Falls back to lane + stroke. */
+  portal?: GameAssetId;
   wall: GameAssetId;
   crate: GameAssetId;
 }
@@ -84,13 +86,14 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
       "Crate family is the only warm terrain category, so breakables pop instantly.",
     ],
     pixellabDescription:
-      "1). warm limestone floor tile, anonymous grain, seamless edges 2). brighter cream lane tile with thin edge frame only 3). spawn tile with thin warm-gold open ring 4). charcoal slab wall with top lip and sand accent line 5). top-down wood crate lid with iron cross-bands (orthographic, not isometric)",
+      "1). warm limestone floor tile, anonymous grain, seamless edges 2). brighter cream lane continuous 3). spawn thin warm-gold open ring 4). wrap-portal open dashed gold ring 5). charcoal stone wall soft rim + top lip 6). top-down wood crate lid iron cross-bands (orthographic)",
     renderMode: "sprite",
     tilePaths: {
       base: "arena.theme.tournament-clean.floor.base",
       baseAlt: "arena.theme.tournament-clean.floor.base-alt",
       lane: "arena.theme.tournament-clean.floor.lane",
       spawn: "arena.theme.tournament-clean.floor.spawn",
+      portal: "arena.theme.tournament-clean.floor.portal",
       wall: "arena.theme.tournament-clean.wall",
       crate: "arena.theme.tournament-clean.crate",
     },
