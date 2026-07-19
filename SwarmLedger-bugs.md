@@ -81,3 +81,44 @@
 
 - Nenhum WIP local de agentes no momento da consolidação
 - Próximas rodadas do executor podem caçar bugs novos com tree limpa
+
+---
+
+## Rodada 007 — 2026-07-18
+
+| Campo | Valor |
+| --- | --- |
+| **Status** | `corrigido` |
+| **Bug escolhido** | Launch offline: `character=` vazio / só espaços vira `""` em vez de ausente |
+| **Fluxo** | treino / jogar / arena via URL (bookmarks, links, round-trip) |
+| **Branch** | `swarm/bombpvp/bugs` |
+| **Arquivos de fix** | `src/matches/launch-request.ts`, `tests/launch-request.test.ts` |
+
+### Reprodução
+
+- **Passos:**
+  1. Abrir ou construir request com `mode=training&character=` ou `character=%20%20`.
+  2. Passar por `launchRequestFromSearchParams` / `resolveLaunchRequest`.
+  3. Serializar de volta com `launchRequestToSearchParams`.
+- **Esperado:** personagem ausente (`null`); URL serializada **sem** parâmetro `character` (mesmo comportamento de omitir o campo).
+- **Observado (antes):** `character` ficava `""`; serialize emitia `character=` e o token vazio poluía o contrato de launch (distinto de `null` no tipo e no round-trip).
+- **Impacto:** URLs de treino/jogar compartilhadas ou geradas com placeholder vazio não normalizavam para o fallback canônico; inconsistência no request e no query string.
+
+### Correção
+
+- `normalizeCharacterId`: trim; vazio → `null`.
+- Aplicado em `resolveLaunchRequest` no ramo offline.
+- Teste de regressão: vazio, whitespace URL-encoded, resolve+serialize sem `character`.
+
+### Evidência
+
+- `npx vitest run tests/launch-request.test.ts tests/app.test.ts` → **30 passed**
+
+### Entrega
+
+- Bug: empty/whitespace character id treated as absent
+- Arquivos: `src/matches/launch-request.ts`, `tests/launch-request.test.ts`, `SwarmLedger-bugs.md`
+- Branch: `swarm/bombpvp/bugs`
+- Commit local: (este commit)
+- **Sem** push/PR/merge para main
+- Nota: WIP residual de `game-assets/audio/workshop/` deixado intocado (outro assunto)

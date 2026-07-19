@@ -58,6 +58,13 @@ function normalizeLabLabel(label: string | null | undefined): string {
   return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
 }
 
+/** Empty / whitespace-only character tokens mean "no character" (same as absent). */
+function normalizeCharacterId(character: string | null | undefined): string | null {
+  if (character == null) return null;
+  const trimmed = character.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 export function resolveLaunchRequest(candidate: LaunchRequestCandidate): LaunchRequestResult {
   if (candidate.mode === "lab") {
     const models = candidate.models.map((model) => model.trim());
@@ -83,7 +90,7 @@ export function resolveLaunchRequest(candidate: LaunchRequestCandidate): LaunchR
     ok: true,
     request: {
       mode: candidate.mode,
-      character: candidate.character,
+      character: normalizeCharacterId(candidate.character),
       bot: requestedBot?.id ?? OFFLINE_LAUNCH_DEFAULTS[candidate.mode],
       botSelection: requestedBot ? "explicit" : "default",
     },

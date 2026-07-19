@@ -72,6 +72,33 @@ describe("launch request", () => {
     });
   });
 
+  it("trata character vazio ou só espaços como ausente e não serializa o parâmetro", () => {
+    expect(launchRequestFromSearchParams(new URLSearchParams(
+      "mode=training&character=",
+    ))).toEqual({
+      ok: true,
+      request: { mode: "training", character: null, bot: "bomb", botSelection: "default" },
+    });
+    expect(launchRequestFromSearchParams(new URLSearchParams(
+      "mode=continuous&character=%20%20&bot=v2",
+    ))).toEqual({
+      ok: true,
+      request: { mode: "continuous", character: null, bot: "v2", botSelection: "explicit" },
+    });
+
+    const resolved = resolveLaunchRequest({
+      mode: "training",
+      character: "   ",
+      bot: "pingo",
+    });
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) throw new Error(resolved.error);
+    expect(resolved.request.character).toBeNull();
+    expect(launchRequestToSearchParams(resolved.request).toString()).toBe(
+      "mode=training&bot=pingo",
+    );
+  });
+
   it("normaliza uma sala lab e serializa modelos e labels por slot", () => {
     const result = resolveLaunchRequest({
       mode: "lab",
