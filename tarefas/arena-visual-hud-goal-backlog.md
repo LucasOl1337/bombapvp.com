@@ -16,10 +16,14 @@
 | G6n Wall masonry (readable courses @40px) | **done** — `g6n-wall-masonry-DONE.md` |
 | G6o CrateAlt micro-variation | **done** — `g6o-crate-alt-DONE.md` |
 | G6p WallAlt offset masonry checker | **done** — `g6p-wall-alt-DONE.md` |
+| G6q Portal stronger dashed ring @40px | **done** — `g6q-portal-strong-DONE.md` |
+| G6r Crate fill expand (pad 15→6) | **done** — `g6r-crate-fill-DONE.md` |
+| G6s Floor 4-way base (alt2/alt3) | **done** — `g6s-floor-4way-DONE.md` |
+| G6t Pure continuous lane (no edge darken) | **done** — `g6t-lane-pure-continuous-DONE.md` |
 
 ## Main arena (tournament-clean) — READY
 
-Seamless cobble + mean-matched baseAlt, continuous lanes, masonry walls + wallAlt checker, portal dashed rings (≠ spawn), crate + crateAlt checker, break FX, spawn rings only on pads. Live training screenshots green.
+Seamless cobble + 4-way mean-matched base variants, pure continuous cream lanes, masonry walls + wallAlt, strong portal dashed rings (≠ spawn solid), solid-fill crate + crateAlt + matched break FX, spawn rings only on pads. Live training screenshots green.
 
 ## Optional next
 
