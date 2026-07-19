@@ -1,8 +1,7 @@
 // @vitest-environment node
 
 /**
- * Headless GameApp smoke: proves shipped movement / flame / kick blocking
- * use the professional body half (PLAYER_BODY_HALF < TILE/2), not a full-tile ghost.
+ * Headless GameApp smoke for distinct physical-body and flame-hurtbox rules.
  */
 import { describe, expect, it } from "vitest";
 import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
@@ -83,7 +82,7 @@ describe("GameApp body integration smoke", () => {
     expect(result.players[1].alive).toBe(true);
   });
 
-  it("kills when professional body AABB actually overlaps residual flame", () => {
+  it("does not kill when only the larger physical body clips residual flame", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     const flameTile = { x: 2, y: 1 };
@@ -109,7 +108,30 @@ describe("GameApp body integration smoke", () => {
     app.advanceServerSimulation(1_000 / 60);
 
     const result = app.exportOnlineSnapshot();
-    expect(result.players[1].alive).toBe(false);
+    expect(result.players[1].alive).toBe(true);
+  });
+
+  it("kills when the vulnerable core enters the residual flame tile", () => {
+    const app = createMatch();
+    const snapshot = app.exportOnlineSnapshot();
+    const flameTile = { x: 2, y: 1 };
+    snapshot.players[1].position = { x: 100, y: 60 };
+    snapshot.players[1].tile = { ...flameTile };
+    snapshot.players[1].spawnProtectionMs = 0;
+    snapshot.players[1].shieldCharges = 0;
+    snapshot.players[1].flameGuardMs = 0;
+    snapshot.players[2].position = { x: 220, y: 220 };
+    snapshot.flames = [{
+      tile: flameTile,
+      remainingMs: 500,
+      style: "normal",
+      ownerId: 2,
+    }];
+    app.applyOnlineSnapshot(snapshot);
+    app.replaceServerPlayerInput(1, input());
+    app.advanceServerSimulation(1_000 / 60);
+
+    expect(app.exportOnlineSnapshot().players[1].alive).toBe(false);
   });
 
   it("collects power-ups by continuous body overlap, not center tile only", () => {

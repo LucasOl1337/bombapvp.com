@@ -21,17 +21,6 @@ function assets() {
   };
 }
 
-function input(overrides = {}) {
-  return {
-    direction: null,
-    bombPressed: false,
-    detonatePressed: false,
-    skillPressed: false,
-    skillHeld: false,
-    ...overrides,
-  };
-}
-
 function createMatch(playerIds = [1, 2]) {
   const arena = createDefaultArenaDefinition();
   const app = new GameApp({}, assets(), arena);
@@ -57,16 +46,15 @@ describe("letalidade autoritativa da chama residual", () => {
   it("mata e atribui ao owner quem entra depois numa chama ainda visivel", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
-    snapshot.players[1].position = { x: 60, y: 60 };
-    snapshot.players[1].tile = { x: 1, y: 1 };
+    snapshot.players[1].position = { x: 100, y: 60 };
+    snapshot.players[1].tile = { x: 2, y: 1 };
     snapshot.players[1].spawnProtectionMs = 0;
     snapshot.players[2].position = { x: 220, y: 220 };
     snapshot.players[2].tile = { x: 5, y: 5 };
     snapshot.flames = [activeFlame()];
     app.applyOnlineSnapshot(snapshot);
 
-    app.replaceServerPlayerInput(1, input({ direction: "right" }));
-    app.advanceServerSimulation(200);
+    app.advanceServerSimulation(1_000 / 60);
 
     const result = app.exportOnlineSnapshot();
     expect(result.flames[0].remainingMs).toBeGreaterThan(0);
@@ -152,9 +140,7 @@ describe("letalidade autoritativa da chama residual", () => {
     expect(result.endlessStats.kills[2]).toBe(1);
   });
 
-  it("mata quando o hitbox sobrepoe a chama mesmo com tile discreto em vizinho", () => {
-    // TILE_SIZE=40, hitbox half=20. Center of tile (2,1) is (100,60).
-    // Position x=119 still floors to tile x=2, but body overlaps tile x=3 (120..160).
+  it("nao mata por contato marginal do corpo fisico com a chama vizinha", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     snapshot.players[1].position = { x: 119, y: 60 };
@@ -176,14 +162,14 @@ describe("letalidade autoritativa da chama residual", () => {
 
     const result = app.exportOnlineSnapshot();
     expect(result.players[1].tile).toEqual({ x: 2, y: 1 });
-    expect(result.players[1].alive).toBe(false);
-    expect(result.endlessStats.kills[2]).toBe(1);
+    expect(result.players[1].alive).toBe(true);
+    expect(result.endlessStats.kills[2]).toBe(0);
   });
 
-  it("mata no instante da explosao se o corpo so sobrepoe tile de blast adjacente", () => {
+  it("nao mata no instante da explosao por contato marginal com tile adjacente", () => {
     const app = createMatch([1, 2, 3]);
     const snapshot = app.exportOnlineSnapshot();
-    // Standing near right edge of (1,1); bomb on (2,1) range 1 covers adjacent tiles.
+    // Player only clips blast tile (2,1); bomb at (3,1) does not reach center tile (1,1).
     snapshot.players[1].position = { x: 79, y: 60 }; // tile 1,1 center-ish right edge (tile1: 40-80)
     snapshot.players[1].tile = { x: 1, y: 1 };
     snapshot.players[1].spawnProtectionMs = 0;
@@ -194,13 +180,38 @@ describe("letalidade autoritativa da chama residual", () => {
     snapshot.bombs = [{
       id: 1,
       ownerId: 2,
-      tile: { x: 2, y: 1 },
+      tile: { x: 3, y: 1 },
       fuseMs: 0,
       ownerCanPass: false,
       bodyEgressPlayerIds: [],
       flameRange: 1,
     }];
     snapshot.nextBombId = 2;
+    app.applyOnlineSnapshot(snapshot);
+
+    app.advanceServerSimulation(1_000 / 60);
+
+    const result = app.exportOnlineSnapshot();
+    expect(result.players[1].alive).toBe(true);
+    expect(result.endlessStats.kills[2]).toBe(0);
+  });
+
+  it("mata depois que o nucleo vulneravel entra no tile da chama", () => {
+    const app = createMatch();
+    const snapshot = app.exportOnlineSnapshot();
+    snapshot.players[1].position = { x: 109, y: 60 };
+    snapshot.players[1].tile = { x: 2, y: 1 };
+    snapshot.players[1].spawnProtectionMs = 0;
+    snapshot.players[1].flameGuardMs = 0;
+    snapshot.players[1].shieldCharges = 0;
+    snapshot.players[2].position = { x: 220, y: 220 };
+    snapshot.players[2].tile = { x: 5, y: 5 };
+    snapshot.flames = [{
+      tile: { x: 2, y: 1 },
+      remainingMs: 500,
+      style: "normal",
+      ownerId: 2,
+    }];
     app.applyOnlineSnapshot(snapshot);
 
     app.advanceServerSimulation(1_000 / 60);

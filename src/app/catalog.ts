@@ -69,7 +69,7 @@ const PT_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
     name: "Jogo online PvP",
-    description: "Entre em uma sequência de rodadas com outros jogadores e Completers.",
+    description: "Entre direto na arena com o personagem em foco e dispute rodadas com Completers.",
     actionLabel: "Jogar agora",
     journeyLabel: "Entrada imediata",
   }),
@@ -93,7 +93,7 @@ const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
     name: "Online PvP",
-    description: "Join a sequence of rounds with other players and Completers.",
+    description: "Jump straight into the arena with the fighter in focus and contest rounds with Completers.",
     actionLabel: "Play now",
     journeyLabel: "Instant entry",
   }),

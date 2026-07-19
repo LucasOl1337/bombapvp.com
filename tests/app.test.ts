@@ -3,18 +3,14 @@ import { fireEvent, within } from "@testing-library/dom";
 import { createBombApp, type BombApp } from "../src/app/index.ts";
 
 const LOCAL_BOT_IDS = ["bomb", "pingo", "v1", "v2", "v3"] as const;
-const BOT_SELECTION_CASES = [
-  ["training", "/treino/personagem", "bomb"],
-  ["training", "/treino/personagem", "pingo"],
-  ["training", "/treino/personagem", "v1"],
-  ["training", "/treino/personagem", "v2"],
-  ["training", "/treino/personagem", "v3"],
-  ["continuous", "/jogar/personagem", "bomb"],
-  ["continuous", "/jogar/personagem", "pingo"],
-  ["continuous", "/jogar/personagem", "v1"],
-  ["continuous", "/jogar/personagem", "v2"],
-  ["continuous", "/jogar/personagem", "v3"],
+const TRAINING_BOT_SELECTION_CASES = [
+  ["bomb"],
+  ["pingo"],
+  ["v1"],
+  ["v2"],
+  ["v3"],
 ] as const;
+const RANNI_CHARACTER_ID = "03a976fb-7313-4064-a477-5bb9b0760034";
 
 describe("Bomba PvP app", () => {
   let app: BombApp | undefined;
@@ -83,7 +79,7 @@ describe("Bomba PvP app", () => {
     expect(englishRoot.querySelector(".experience-region")).not.toBeNull();
   });
 
-  it("envia a Sala contínua ao motor original após a seleção", () => {
+  it("envia a Sala contínua ao motor original direto do launcher com o personagem em foco", () => {
     const root = createRoot();
     const visitedPaths: string[] = [];
     app = createBombApp({
@@ -93,40 +89,37 @@ describe("Bomba PvP app", () => {
     });
     const view = within(root);
 
+    // Default roster focus is the first unit (Ranni). "Jogar agora" skips selection.
+    expect(app.getSnapshot().selectedCharacter?.name).toBe("Ranni");
     fireEvent.click(view.getByRole("button", { name: "Jogar agora" }));
     expect(app.getSnapshot()).toMatchObject({
-      screen: "character-selection",
-      currentPath: "/jogar/personagem",
-      activeExperience: { id: "continuous-room", name: "Jogo online PvP" },
-      selectedCharacter: null,
-      selectedBot: "v1",
-    });
-    expect(
-      (view.getByRole("button", { name: "Confirmar personagem" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-
-    fireEvent.click(view.getByRole("button", { name: "Ranni, Escolher" }));
-    expect(app.getSnapshot()).toMatchObject({
-      selectedCharacter: { name: "Ranni" },
-    });
-    expect(
-      root.querySelector(".app-shell")?.classList.contains("app-shell--screen-update"),
-    ).toBe(true);
-    expect(
-      view.getByRole("button", { name: "Ranni, Selecionado" }).getAttribute("aria-pressed"),
-    ).toBe("true");
-
-    fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
-    expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=v1",
+      currentPath: `/arena/?mode=continuous&character=${RANNI_CHARACTER_ID}`,
+      activeExperience: { id: "continuous-room", name: "Jogo online PvP" },
       selectedCharacter: { name: "Ranni" },
     });
     expect(view.getByRole("region", { name: "Abrindo arena" })).toBeTruthy();
+    expect(view.getByText("Ranni · Jogo online PvP · vs Bomb + Pingo")).toBeTruthy();
     expect(visitedPaths).toEqual([
-      "/jogar/personagem",
-      "/arena/?mode=continuous&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=v1",
+      `/arena/?mode=continuous&character=${RANNI_CHARACTER_ID}`,
     ]);
+  });
+
+  it("usa o personagem em foco no elenco da landing ao entrar no PvP online", () => {
+    const root = createRoot();
+    app = createBombApp({ hostname: "bombapvp.com", root });
+    const view = within(root);
+
+    // Advance the landing roster past Ranni (index 0) to Nico or another unit.
+    fireEvent.click(view.getByRole("button", { name: "Próximo personagem" }));
+    fireEvent.click(view.getByRole("button", { name: "Jogar agora" }));
+
+    const focusedName = app.getSnapshot().selectedCharacter?.name;
+    expect(focusedName).toBeTruthy();
+    expect(focusedName).not.toBe("Ranni");
+    expect(app.getSnapshot().screen).toBe("game-launch");
+    expect(app.getSnapshot().currentPath).toMatch(/^\/arena\/\?mode=continuous&character=/);
+    expect(app.getSnapshot().currentPath).not.toContain("bot=");
   });
 
   it("envia o Treino ao motor original com o personagem escolhido", () => {
@@ -158,11 +151,11 @@ describe("Bomba PvP app", () => {
     expect(view.getByText("Nico · Treino contra bots · vs Pingo")).toBeTruthy();
   });
 
-  it.each(BOT_SELECTION_CASES)(
-    "oferece os cinco bots em %s (%s) e confirma %s",
-    (mode, initialPath, botId) => {
+  it.each(TRAINING_BOT_SELECTION_CASES)(
+    "oferece os cinco bots no treino e confirma %s",
+    (botId) => {
       const root = createRoot();
-      app = createBombApp({ hostname: "bombapvp.com", root, initialPath });
+      app = createBombApp({ hostname: "bombapvp.com", root, initialPath: "/treino/personagem" });
       const view = within(root);
       const opponent = view.getByRole("combobox", { name: "Bot adversário" }) as HTMLSelectElement;
       expect(Array.from(opponent.options, ({ value }) => value)).toEqual([...LOCAL_BOT_IDS]);
@@ -173,7 +166,7 @@ describe("Bomba PvP app", () => {
       fireEvent.click(view.getByRole("button", { name: "Confirmar personagem" }));
 
       expect(app.getSnapshot().currentPath).toBe(
-        `/arena/?mode=${mode}&character=03a976fb-7313-4064-a477-5bb9b0760034&bot=${botId}`,
+        `/arena/?mode=training&character=${RANNI_CHARACTER_ID}&bot=${botId}`,
       );
     },
   );
@@ -292,13 +285,14 @@ describe("Bomba PvP app", () => {
     const screens: string[] = [];
     const unsubscribe = app.subscribe(({ screen }) => screens.push(screen));
 
+    // /jogar/personagem deep-links straight into continuous game-launch (no selection screen).
     app.dispatch({ type: "navigate", path: "/jogar/personagem?origem=home" });
     app.dispatch({ type: "navigate", path: "/rota-antiga" });
-    expect(screens).toEqual(["character-selection", "launcher"]);
+    expect(screens).toEqual(["game-launch", "launcher"]);
 
     unsubscribe();
     app.dispatch({ type: "open-experience", experienceId: "bot-training" });
-    expect(screens).toEqual(["character-selection", "launcher"]);
+    expect(screens).toEqual(["game-launch", "launcher"]);
     expect(Object.isFrozen(app.getSnapshot())).toBe(true);
     expect(Object.isFrozen(app.getSnapshot().characters)).toBe(true);
     expect(app.getSnapshot().characters.every(Object.isFrozen)).toBe(true);

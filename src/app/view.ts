@@ -1,4 +1,5 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
+import type { CharacterId } from "./catalog.ts";
 import brandMarkUrl from "../../game-assets/ui/branding/brand-mark.png?url";
 import { getLauncherPreview } from "../../Champions/launcher-previews.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
@@ -268,10 +269,23 @@ function clipsForCharacter(character: CharacterSnapshot): ShowcaseClip[] {
   return [{ frames: [character.assetPath] }];
 }
 
-function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLElement {
+type RosterShowcaseController = Readonly<{
+  element: HTMLElement;
+  getFocusedCharacterId: () => CharacterId | null;
+}>;
+
+function renderRosterShowcase(
+  document: Document,
+  snapshot: AppSnapshot,
+): RosterShowcaseController {
   const characters = snapshot.characters;
   const isPortuguese = snapshot.locale === "pt-BR";
-  let index = 0;
+  const initialId = snapshot.selectedCharacter?.id;
+  const initialIndex = Math.max(
+    0,
+    initialId ? characters.findIndex((character) => character.id === initialId) : 0,
+  );
+  let index = initialIndex >= 0 ? initialIndex : 0;
   let hovering = false;
 
   const panel = element(document, "aside", "roster-showcase");
@@ -429,7 +443,10 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
 
   panel.append(main, thumbs);
   paint();
-  return panel;
+  return {
+    element: panel,
+    getFocusedCharacterId: (): CharacterId | null => characters[index]?.id ?? null,
+  };
 }
 
 function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLElement {
@@ -527,7 +544,11 @@ function renderExperienceGrid(
   document: Document,
   snapshot: AppSnapshot,
   dispatch: Dispatch,
-  onPreview?: (experience: ExperienceSnapshot, index: number) => void,
+  options: Readonly<{
+    onPreview?: (experience: ExperienceSnapshot, index: number) => void;
+    /** Character focused on the landing roster — used by online PvP direct entry. */
+    getOnlinePvpCharacterId?: () => CharacterId | null;
+  }> = {},
 ): HTMLElement {
   const grid = element(document, "div", "experience-grid");
   const cards: HTMLElement[] = [];
@@ -558,18 +579,30 @@ function renderExperienceGrid(
       element(document, "p", "experience-card__description", experience.description),
     );
 
-    const action = button(
-      document,
-      experience.actionLabel,
-      "action action--card",
-      { type: "open-experience", experienceId: experience.id },
-      dispatch,
-    );
+    const action = element(document, "button", "action action--card", experience.actionLabel) as HTMLButtonElement;
+    action.type = "button";
+    action.addEventListener("click", () => {
+      // Online PvP jumps straight into the arena with the unit currently shown
+      // on the landing roster — no secondary character-selection screen.
+      if (experience.id === "continuous-room") {
+        const characterId: CharacterId | null = options.getOnlinePvpCharacterId?.()
+          ?? snapshot.selectedCharacter?.id
+          ?? snapshot.characters[0]?.id
+          ?? null;
+        if (characterId) {
+          dispatch({ type: "start-online-pvp", characterId });
+        } else {
+          dispatch({ type: "start-online-pvp" });
+        }
+        return;
+      }
+      dispatch({ type: "open-experience", experienceId: experience.id });
+    });
     addArrow(document, action);
     article.append(header, copy, action);
     const preview = (): void => {
       cards.forEach((card, cardIndex) => card.classList.toggle("is-previewed", cardIndex === index));
-      onPreview?.(experience, index);
+      options.onPreview?.(experience, index);
     };
     article.addEventListener("pointerenter", preview);
     article.addEventListener("focusin", preview);
@@ -632,7 +665,7 @@ function getModeBriefing(locale: AppSnapshot["locale"], experienceId: string): M
   return isPortuguese
     ? {
         code: "CANAL 01 // AO VIVO",
-        summary: "Sala contínua de rodadas rápidas. Entre, escolha seu personagem e dispute a arena com jogadores e Completers.",
+        summary: "Sala contínua de rodadas rápidas. O personagem em foco no elenco entra direto na arena com Completers Bomb e Pingo.",
         format: "PvP contínuo",
         pace: "Competitivo",
         ideal: "Entrar e jogar",
@@ -640,7 +673,7 @@ function getModeBriefing(locale: AppSnapshot["locale"], experienceId: string): M
       }
     : {
         code: "CHANNEL 01 // LIVE",
-        summary: "A continuous room of fast rounds. Join, choose your fighter, and contest the arena with players and Completers.",
+        summary: "A continuous room of fast rounds. The fighter in focus on the roster jumps straight into the arena with Bomb and Pingo Completers.",
         format: "Continuous PvP",
         pace: "Competitive",
         ideal: "Jump in and play",
@@ -721,7 +754,11 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
     ),
   );
   const modeBriefing = renderModeBriefing(document, snapshot);
-  const experienceGrid = renderExperienceGrid(document, snapshot, dispatch, modeBriefing.show);
+  const rosterShowcase = renderRosterShowcase(document, snapshot);
+  const experienceGrid = renderExperienceGrid(document, snapshot, dispatch, {
+    onPreview: modeBriefing.show,
+    getOnlinePvpCharacterId: rosterShowcase.getFocusedCharacterId,
+  });
   const firstExperience = snapshot.experiences[0];
   if (firstExperience) modeBriefing.show(firstExperience, 0);
   modes.append(modesHeader, experienceGrid, modeBriefing.element);
@@ -746,7 +783,7 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
   );
   roster.append(
     rosterHeader,
-    renderRosterShowcase(document, snapshot),
+    rosterShowcase.element,
   );
 
   region.append(launcherHeading, modes, roster);
@@ -866,10 +903,8 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  if (
-    snapshot.activeExperience?.id === "bot-training"
-    || snapshot.activeExperience?.id === "continuous-room"
-  ) {
+  // Bot opponent picker is training-only. Online PvP always uses Bomb + Pingo Completers.
+  if (snapshot.activeExperience?.id === "bot-training") {
     const opponentField = element(document, "label", "training-bot-field");
     const opponentLabel = element(
       document,
@@ -918,21 +953,26 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
     portrait.append(createCharacterImage(document, snapshot.selectedCharacter));
   }
 
-  // Offline treino/jogar always pick an opponent bot — surface it so the ready
-  // screen matches what the user chose (defaults included).
-  const opponentBotLabel = isLabLaunch
+  // Training surfaces the chosen opponent bot. Online PvP always faces Bomb + Pingo.
+  const isContinuousLaunch = snapshot.activeExperience?.id === "continuous-room";
+  const opponentBotLabel = isLabLaunch || isContinuousLaunch
     ? null
     : (snapshot.bots.find((bot) => bot.id === snapshot.selectedBot)?.label ?? null);
+  const continuousOpponentLabel = isContinuousLaunch
+    ? (snapshot.locale === "pt-BR" ? "vs Bomb + Pingo" : "vs Bomb + Pingo")
+    : null;
   const choiceLine = isLabLaunch
     ? (snapshot.activeExperience?.name ?? "")
     : [
       snapshot.selectedCharacter?.name,
       snapshot.activeExperience?.name,
-      opponentBotLabel ? `vs ${opponentBotLabel}` : null,
+      continuousOpponentLabel ?? (opponentBotLabel ? `vs ${opponentBotLabel}` : null),
     ].filter(Boolean).join(" · ");
   const reviseLabel = isLabLaunch
     ? snapshot.copy.reviseLabLabel
-    : snapshot.copy.reviseLabel;
+    : isContinuousLaunch
+      ? snapshot.copy.backToLauncherLabel
+      : snapshot.copy.reviseLabel;
 
   const copy = element(document, "div", "ready-state__copy");
   copy.append(

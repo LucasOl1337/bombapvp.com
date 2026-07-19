@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   bodyOverlapsActiveFlame,
+  FLAME_HURTBOX_HALF_RATIO,
+  flameHurtboxOverlapsTile,
   findActiveFlameHittingBody,
   findPlayersHitByFlames,
   findPlayersOverlappingTiles,
@@ -22,6 +24,16 @@ function playerAt(id: 1 | 2, x: number, y: number, alive = true): PlayerState {
 }
 
 describe("flame-contact pure helpers", () => {
+  it("uses a forgiving hurtbox independent from physical collision", () => {
+    const flameTile = { x: 3, y: 1 };
+    const y = flameTile.y * TILE_SIZE + HALF;
+    const flameEdge = flameTile.x * TILE_SIZE;
+
+    expect(FLAME_HURTBOX_HALF_RATIO).toBeLessThan(PLAYER_BODY_HALF / TILE_SIZE);
+    expect(flameHurtboxOverlapsTile({ x: flameEdge - 1, y }, flameTile)).toBe(false);
+    expect(flameHurtboxOverlapsTile({ x: flameEdge + 9, y }, flameTile)).toBe(true);
+  });
+
   it("parses tile keys through the canonical codec", () => {
     expect(tilesFromKeys(["2,3", "bad", "1,1"])).toEqual([
       { x: 2, y: 3 },

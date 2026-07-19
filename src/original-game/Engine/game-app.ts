@@ -88,7 +88,7 @@ import {
   projectedBodyOverlapsTile,
   isMonotonicBodyBombEgress as pureIsMonotonicBodyBombEgress,
 } from "../Gameplay/player-body";
-import { tilesFromKeys } from "../Gameplay/flame-contact";
+import { flameHurtboxOverlapsTile, tilesFromKeys } from "../Gameplay/flame-contact";
 import { drawFlameTile } from "./flame-render";
 import {
   computeRivalSlotWidth,
@@ -3486,6 +3486,15 @@ export class GameApp {
     return bodyOverlapsTile(player.position, normalized, this.getBodyGeometryOptions());
   }
 
+  private isPlayerHitByFlameTile(player: PlayerState, tile: TileCoord): boolean {
+    const normalized = this.normalizeTile(tile);
+    return flameHurtboxOverlapsTile(
+      player.position,
+      normalized,
+      this.getBodyGeometryOptions(),
+    );
+  }
+
   private getBodyTileOverlapArea(position: PixelCoord, tile: TileCoord): number {
     const normalized = this.normalizeTile(tile);
     return bodyTileOverlapArea(position, normalized, this.getBodyGeometryOptions());
@@ -3961,11 +3970,10 @@ export class GameApp {
       const player = this.players[id];
       if (!player.alive) continue;
       player.tile = this.getTileFromPosition(player.position);
-      // Body AABB overlap (PLAYER_BODY_HALF < TILE/2). Continuous overlap
-      // matches movement and bot lethality without full-tile unfair kills.
+      // Flame damage uses a smaller central hurtbox than physical collision.
       const flame = this.flames.find((entry) => (
         entry.remainingMs > 0
-        && this.isPlayerOverlappingTile(player, entry.tile)
+        && this.isPlayerHitByFlameTile(player, entry.tile)
       ));
       if (flame) this.tryAbsorbInstantHit(player, flame.ownerId ?? null);
     }
@@ -3983,7 +3991,7 @@ export class GameApp {
         continue;
       }
       player.tile = this.getTileFromPosition(player.position);
-      const hit = flameTiles.some((tile) => this.isPlayerOverlappingTile(player, tile));
+      const hit = flameTiles.some((tile) => this.isPlayerHitByFlameTile(player, tile));
       if (hit) {
         this.tryAbsorbInstantHit(player, attackerId);
       }
