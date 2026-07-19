@@ -191,6 +191,26 @@ describe("Bomba PvP app", () => {
     });
   });
 
+  it("volta do game-launch do laboratório para a tela do laboratório, não para seleção de personagem", async () => {
+    const root = createRoot();
+    app = createBombApp({ hostname: "bombapvp.com", root, initialPath: "/laboratorio" });
+    const view = within(root);
+
+    const start = await view.findByRole("button", { name: "Iniciar Bot vs Bot" }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(start.disabled).toBe(false));
+    fireEvent.click(start);
+    expect(app.getSnapshot().screen).toBe("game-launch");
+
+    fireEvent.click(view.getByRole("button", { name: "Revisar personagem" }));
+    expect(app.getSnapshot()).toMatchObject({
+      screen: "laboratory",
+      currentPath: "/laboratorio",
+      activeExperience: { id: "bot-vs-bot-lab" },
+    });
+    expect(view.getByRole("region", { name: "Laboratório Bot vs Bot" })).toBeTruthy();
+    expect(view.queryByRole("heading", { name: "Escolha seu personagem" })).toBeNull();
+  });
+
   it("configura até quatro competidores misturando LLMs, V3 e V2", async () => {
     const root = createRoot();
     app = createBombApp({ hostname: "bombapvp.com", root, initialPath: "/laboratorio" });

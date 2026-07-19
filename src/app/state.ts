@@ -182,10 +182,19 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
 
   if (intent.type === "back-to-selection") {
     if (snapshot.screen !== "game-launch" || !snapshot.activeExperience) return snapshot;
+    const experienceId = snapshot.activeExperience.id;
+    // Lab never uses character-selection; "revise" must return to the laboratory form.
+    if (experienceId === "bot-vs-bot-lab") {
+      return freezeSnapshot({
+        ...snapshot,
+        screen: "laboratory",
+        currentPath: routeForExperience(experienceId),
+      });
+    }
     return freezeSnapshot({
       ...snapshot,
       screen: "character-selection",
-      currentPath: routeForExperience(snapshot.activeExperience.id),
+      currentPath: routeForExperience(experienceId),
     });
   }
 
