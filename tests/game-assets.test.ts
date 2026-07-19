@@ -49,8 +49,10 @@ describe("game assets", () => {
       baseAlt: "arena.theme.tournament-clean.floor.base-alt",
       lane: "arena.theme.tournament-clean.floor.lane",
       spawn: "arena.theme.tournament-clean.floor.spawn",
+      portal: "arena.theme.tournament-clean.floor.portal",
       wall: "arena.theme.tournament-clean.wall",
       crate: "arena.theme.tournament-clean.crate",
+      crateAlt: "arena.theme.tournament-clean.crate-alt",
     });
   });
 
@@ -74,8 +76,10 @@ describe("game assets", () => {
     ["arena.theme.tournament-clean.floor.base-alt", "arenas/themes/tournament-clean/floor-base-alt.png"],
     ["arena.theme.tournament-clean.floor.lane", "arenas/themes/tournament-clean/floor-lane.png"],
     ["arena.theme.tournament-clean.floor.spawn", "arenas/themes/tournament-clean/floor-spawn.png"],
+    ["arena.theme.tournament-clean.floor.portal", "arenas/themes/tournament-clean/floor-portal.png"],
     ["arena.theme.tournament-clean.wall", "arenas/themes/tournament-clean/wall.png"],
     ["arena.theme.tournament-clean.crate", "arenas/themes/tournament-clean/crate.png"],
+    ["arena.theme.tournament-clean.crate-alt", "arenas/themes/tournament-clean/crate-alt.png"],
     ["arena.theme.verdant-ruins.floor.base", "arenas/themes/verdant-ruins/floor-base.png"],
     ["arena.theme.verdant-ruins.floor.lane", "arenas/themes/verdant-ruins/floor-lane.png"],
     ["arena.theme.verdant-ruins.floor.spawn", "arenas/themes/verdant-ruins/floor-spawn.png"],

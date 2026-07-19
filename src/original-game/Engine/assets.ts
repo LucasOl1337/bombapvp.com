@@ -50,6 +50,8 @@ export interface GameAssets {
   props: {
     wall: HTMLImageElement | null;
     crate: HTMLImageElement | null;
+    /** Optional second crate for checkerboard prop variation. */
+    crateAlt?: HTMLImageElement | null;
     crateBreakFrames?: HTMLImageElement[];
     bomb: HTMLImageElement | null;
     flame: HTMLImageElement | null;
@@ -316,6 +318,9 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crate), resolveGameAsset("gameplay.crate.sprite")])
         : Promise.resolve(null),
+      arenaTilePaths?.crateAlt
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crateAlt)])
+        : Promise.resolve(null),
       loadImage(resolveGameAsset("gameplay.crate.break.0")),
       loadImage(resolveGameAsset("gameplay.crate.break.1")),
       loadImage(resolveGameAsset("gameplay.crate.break.2")),
@@ -350,6 +355,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     floorPortal,
     wall,
     crate,
+    crateAlt,
     crateBreak0,
     crateBreak1,
     crateBreak2,
@@ -413,6 +419,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     props: {
       wall,
       crate,
+      crateAlt,
       crateBreakFrames: [crateBreak0, crateBreak1, crateBreak2, crateBreak3]
         .filter((frame): frame is HTMLImageElement => frame !== null),
       bomb,

@@ -16,6 +16,7 @@ import arcaneCitadelFloorLaneUrl from "./arenas/themes/arcane-citadel/floor-lane
 import arcaneCitadelFloorSpawnUrl from "./arenas/themes/arcane-citadel/floor-spawn.png?url";
 import arcaneCitadelWallUrl from "./arenas/themes/arcane-citadel/wall.png?url";
 import tournamentCleanCrateUrl from "./arenas/themes/tournament-clean/crate.png?url";
+import tournamentCleanCrateAltUrl from "./arenas/themes/tournament-clean/crate-alt.png?url";
 import tournamentCleanFloorBaseUrl from "./arenas/themes/tournament-clean/floor-base.png?url";
 import tournamentCleanFloorBaseAltUrl from "./arenas/themes/tournament-clean/floor-base-alt.png?url";
 import tournamentCleanFloorLaneUrl from "./arenas/themes/tournament-clean/floor-lane.png?url";
@@ -124,6 +125,7 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "arena.theme.tournament-clean.floor.portal": tournamentCleanFloorPortalUrl,
   "arena.theme.tournament-clean.wall": tournamentCleanWallUrl,
   "arena.theme.tournament-clean.crate": tournamentCleanCrateUrl,
+  "arena.theme.tournament-clean.crate-alt": tournamentCleanCrateAltUrl,
   "arena.theme.verdant-ruins.floor.base": verdantRuinsFloorBaseUrl,
   "arena.theme.verdant-ruins.floor.lane": verdantRuinsFloorLaneUrl,
   "arena.theme.verdant-ruins.floor.spawn": verdantRuinsFloorSpawnUrl,

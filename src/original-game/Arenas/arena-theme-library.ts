@@ -10,6 +10,8 @@ export interface ArenaThemeTilePaths {
   portal?: GameAssetId;
   wall: GameAssetId;
   crate: GameAssetId;
+  /** Optional second crate for checker (breaks identical prop stamp field). */
+  crateAlt?: GameAssetId;
 }
 
 export interface ArenaThemePalette {
@@ -96,6 +98,7 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
       portal: "arena.theme.tournament-clean.floor.portal",
       wall: "arena.theme.tournament-clean.wall",
       crate: "arena.theme.tournament-clean.crate",
+      crateAlt: "arena.theme.tournament-clean.crate-alt",
     },
     palette: {
       floorBase: "#d8d0c2",

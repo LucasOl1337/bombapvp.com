@@ -5278,7 +5278,7 @@ export class GameApp {
             this.drawWall(screenX, screenY);
           }
         } else if (this.arena.breakable.has(key)) {
-          this.drawCrate(screenX, screenY);
+          this.drawCrate(screenX, screenY, x, y);
         } else if (isWrapPortal && !this.assets.floor.portal) {
           // Fallback only when theme has no portal sprite (legacy stroke square).
           c.strokeStyle = this.getArenaPalette().portalRing;
@@ -5736,11 +5736,15 @@ export class GameApp {
     this.ctx.fillRect(x + 3, y + 3, TILE_SIZE - 6, TILE_SIZE - 6);
   }
 
-  private drawCrate(x: number, y: number): void {
-    if (this.assets.props.crate) {
+  private drawCrate(x: number, y: number, tileX = 0, tileY = 0): void {
+    const crateSprite =
+      (tileX + tileY) % 2 === 1 && this.assets.props.crateAlt
+        ? this.assets.props.crateAlt
+        : this.assets.props.crate;
+    if (crateSprite) {
       this.ctx.fillStyle = "rgba(10, 6, 2, 0.28)";
       this.ctx.fillRect(x + 2, y + TILE_SIZE - 4, TILE_SIZE - 4, 4);
-      this.ctx.drawImage(this.assets.props.crate, x, y, TILE_SIZE, TILE_SIZE);
+      this.ctx.drawImage(crateSprite, x, y, TILE_SIZE, TILE_SIZE);
       return;
     }
     const theme = this.getArenaThemeDefinition();
