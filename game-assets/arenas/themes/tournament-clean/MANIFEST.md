@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v2.4 lane+wall craft)
+# Tournament Clean — top-down sprite tile pack (v2.5 continuous wall)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -8,9 +8,9 @@ Default continuous arena (`tournament-clean`). Warm limestone cobble, textured c
 |------|------------|--------|
 | `floor-base.png` | `arena.theme.tournament-clean.floor.base` | Toroidal Voronoi cobble — seamless |
 | `floor-base-alt.png` | `…floor.base-alt` | 2nd seamless cobble (darker); checker via `(x+y)%2` |
-| `floor-lane.png` | `…floor.lane` | Brighter cobble + thin edge frame |
+| `floor-lane.png` | `…floor.lane` | Brighter cobble only (no sticker frame) |
 | `floor-spawn.png` | `…floor.spawn` | Cobble + open gold ring |
-| `wall.png` | `…wall` | Solid charcoal slab + sand frame (all 4 edges) |
+| `wall.png` | `…wall` | Charcoal stone slab, soft dark rim + top lip only (no gold frame) |
 | `crate.png` | `…crate` | Top-down wood lid, iron cross-bands, RGBA |
 
 ## How floor-base is made
@@ -29,7 +29,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 
 ## Palette anchors
 
-Floor `#d8d0c2` / `#cec5b7` family · lane cream lift · spawn gold `#c49e4c` · wall charcoal + sand frame · crate warm brown.
+Floor `#d8d0c2` / `#cec5b7` family · lane cream lift · spawn gold `#c49e4c` · wall charcoal + soft rim/top lip · crate warm brown.
 
 ## Render mode
 

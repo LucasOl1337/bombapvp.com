@@ -10,10 +10,11 @@
 | G6h Spawn pad-only | **done** |
 | G6i Top-down crate break | **done** |
 | G6j Continuous lane (no sticker frames) | **done** — `g6j-lane-continuous-DONE.md` |
+| G6k Continuous wall (no gold frames) | **done** — `g6k-wall-continuous-DONE.md` |
 
 ## Main arena (tournament-clean) — READY
 
-Seamless cobble + baseAlt, continuous bright lanes, textured walls, ortho crates + matching break FX, spawn rings only on pads. Live training screenshots green.
+Seamless cobble + baseAlt, continuous bright lanes, continuous charcoal walls (no sticker frames), ortho crates + matching break FX, spawn rings only on pads. Live training screenshots green.
 
 ## Optional next
 
