@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v2.5 continuous wall)
+# Tournament Clean — top-down sprite tile pack (v2.6 matched floor alt)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -6,8 +6,8 @@ Default continuous arena (`tournament-clean`). Warm limestone cobble, textured c
 
 | File | Catalog id | Notes |
 |------|------------|--------|
-| `floor-base.png` | `arena.theme.tournament-clean.floor.base` | Toroidal Voronoi cobble — seamless |
-| `floor-base-alt.png` | `…floor.base-alt` | 2nd seamless cobble (darker); checker via `(x+y)%2` |
+| `floor-base.png` | `arena.theme.tournament-clean.floor.base` | Toroidal Voronoi cobble — seamless, finer stones |
+| `floor-base-alt.png` | `…floor.base-alt` | 2nd layout; **mean-matched** to base (no tone checker) |
 | `floor-lane.png` | `…floor.lane` | Brighter cobble only (no sticker frame) |
 | `floor-spawn.png` | `…floor.spawn` | Cobble + open gold ring |
 | `wall.png` | `…wall` | Charcoal stone slab, soft dark rim + top lip only (no gold frame) |
@@ -15,15 +15,16 @@ Default continuous arena (`tournament-clean`). Warm limestone cobble, textured c
 
 ## How floor-base is made
 
-Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile edges. Seed search minimizes edge RGB delta. Lane/spawn derived from the same base for family match.
+Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile edges. Seed search minimizes edge RGB delta. Lane/spawn derived from the same base for family match. baseAlt uses a different seed then brightness-matched so layout varies without light/dark checkerboard.
 
 ## QA
 
 | Gate | Result |
 |------|--------|
 | 2×2 seam — hard bar | PASS (stones wrap; no join bar) |
-| Landmark motif in all 4 quadrants | PARTIAL — single tile repeats (inherent); no broken edge stones |
-| Edge delta (seed 47) | lr≈6.0, tb≈12.8 mean abs/channel |
+| Tone checker base vs alt | PASS — cell mean delta ≈0.3 (was ~12) |
+| Landmark motif in all 4 quadrants | PARTIAL — two layouts alternate; no broken edge stones |
+| Edge delta (base seed 45) | lr≈6.8, tb≈4.3 mean abs/channel |
 | Top-down crate + alpha | PASS |
 | Readable at TILE_SIZE=40 | PASS — `_preview-arena-mock.png` |
 
