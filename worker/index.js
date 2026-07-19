@@ -73,3 +73,20 @@ export default {
     return handleRequest(request, env);
   },
 };
+
+/**
+ * Durable Object class registered on the Cloudflare Worker.
+ * Kept exported so deploys satisfy existing DO bindings even when
+ * continuous online matchmaking is not fully enabled in this build.
+ */
+export class OnlineMatchmakingRoom {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch() {
+    return json(503, { ok: false, error: "online_matchmaking_unavailable" });
+  }
+}
+
