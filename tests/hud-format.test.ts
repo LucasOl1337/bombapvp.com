@@ -94,11 +94,10 @@ describe("computeRivalSlotWidth", () => {
 });
 
 describe("HUD geometry constants", () => {
-  it("keeps config HUD_HEIGHT aligned with two-row layout", () => {
-    expect(HUD_HEIGHT).toBe(HUD_LAYOUT.height);
-    expect(HUD_HEIGHT).toBeGreaterThanOrEqual(72);
-    // Arena origin stays fixed so HUD growth does not shift gameplay coordinates.
-    expect(ARENA_OFFSET_Y).toBe(66);
+  it("keeps visual match HUD independent from world-space origin", () => {
+    // Match paint uses HUD_LAYOUT.height; world origin uses HUD_HEIGHT + 6.
+    expect(HUD_LAYOUT.height).toBeGreaterThan(HUD_HEIGHT);
+    expect(ARENA_OFFSET_Y).toBe(HUD_HEIGHT + 6);
     expect(HUD_LAYOUT.localPanelY + HUD_LAYOUT.localPanelHeight).toBeLessThanOrEqual(HUD_LAYOUT.height);
     expect(HUD_LAYOUT.topRowY + HUD_LAYOUT.topRowHeight).toBeLessThanOrEqual(HUD_LAYOUT.localPanelY);
   });
