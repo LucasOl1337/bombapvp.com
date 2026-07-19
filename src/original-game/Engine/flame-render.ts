@@ -5,7 +5,7 @@ import type { FlameState } from "../Gameplay/types";
 import { FLAME_DURATION_MS, TILE_SIZE } from "../PersonalConfig/config";
 
 /** Bomb explosion multi-frame sheet: 4×4 = 16 frames, row-major (arc-flare pack). */
-export const FLAME_ANIM_COLS = 4;
+export const FLAME_ANIM_COLS = 6;
 export const FLAME_ANIM_ROWS = 4;
 export const FLAME_ANIM_FRAME_COUNT = FLAME_ANIM_COLS * FLAME_ANIM_ROWS;
 
