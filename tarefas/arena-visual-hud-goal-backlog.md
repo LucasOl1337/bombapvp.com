@@ -24,10 +24,11 @@
 | G6v Crate solid cell fill (pad 7→3) | **done** — `g6v-crate-solid-fill-DONE.md` |
 | G6w Crate full-bleed (no soft perimeter) | **done** — `g6w-crate-fullbleed-DONE.md` |
 | G6x Crate outer rim lift (no dark frame grid) | **done** — `g6x-crate-rim-lift-DONE.md` |
+| G6y Floor alt edge flatten (no cell-edge tone grid) | **done** — `g6y-floor-edge-flatten-DONE.md` |
 
 ## Main arena (tournament-clean) — READY
 
-Seamless cobble + 4-way mean-matched base variants, pure continuous cream lanes, pure continuous masonry walls + wallAlt (no per-cell rim/lip), strong portal dashed rings (≠ spawn solid), full-bleed crate + crateAlt (lifted outer rim, iron cross kept) + matched break FX, spawn rings only on pads. Live training screenshots green.
+Seamless cobble + 4-way mean-matched base variants (edge-flattened alts), pure continuous cream lanes, pure continuous masonry walls + wallAlt (no per-cell rim/lip), strong portal dashed rings (≠ spawn solid), full-bleed crate + crateAlt (lifted outer rim, iron cross kept) + matched break FX, spawn rings only on pads. Live training screenshots green.
 
 ## Optional next
 

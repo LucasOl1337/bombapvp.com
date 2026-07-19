@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v3.8 crate rim lift)
+# Tournament Clean — top-down sprite tile pack (v3.9 floor edge flatten)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -28,6 +28,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 |------|--------|
 | 2×2 seam — hard bar | PASS (stones wrap; no join bar) |
 | Tone checker base vs alt | PASS — cell mean delta ≈0.3 (was ~12) |
+| Floor alt edge−inner | PASS — alt/alt3 ≈0.5–0.6 (was ~4.8–5.0) |
 | Landmark motif in all 4 quadrants | PARTIAL — two layouts alternate; no broken edge stones |
 | Edge delta (base seed 45) | lr≈6.8, tb≈4.3 mean abs/channel |
 | Top-down crate + alpha | PASS |
@@ -36,7 +37,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 
 ## Palette anchors
 
-Floor `#d8d0c2` / `#cec5b7` family · lane cream lift · spawn gold `#c49e4c` · wall charcoal + soft rim/top lip · crate warm brown.
+Floor `#d8d0c2` / `#cec5b7` family · lane cream lift · spawn gold `#c49e4c` · wall charcoal masonry edge-to-edge · crate warm brown (full-bleed, lifted outer rim).
 
 ## Render mode
 
