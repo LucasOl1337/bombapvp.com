@@ -43,3 +43,7 @@ Floor `#d8d0c2` / `#cec5b7` family · lane cream lift · spawn gold `#c49e4c` ·
 ## Render mode
 
 `renderMode: "sprite"` + `tilePaths` in `arena-theme-library.ts`.
+
+## v4.1 — rigid fort walls + crate gold rim fix
+- wall / wall-alt: dark basalt ironstone (not limestone cobble) for hard vs soft crate contrast
+- crates: pure yellow left-edge rim removed (gold seam bug)

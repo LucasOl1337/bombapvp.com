@@ -2412,7 +2412,13 @@ export class GameApp {
   private handleMatchCycleEvents(events: readonly MatchCycleEvent[]): void {
     for (const event of events) {
       if (event.type === "round-timer-expired") {
-        this.finishRound(null, "timer", "Clock hit zero. Draw round.");
+        // No timeout draws. Clock expiry only forces sudden death open;
+        // the round ends solely by elimination or simultaneous deaths (double-ko).
+        if (!this.suddenDeathActive) {
+          this.suddenDeathActive = true;
+          this.suddenDeathTickMs = 0;
+          this.soundManager.playOneShot("suddenDeathAlarm");
+        }
         continue;
       }
       if (event.type === "round-started") {
@@ -5668,11 +5674,10 @@ export class GameApp {
         ? this.assets.props.wallAlt
         : this.assets.props.wall;
     if (wallSprite) {
-      this.ctx.fillStyle = "rgba(8, 10, 14, 0.35)";
-      this.ctx.fillRect(x + 1, y + TILE_SIZE - 5, TILE_SIZE - 2, 5);
+      // Hard drop-shadow only — no cream top lip (that softened fortification walls).
+      this.ctx.fillStyle = "rgba(4, 4, 8, 0.5)";
+      this.ctx.fillRect(x + 1, y + TILE_SIZE - 4, TILE_SIZE - 2, 4);
       this.ctx.drawImage(wallSprite, x, y, TILE_SIZE, TILE_SIZE);
-      this.ctx.fillStyle = "rgba(226, 221, 190, 0.08)";
-      this.ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, 2);
       return;
     }
     const theme = this.getArenaThemeDefinition();
