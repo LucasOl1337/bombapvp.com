@@ -4,21 +4,19 @@
 
 | Goal | Status |
 | --- | --- |
-| G1–G5 first pass | **reverted** — see `tarefas/claims/postmortem-asset-refresh-failure.md` |
-| G6 Tournament-clean top-down pack | **done** — claim `g6-tournament-clean-topdown-DONE.md` |
-| G6b Cobble refine | **done** — claim `g6b-tournament-clean-cobble-refine-DONE.md` |
-| G6c Seamless cobble (toroidal Voronoi) | **done** — claim `g6c-seamless-cobble-DONE.md` |
-| G6d baseAlt checker + solid wall | **done** — claim `g6d-basealt-wall-DONE.md` |
+| G1–G5 first pass | **reverted** — postmortem |
+| G6–G6e tile pack | **done** |
+| G6f–G6g gates + live screenshot | **done / PASS** |
+| G6h Spawn pad-only | **done** |
+| G6i Top-down crate break | **done** |
+| G6j Continuous lane (no sticker frames) | **done** — `g6j-lane-continuous-DONE.md` |
 
-## G6–G6d verify
+## Main arena (tournament-clean) — READY
 
-- Seamless cobble + baseAlt checker in draw path  
-- Solid framed wall; orthographic crate  
-- Catalog/library/tests green (97)  
+Seamless cobble + baseAlt, continuous bright lanes, textured walls, ortho crates + matching break FX, spawn rings only on pads. Live training screenshots green.
 
-## Optional next goals
+## Optional next
 
-- Live playtest continuous arena (hard refresh); rollback to procedural if needed  
-- Wire HUD frames/icons if still pending  
-- G5b–e other themes with same top-down + seamless rules  
-- Arcane-citadel floor-base still near-flat (~992 B)
+- Owner commit/push when ordered  
+- Other themes; arcane-citadel flat floor-base  
+- HUD frame wire-up if pending  
