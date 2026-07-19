@@ -1,9 +1,33 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { resolveGameAsset } from "../game-assets/index.ts";
+import { CITADEL_BREACH_MARKETING } from "../game-assets/marketing.ts";
+import { CITADEL_BREACH_VISUALS } from "../game-assets/citadel-breach.ts";
 import { getArenaThemeById } from "../src/original-game/Arenas/arena-theme-library.ts";
 
 describe("game assets", () => {
+  it("keeps launcher marketing free of the full catalog import", () => {
+    const marketingSource = readFileSync(
+      resolve(import.meta.dirname, "../game-assets/marketing.ts"),
+      "utf8",
+    );
+    const viewSource = readFileSync(
+      resolve(import.meta.dirname, "../src/app/view.ts"),
+      "utf8",
+    );
+    expect(marketingSource).not.toMatch(/from\s+["']\.\/catalog/);
+    expect(viewSource).toMatch(/game-assets\/marketing/);
+    expect(viewSource).not.toMatch(/from\s+["']\.\.\/\.\.\/game-assets["']/);
+    expect(viewSource).not.toMatch(/CITADEL_BREACH_VISUALS/);
+    expect(Object.keys(CITADEL_BREACH_VISUALS)).toEqual(
+      expect.arrayContaining(["marketing", "arena", "powerUps", "hud", "feedback", "effects"]),
+    );
+    expect(CITADEL_BREACH_MARKETING.banner.url.length).toBeGreaterThan(0);
+    expect(CITADEL_BREACH_MARKETING.keyArt.url.length).toBeGreaterThan(0);
+  });
+
   it("uses the cohesive Arcane Citadel theme tile pack (not motif-heavy shared props)", () => {
     expect(getArenaThemeById("arcane-citadel")?.tilePaths).toMatchObject({
       base: "arena.theme.arcane-citadel.floor.base",
@@ -19,6 +43,8 @@ describe("game assets", () => {
     ["gameplay.bomb.sprite.ruins", "bomb-ruins.png"],
     ["gameplay.bomb.flame", "flame.png"],
     ["gameplay.bomb.flame.ruins", "flame-ruins.png"],
+    ["gameplay.bomb.flame.anim-sheet", "flame-anim-sheet-v1.png"],
+    ["effect.explosion.bomb-anim", "bomb-explosion-anim-sheet-v1.png"],
     ["audio.bomb.place", "bomb_place.mp3"],
     ["audio.bomb.explode.default", "bomb_explode_default.mp3"],
     ["audio.bomb.explode.main", "bomb_explode_main.mp3"],

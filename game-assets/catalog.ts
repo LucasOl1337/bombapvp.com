@@ -54,6 +54,8 @@ import bombKickTelegraphUrl from "./gameplay/feedback/bomb-kick-telegraph-v1-202
 import bombPlantConfirmationUrl from "./gameplay/feedback/bomb-plant-confirmation-marker-v2-20260718-1736.png?url";
 import flameRuinsUrl from "./gameplay/bomb/explosion/flame-ruins.png?url";
 import flameUrl from "./gameplay/bomb/explosion/flame.png?url";
+import flameAnimSheetUrl from "./gameplay/bomb/explosion/flame-anim-sheet-v1.png?url";
+import bombExplosionAnimSheetUrl from "./effects/explosions/bomb-explosion-anim-sheet-v1.png?url";
 import bombRuinsUrl from "./gameplay/bomb/sprites/bomb-ruins.png?url";
 import bombUrl from "./gameplay/bomb/sprites/bomb.png?url";
 import crateBreak0Url from "./gameplay/crates/break/crate-break-0.png?url";
@@ -90,6 +92,8 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "gameplay.bomb.sprite.ruins": bombRuinsUrl,
   "gameplay.bomb.flame": flameUrl,
   "gameplay.bomb.flame.ruins": flameRuinsUrl,
+  "gameplay.bomb.flame.anim-sheet": flameAnimSheetUrl,
+  "effect.explosion.bomb-anim": bombExplosionAnimSheetUrl,
   "audio.bomb.place": bombPlaceUrl,
   "audio.bomb.explode.default": bombExplosionDefaultUrl,
   "audio.bomb.explode.main": bombExplosionMainUrl,

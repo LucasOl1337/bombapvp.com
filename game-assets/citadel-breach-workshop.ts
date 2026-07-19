@@ -1,19 +1,21 @@
+/**
+ * Non-shipping workshop registry for Citadel Breach concept art.
+ * Not exported from game-assets/index — do not import from the launcher.
+ * Engine/runtime may adopt pieces later when a real owner exists.
+ */
 import { resolveGameAsset, type GameAssetId } from "./catalog";
 
-export type CitadelBreachVisual = Readonly<{
+export type CitadelWorkshopVisual = Readonly<{
   id: GameAssetId;
   url: string;
 }>;
 
-function visual(id: GameAssetId): CitadelBreachVisual {
+function visual(id: GameAssetId): CitadelWorkshopVisual {
   return Object.freeze({ id, url: resolveGameAsset(id) });
 }
 
-export const CITADEL_BREACH_VISUALS = Object.freeze({
-  marketing: Object.freeze({
-    banner: visual("marketing.citadel-breach.launcher-banner"),
-    keyArt: visual("marketing.citadel-breach.key-art"),
-  }),
+/** Concept packs without gameplay ownership. Keep out of launcher entry. */
+export const CITADEL_BREACH_WORKSHOP = Object.freeze({
   arena: Object.freeze([
     visual("arena.shared.citadel-conduit-floor"),
     visual("arena.shared.citadel-gate-obstacle"),

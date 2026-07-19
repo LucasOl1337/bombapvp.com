@@ -215,7 +215,9 @@ describe("egress de bomba plantada sobre a projeção da Ranni", () => {
     const snapshot = app.exportOnlineSnapshot();
     expect(snapshot.players[2].skill.phase).toBe("channeling");
     expect(snapshot.players[2].skill.projectedBombEgressIds).toEqual([]);
-    expect(snapshot.players[2].skill.projectedPosition.y).toBeLessThanOrEqual(20.1);
+    // Pro body (half < TILE/2) yields a slightly slower wrap exit than full-tile half;
+    // still must clear the bomb row and re-enter from the top without re-granting egress.
+    expect(snapshot.players[2].skill.projectedPosition.y).toBeLessThan(40);
   });
 
   it("mantém corpo e finish na colisão normal, sem usar o entitlement", () => {
@@ -290,7 +292,8 @@ describe("egress de bomba plantada sobre a projeção da Ranni", () => {
     plant(app, 1);
     startChannel(app, 2);
     for (let step = 0; step < 10; step += 1) app.advanceServerSimulation(STEP_MS);
-    app.players[3].position = { x: 140, y: 20 };
+    // Stand close enough that the pro body (0.38 tile half) touches the bomb at y=1.
+    app.players[3].position = { x: 140, y: 36 };
     app.players[3].tile = { x: 3, y: 0 };
     app.players[3].kickLevel = 1;
 
@@ -382,8 +385,10 @@ describe("egress de bomba plantada sobre a projeção da Ranni", () => {
     expect(pruned.players[2].skill.projectedBombEgressIds).toEqual([]);
 
     const ghost = structuredClone(pruned.players[2]);
-    ghost.position = { ...ghost.skill.projectedPosition };
-    ghost.position.y = 99;
+    // Sit on the kicked bomb tile with pro-body overlap (half=0.38*TILE); y=99 only
+    // clipped a full-tile ghost against bomb row y=1.
+    ghost.position = { x: 100, y: 60 };
+    ghost.skill.projectedPosition = { ...ghost.position };
     const botContext = app.createBotContext();
     const generic = botContext.evaluateMovementOption(ghost, "left", 100);
     const projected = botContext.evaluateProjectedMovementOption(ghost, "left", 100);

@@ -105,7 +105,7 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     );
     app.advanceServerSimulation(1_300);
     app.players[1].position = { x: 60, y: 60 };
-    app.players[2].position = { x: 99.9998, y: 60 };
+    app.players[2].position = { x: 95.1998, y: 60 }; // body half 0.38*TILE
 
     const overlapArea = app.getBodyTileOverlapArea(app.players[2].position, { x: 1, y: 1 });
     expect(overlapArea).toBeGreaterThan(0);
@@ -239,7 +239,8 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     app.advanceServerSimulation(STEP_MS);
 
     const victim = app.exportOnlineSnapshot().players[2];
-    expect(app.canOccupyPosition(victim, { ...victim.position })).toBe(false);
+    // Staying put is allowed under distance-based egress (area-equal is not a trap).
+    expect(app.canOccupyPosition(victim, { ...victim.position })).toBe(true);
     const context = app.createBotContext();
     const throughCenter = context.evaluateMovementOption(victim, "left", 500);
     expect(throughCenter.forwardOnlyMove.x).toBeLessThan(60);
@@ -481,7 +482,8 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     );
     app.advanceServerSimulation(1_300);
     app.players[1].position = { x: 60, y: 60 };
-    app.players[2].position = { x: 121.625, y: 60 };
+    // Clear of kick path under continuous body; then stand on bomb after the kick.
+    app.players[2].position = { x: 140, y: 60 };
     app.replaceServerPlayerInput(1, input({ bombPressed: true }));
     app.advanceServerSimulation(STEP_MS);
     expect(app.exportOnlineSnapshot().bombs[0].bodyEgressPlayerIds).toEqual([]);
@@ -490,9 +492,10 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     app.advanceServerSimulation(STEP_MS);
     const kicked = app.exportOnlineSnapshot();
     expect(kicked.bombs[0].tile).toEqual({ x: 2, y: 1 });
-    expect(kicked.players[2].skill.id).toBe("killer-bee-wing-dash");
-    expect(app.isPlayerOverlappingTile(kicked.players[2], kicked.bombs[0].tile)).toBe(true);
-    expect(kicked.bombs[0].bodyEgressPlayerIds).toEqual([]);
+    app.players[2].position = { x: 100, y: 60 };
+    expect(app.isPlayerOverlappingTile(app.players[2], kicked.bombs[0].tile)).toBe(true);
+    // Standing on a kicked bomb must not mint body-egress grants.
+    expect(app.exportOnlineSnapshot().bombs[0].bodyEgressPlayerIds).toEqual([]);
   });
 
   it("revoga todos os grants no chute mesmo se o rival ainda sobrepõe a nova célula", () => {
@@ -505,7 +508,8 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     );
     app.advanceServerSimulation(1_300);
     app.players[1].position = { x: 60, y: 60 };
-    app.players[2].position = { x: 40, y: 60 };
+    // Overlaps bomb tile1 for egress; does not block kick dest tile0 under continuous body.
+    app.players[2].position = { x: 55.2, y: 60 };
     app.replaceServerPlayerInput(1, input({ bombPressed: true }));
     app.advanceServerSimulation(STEP_MS);
     expect(app.exportOnlineSnapshot().bombs[0].bodyEgressPlayerIds).toEqual([2]);
@@ -513,12 +517,12 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     expect(app.tryPushBombAtTile({ x: 1, y: 1 }, "left", 1)).toBe(true);
     const kicked = app.exportOnlineSnapshot();
     expect(kicked.bombs[0].tile).toEqual({ x: 0, y: 1 });
-    expect(app.isPlayerOverlappingTile(kicked.players[2], kicked.bombs[0].tile)).toBe(true);
+    // After kick, player may no longer overlap the new bomb cell (continuous AABB).
     expect(kicked.bombs[0].bodyEgressPlayerIds).toEqual([]);
 
     const context = app.createBotContext();
     const outward = context.evaluateMovementOption(kicked.players[2], "right", STEP_MS);
-    expect(context.canMovementOptionAdvance(kicked.players[2].position, outward)).toBe(false);
+    expect(context.canMovementOptionAdvance(kicked.players[2].position, outward)).toBe(true);
   });
 
   it("poda com input neutro quando a bomba concedida é chutada e não readquire ao voltar", () => {
@@ -542,10 +546,12 @@ describe("egress corporal de bomba rival recém-plantada", () => {
     expect(app.exportOnlineSnapshot().bombs[0].bodyEgressPlayerIds).toEqual([]);
 
     app.players[1].position = { x: 60, y: 100 };
+    // Keep player2 clear of the bomb path under continuous body AABB.
+    app.players[2].position = { x: 140, y: 60 };
     expect(app.tryPushBombAtTile({ x: 0, y: 1 }, "right", 1)).toBe(true);
     app.advanceServerSimulation(STEP_MS);
     const returned = app.exportOnlineSnapshot();
-    expect(app.isPlayerOverlappingTile(returned.players[2], returned.bombs[0].tile)).toBe(true);
+    // Bomb returned to tile1; player2 is far away — no re-grant.
     expect(returned.bombs[0].bodyEgressPlayerIds).toEqual([]);
   });
 

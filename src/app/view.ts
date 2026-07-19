@@ -1,5 +1,5 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
-import { CITADEL_BREACH_VISUALS, type CitadelBreachVisual } from "../../game-assets";
+import { CITADEL_BREACH_MARKETING, type MarketingVisual } from "../../game-assets/marketing.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
 import {
   LAB_BOMB_MODEL,
@@ -176,7 +176,7 @@ function renderRosterPanel(document: Document, snapshot: AppSnapshot): HTMLEleme
 
 function createCitadelVisual(
   document: Document,
-  visual: CitadelBreachVisual,
+  visual: MarketingVisual,
   className: string,
 ): HTMLImageElement {
   const image = document.createElement("img");
@@ -197,28 +197,11 @@ function renderCitadelFeature(document: Document, snapshot: AppSnapshot): HTMLEl
 
   const media = element(document, "div", "citadel-feature__media");
   media.setAttribute("aria-hidden", "true");
+  // Launcher-only marketing bundle — never import full citadel catalog here.
   media.append(
-    createCitadelVisual(document, CITADEL_BREACH_VISUALS.marketing.banner, "citadel-feature__banner"),
-    createCitadelVisual(document, CITADEL_BREACH_VISUALS.marketing.keyArt, "citadel-feature__key-art"),
+    createCitadelVisual(document, CITADEL_BREACH_MARKETING.banner, "citadel-feature__banner"),
+    createCitadelVisual(document, CITADEL_BREACH_MARKETING.keyArt, "citadel-feature__key-art"),
   );
-
-  const systems = element(document, "div", "citadel-feature__systems");
-  const groups = [
-    ["arena", CITADEL_BREACH_VISUALS.arena],
-    ["power", CITADEL_BREACH_VISUALS.powerUps],
-    ["hud", CITADEL_BREACH_VISUALS.hud],
-    ["feedback", CITADEL_BREACH_VISUALS.feedback],
-    ["effects", CITADEL_BREACH_VISUALS.effects],
-  ] as const;
-  for (const [groupName, visuals] of groups) {
-    const group = element(document, "span", `citadel-feature__asset-group citadel-feature__asset-group--${groupName}`);
-    group.dataset.visualGroup = groupName;
-    for (const visual of visuals) {
-      group.append(createCitadelVisual(document, visual, "citadel-feature__asset"));
-    }
-    systems.append(group);
-  }
-  media.append(systems);
 
   const copy = element(document, "div", "citadel-feature__copy");
   copy.append(
