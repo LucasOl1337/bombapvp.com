@@ -6,23 +6,23 @@ import type { PlayerId, PlayerState } from "../Gameplay/types";
 /** Shared two-row match HUD geometry (windowed + fullscreen). */
 export const HUD_LAYOUT = {
   /** Visual match HUD height; independent from stable world-space geometry. */
-  height: 78,
+  height: 96,
   /** Top strip: rival slots + match center. */
-  topRowY: 4,
-  topRowHeight: 28,
+  topRowY: 6,
+  topRowHeight: 36,
   /** Bottom strip: dedicated local player panel. */
-  localPanelY: 36,
-  localPanelHeight: 38,
+  localPanelY: 48,
+  localPanelHeight: 44,
   /** Isolated match meta (round / timer / mode). */
-  centerWidth: 160,
-  centerMaxWidth: 180,
-  rivalSlotMinWidth: 112,
-  rivalSlotMaxWidth: 170,
-  paddingX: 6,
-  gap: 4,
+  centerWidth: 176,
+  centerMaxWidth: 200,
+  rivalSlotMinWidth: 128,
+  rivalSlotMaxWidth: 190,
+  paddingX: 8,
+  gap: 6,
   /** Name budgets (code units) for stable ellipsis. */
-  rivalNameMax: 12,
-  localNameMax: 18,
+  rivalNameMax: 14,
+  localNameMax: 20,
 } as const;
 
 const ELLIPSIS = "…";

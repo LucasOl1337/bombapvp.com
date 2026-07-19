@@ -2201,8 +2201,11 @@ export class GameApp {
       0,
       this.roomBotBombPlacementThrottleMs - deltaMs,
     );
+    const positionsBeforeMovement = createPlayerRecord((playerId) => ({
+      ...this.players[playerId].position,
+    }));
     this.updatePlayers(deltaMs);
-    this.updateBombs(deltaMs);
+    this.updateBombs(deltaMs, positionsBeforeMovement);
     this.updateFlames(deltaMs);
     this.collectPowerUps();
     this.evaluateRoundState();
@@ -3603,7 +3606,10 @@ export class GameApp {
     }
   }
 
-  private updateBombs(deltaMs: number): void {
+  private updateBombs(
+    deltaMs: number,
+    positionsBeforeMovement: Readonly<Record<PlayerId, PixelCoord>>,
+  ): void {
     for (const bomb of this.bombs) {
       bomb.bodyEgressPlayerIds = (bomb.bodyEgressPlayerIds ?? []).filter((playerId) => {
         const player = this.players[playerId];
@@ -3629,11 +3635,14 @@ export class GameApp {
       },
     });
     for (const explosion of explosions) {
-      this.applyBombExplosion(explosion);
+      this.applyBombExplosion(explosion, positionsBeforeMovement);
     }
   }
 
-  private applyBombExplosion(explosion: BombExplosion): void {
+  private applyBombExplosion(
+    explosion: BombExplosion,
+    positionsBeforeMovement: Readonly<Record<PlayerId, PixelCoord>>,
+  ): void {
     const index = this.bombs.findIndex((item) => item.id === explosion.bombId);
     if (index === -1) {
       return;
@@ -3665,6 +3674,7 @@ export class GameApp {
     this.resolvePlayerDeathsAtTileKeys(
       explosion.flameTiles.map((tile) => tileKey(tile.x, tile.y)),
       bomb.ownerId,
+      positionsBeforeMovement,
     );
   }
 
@@ -3963,7 +3973,11 @@ export class GameApp {
     this.flames = this.flames.filter((flame) => flame.remainingMs > 0);
   }
 
-  private resolvePlayerDeathsAtTileKeys(keys: Iterable<string>, attackerId: PlayerId | null = null): void {
+  private resolvePlayerDeathsAtTileKeys(
+    keys: Iterable<string>,
+    attackerId: PlayerId | null = null,
+    positionsBeforeMovement?: Readonly<Record<PlayerId, PixelCoord>>,
+  ): void {
     const flameKeys = new Set(keys);
     if (flameKeys.size === 0) {
       return;
@@ -3975,7 +3989,15 @@ export class GameApp {
         continue;
       }
       player.tile = this.getTileFromPosition(player.position);
-      const hit = flameTiles.some((tile) => this.isPlayerHitByFlameTile(player, tile));
+      const previousPosition = positionsBeforeMovement?.[id];
+      const hit = flameTiles.some((tile) => (
+        this.isPlayerHitByFlameTile(player, tile)
+        || (previousPosition !== undefined && flameHurtboxOverlapsTile(
+          previousPosition,
+          this.normalizeTile(tile),
+          this.getBodyGeometryOptions(),
+        ))
+      ));
       if (hit) {
         this.tryAbsorbInstantHit(player, attackerId);
       }
@@ -4450,6 +4472,46 @@ export class GameApp {
     }
   }
 
+  /**
+   * 9-slice panel draw so chrome keeps crisp corners when stretched to HUD slots.
+   */
+  private drawNineSlicePanel(
+    image: HTMLImageElement,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    slice = 28,
+  ): void {
+    const iw = image.naturalWidth;
+    const ih = image.naturalHeight;
+    if (iw < 8 || ih < 8 || width < 4 || height < 4) {
+      this.ctx.drawImage(image, x, y, width, height);
+      return;
+    }
+    const s = Math.max(8, Math.min(slice, Math.floor(iw / 3), Math.floor(ih / 3)));
+    const dw = Math.max(1, width - s * 2);
+    const dh = Math.max(1, height - s * 2);
+    const mw = Math.max(1, iw - s * 2);
+    const mh = Math.max(1, ih - s * 2);
+    const prevSmooth = this.ctx.imageSmoothingEnabled;
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
+    // corners
+    this.ctx.drawImage(image, 0, 0, s, s, x, y, s, s);
+    this.ctx.drawImage(image, iw - s, 0, s, s, x + width - s, y, s, s);
+    this.ctx.drawImage(image, 0, ih - s, s, s, x, y + height - s, s, s);
+    this.ctx.drawImage(image, iw - s, ih - s, s, s, x + width - s, y + height - s, s, s);
+    // edges
+    this.ctx.drawImage(image, s, 0, mw, s, x + s, y, dw, s);
+    this.ctx.drawImage(image, s, ih - s, mw, s, x + s, y + height - s, dw, s);
+    this.ctx.drawImage(image, 0, s, s, mh, x, y + s, s, dh);
+    this.ctx.drawImage(image, iw - s, s, s, mh, x + width - s, y + s, s, dh);
+    // center
+    this.ctx.drawImage(image, s, s, mw, mh, x + s, y + s, dw, dh);
+    this.ctx.imageSmoothingEnabled = prevSmooth;
+  }
+
   private drawHudPanel(
     x: number,
     y: number,
@@ -4465,12 +4527,12 @@ export class GameApp {
         ? chrome?.panelCenter
         : chrome?.panelRival;
     if (frame && frame.complete && frame.naturalWidth > 0) {
-      this.ctx.drawImage(frame, x, y, width, height);
-      // Thin accent underline for player identity (does not fight chrome art).
-      if (accent && accent !== CANVAS_UI_BORDER_STRONG) {
+      this.drawNineSlicePanel(frame, x, y, width, height, variant === "local" ? 32 : 24);
+      // Player identity rail (ember/player color) — crisp product accent.
+      if (accent) {
         this.ctx.fillStyle = accent;
-        this.ctx.globalAlpha = 0.55;
-        this.ctx.fillRect(x + 2, y + height - 2, Math.max(0, width - 4), 2);
+        this.ctx.globalAlpha = 0.9;
+        this.ctx.fillRect(x + 3, y + 2, Math.max(0, width - 6), 2);
         this.ctx.globalAlpha = 1;
       }
       return;
@@ -4497,20 +4559,13 @@ export class GameApp {
     const localId = this.getMatchLocalPlayerId();
     const { leftRivals, rightRivals } = partitionHudPlayers(this.activePlayerIds, localId);
 
-    const hudGradient = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, hudHeight);
-    if (compact) {
-      hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.76)");
-      hudGradient.addColorStop(0.5, "rgba(24, 20, 16, 0.72)");
-      hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.76)");
-    } else {
-      hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.96)");
-      hudGradient.addColorStop(0.5, "rgba(25, 21, 17, 0.96)");
-      hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.96)");
-    }
-    this.ctx.fillStyle = hudGradient;
+    // Solid night bar (launcher DNA) — not a washed gray gradient.
+    this.ctx.fillStyle = compact ? "rgba(10, 10, 15, 0.92)" : "rgba(10, 10, 15, 0.97)";
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, hudHeight);
-    this.ctx.fillStyle = CANVAS_UI_BORDER;
-    this.ctx.fillRect(0, hudHeight - (compact ? 1 : 2), CANVAS_WIDTH, compact ? 1 : 2);
+    this.ctx.fillStyle = "rgba(255, 90, 31, 0.85)";
+    this.ctx.fillRect(0, hudHeight - 2, CANVAS_WIDTH, 2);
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, 1);
 
     const pad = HUD_LAYOUT.paddingX;
     const gap = HUD_LAYOUT.gap;
@@ -4557,13 +4612,13 @@ export class GameApp {
     const suddenDeathHud = this.roundOutcome ? null : this.getSuddenDeathHudState();
 
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 7px Inter";
-    this.drawHudText(modeLabel, cx, y + 8, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
-    this.ctx.font = "700 13px Inter";
+    this.ctx.font = "700 8px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(modeLabel, cx, y + 11, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 18px Space Grotesk, Inter, sans-serif";
     this.drawHudText(
       Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
       cx,
-      y + (suddenDeathHud ? 18 : 20),
+      y + (suddenDeathHud ? 24 : 26),
       CANVAS_UI_TEXT,
       CANVAS_UI_SHADOW,
     );
@@ -4610,19 +4665,19 @@ export class GameApp {
 
     // Row 1: P#  Name… ................. K/W
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 9px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(slotLabel, x + 8, y + 11, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 9px Inter, sans-serif";
-    this.drawHudText(name, x + 30, y + 11, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(slotLabel, x + 10, y + 14, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 11px Inter, sans-serif";
+    this.drawHudText(name, x + 34, y + 14, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     this.ctx.textAlign = "right";
-    this.ctx.font = "700 9px Inter, sans-serif";
-    this.drawHudText(scoreText, x + slotW - 8, y + 11, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 11px Inter, sans-serif";
+    this.drawHudText(scoreText, x + slotW - 10, y + 14, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     // Row 2: ult / alive (isolated from name)
     this.ctx.textAlign = "left";
-    this.ctx.font = "600 8px Inter, sans-serif";
-    this.drawHudText(ultLabel, x + 8, y + height - 7, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "700 10px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(ultLabel, x + 10, y + height - 9, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
   }
 
   private getRivalUltLabel(playerId: PlayerId, status: HudPlayerStatus): string {
@@ -4678,40 +4733,40 @@ export class GameApp {
 
     this.drawHudPanel(x, y, width, height, palette.glow, "local");
 
-    // Left identity band (~190px): YOU + name on top, status + score on bottom
-    const identityWidth = 190;
+    // Left identity band: YOU + name on top, status + score on bottom
+    const identityWidth = 210;
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(youLabel, x + 12, y + 15, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 10px Inter, sans-serif";
-    this.drawHudText(nameText, x + 52, y + 15, nameColor, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 13px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(youLabel, x + 14, y + 17, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 12px Inter, sans-serif";
+    this.drawHudText(nameText, x + 62, y + 17, nameColor, CANVAS_UI_SHADOW);
 
-    this.ctx.font = "700 9px Inter, sans-serif";
+    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
     this.drawHudText(
       status.label,
-      x + 12,
-      y + height - 9,
+      x + 14,
+      y + height - 11,
       this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
 
     if (this.onlineRoomMode === "endless") {
-      this.drawEndlessHudStats(x + 100, y + height - 8, playerId, palette);
+      this.drawEndlessHudStats(x + 118, y + height - 11, playerId, palette);
     } else {
-      this.drawRoundPips(x + 100, y + height - 16, this.score[playerId], palette);
+      this.drawRoundPips(x + 118, y + height - 18, this.score[playerId], palette);
     }
 
     // Center/right: power slots (icon + level) — primary stat presentation
-    const rightPad = 8;
-    const ultChipWidth = hasUltimate ? 52 : 0;
-    const ultGap = hasUltimate ? 6 : 0;
-    const slotsLeft = x + identityWidth + 8;
+    const rightPad = 10;
+    const ultChipWidth = hasUltimate ? 64 : 0;
+    const ultGap = hasUltimate ? 8 : 0;
+    const slotsLeft = x + identityWidth + 10;
     const slotsRight = x + width - rightPad - ultChipWidth - ultGap;
-    const slotsWidth = Math.max(80, slotsRight - slotsLeft);
-    const slotGap = 4;
+    const slotsWidth = Math.max(100, slotsRight - slotsLeft);
+    const slotGap = 6;
     const slotCount = Math.max(1, skillSlots.length);
-    const slotW = Math.max(30, Math.min(52, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
-    const slotH = 18;
+    const slotW = Math.max(40, Math.min(64, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
+    const slotH = 24;
     const slotY = y + Math.round((height - slotH) / 2);
     for (let index = 0; index < skillSlots.length; index += 1) {
       const slot = skillSlots[index];
@@ -4801,7 +4856,7 @@ export class GameApp {
     // Never concatenate keybind + status ("SPC OK") — unreadable soup.
     // Chip is status only; keybind is implied for the local player.
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 9px Space Grotesk, Inter, sans-serif";
+    this.ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
     const text = ready
       ? (this.language === "pt" ? "ULT" : "ULT")
       : label;
@@ -5124,13 +5179,13 @@ export class GameApp {
     this.ctx.stroke();
     this.ctx.lineWidth = 1;
 
-    const iconSize = Math.min(14, height - 4);
+    const iconSize = Math.min(18, height - 4);
     const icon = this.resolveHudPowerIcon(slot.type);
     if (icon && icon.complete && icon.naturalWidth > 0) {
       this.ctx.globalAlpha = slot.acquired ? 1 : 0.45;
       this.ctx.drawImage(
         icon,
-        x + 3,
+        x + 4,
         y + Math.max(1, (height - iconSize) / 2),
         iconSize,
         iconSize,
@@ -5138,11 +5193,11 @@ export class GameApp {
       this.ctx.globalAlpha = 1;
     } else {
       this.ctx.textAlign = "left";
-      this.ctx.font = "700 8px Inter";
+      this.ctx.font = "700 10px Inter";
       this.drawHudText(
         definition.shortLabel.slice(0, 1),
-        x + 3,
-        y + height - 3,
+        x + 4,
+        y + height - 4,
         tint,
         CANVAS_UI_SHADOW,
       );
@@ -5150,9 +5205,9 @@ export class GameApp {
 
     // Value only — key labels in chips caused the "SPC OK" overlay mess.
     this.ctx.textAlign = "right";
-    this.ctx.font = "700 8px Inter";
+    this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
     const valueColor = slot.acquired ? CANVAS_UI_TEXT : CANVAS_UI_MUTED_SOFT;
-    this.drawHudText(slot.valueLabel, x + width - 3, y + height - 3, valueColor, CANVAS_UI_SHADOW);
+    this.drawHudText(slot.valueLabel, x + width - 5, y + height - 5, valueColor, CANVAS_UI_SHADOW);
   }
 
   private rebuildArenaStaticCache(): void {
