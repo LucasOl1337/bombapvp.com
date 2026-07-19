@@ -49,6 +49,8 @@ export interface GameAssets {
     crateBreakFrames?: HTMLImageElement[];
     bomb: HTMLImageElement | null;
     flame: HTMLImageElement | null;
+    /** Optional multi-frame bomb explosion sheet. */
+    flameAnimSheet?: HTMLImageElement | null;
   };
   effects?: {
     speedSparkTrail: HTMLImageElement | null;
@@ -300,6 +302,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       loadImage(resolveGameAsset("gameplay.crate.break.3")),
       loadImage(resolveGameAsset("gameplay.bomb.sprite")),
       loadImage(resolveGameAsset("gameplay.bomb.flame")),
+      loadImage(resolveGameAsset("gameplay.bomb.flame.anim-sheet")),
       loadImage(resolveGameAsset("effect.movement.speed-spark-trail")),
       loadImage(resolveGameAsset("ui.arena.victory-emblem")),
       loadImage(resolveGameAsset("ui.arena.stalemate-emblem")),
@@ -324,6 +327,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     crateBreak3,
     bomb,
     flame,
+    flameAnimSheet,
     speedSparkTrail,
     victoryEmblem,
     stalemateEmblem,
@@ -375,6 +379,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
         .filter((frame): frame is HTMLImageElement => frame !== null),
       bomb,
       flame,
+      flameAnimSheet,
     },
     effects: {
       speedSparkTrail,

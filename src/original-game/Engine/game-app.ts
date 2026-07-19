@@ -80,6 +80,22 @@ import {
   registerPickupForChain,
   type PickupChainState,
 } from "../Gameplay/pickup-chain";
+import {
+  PLAYER_BODY_HALF,
+  bodyOverlapsTile,
+  bodyTileOverlapArea,
+  bodyTouchedTileIndices,
+  projectedBodyOverlapsTile,
+  isMonotonicBodyBombEgress as pureIsMonotonicBodyBombEgress,
+} from "../Gameplay/player-body";
+import {
+  tilesFromKeys,
+} from "../Gameplay/flame-contact";
+import { drawFlameTile } from "./flame-render";
+import {
+  drawHudPanel as paintHudPanel,
+  formatHudStatLine as formatHudStatLinePure,
+} from "./hud-format";
 import type {
   LobbyMode,
   MatchStartConfig,
@@ -187,7 +203,6 @@ const directionDelta: Record<Direction, TileCoord> = {
   left: { x: -1, y: 0 },
   right: { x: 1, y: 0 },
 };
-const PLAYER_HITBOX_HALF = TILE_SIZE * 0.5;
 const LANE_SNAP_THRESHOLD = TILE_SIZE * 0.45;
 const LANE_LOCK_THRESHOLD = 3;
 const LANE_SETTLE_EPSILON = 0.35;
@@ -3214,12 +3229,26 @@ export class GameApp {
       if (!player.alive) {
         continue;
       }
-      const playerTile = this.getTileFromPosition(player.position);
-      if (playerTile.x === normalizedTile.x && playerTile.y === normalizedTile.y) {
+      // Kick blocking uses continuous body overlap (same AABB as walls/flames).
+      if (this.isPlayerOverlappingTile(player, normalizedTile)) {
         return true;
       }
     }
     return false;
+  }
+
+  private getBodyGeometryOptions(): {
+    arenaPixelWidth: number;
+    arenaPixelHeight: number;
+    bodyHalf: number;
+    tileSize: number;
+  } {
+    return {
+      arenaPixelWidth: this.getArenaPixelWidth(),
+      arenaPixelHeight: this.getArenaPixelHeight(),
+      bodyHalf: PLAYER_BODY_HALF,
+      tileSize: TILE_SIZE,
+    };
   }
 
   private canOccupyPosition(
@@ -3254,15 +3283,10 @@ export class GameApp {
     ) {
       return false;
     }
-    const left = wrapped.x - PLAYER_HITBOX_HALF;
-    const right = wrapped.x + PLAYER_HITBOX_HALF;
-    const top = wrapped.y - PLAYER_HITBOX_HALF;
-    const bottom = wrapped.y + PLAYER_HITBOX_HALF;
-
-    const minTileX = Math.floor(left / TILE_SIZE);
-    const maxTileX = Math.floor((right - 0.001) / TILE_SIZE);
-    const minTileY = Math.floor(top / TILE_SIZE);
-    const maxTileY = Math.floor((bottom - 0.001) / TILE_SIZE);
+    const { minTileX, maxTileX, minTileY, maxTileY } = bodyTouchedTileIndices(
+      wrapped,
+      this.getBodyGeometryOptions(),
+    );
 
     for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
       for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
@@ -3364,34 +3388,13 @@ export class GameApp {
   }
 
   private isPlayerOverlappingTile(player: PlayerState, tile: TileCoord): boolean {
-    const left = player.position.x - PLAYER_HITBOX_HALF;
-    const right = player.position.x + PLAYER_HITBOX_HALF;
-    const top = player.position.y - PLAYER_HITBOX_HALF;
-    const bottom = player.position.y + PLAYER_HITBOX_HALF;
-    const tileLeft = tile.x * TILE_SIZE;
-    const tileRight = tileLeft + TILE_SIZE;
-    const tileTop = tile.y * TILE_SIZE;
-    const tileBottom = tileTop + TILE_SIZE;
-
-    return left < tileRight && right > tileLeft && top < tileBottom && bottom > tileTop;
+    const normalized = this.normalizeTile(tile);
+    return bodyOverlapsTile(player.position, normalized, this.getBodyGeometryOptions());
   }
 
   private getBodyTileOverlapArea(position: PixelCoord, tile: TileCoord): number {
-    const tileCenter = this.getTileCenter(tile);
-    const tileHalf = TILE_SIZE * 0.5;
-    const deltaX = this.getWrappedDelta(tileCenter.x, position.x, this.getArenaPixelWidth());
-    const deltaY = this.getWrappedDelta(tileCenter.y, position.y, this.getArenaPixelHeight());
-    const overlapWidth = Math.max(
-      0,
-      Math.min(PLAYER_HITBOX_HALF, deltaX + tileHalf)
-        - Math.max(-PLAYER_HITBOX_HALF, deltaX - tileHalf),
-    );
-    const overlapHeight = Math.max(
-      0,
-      Math.min(PLAYER_HITBOX_HALF, deltaY + tileHalf)
-        - Math.max(-PLAYER_HITBOX_HALF, deltaY - tileHalf),
-    );
-    return overlapWidth * overlapHeight;
+    const normalized = this.normalizeTile(tile);
+    return bodyTileOverlapArea(position, normalized, this.getBodyGeometryOptions());
   }
 
   private isMonotonicBodyBombEgress(
@@ -3399,12 +3402,13 @@ export class GameApp {
     candidatePosition: PixelCoord,
     tile: TileCoord,
   ): boolean {
-    const currentArea = this.getBodyTileOverlapArea(currentPosition, tile);
-    const candidateArea = this.getBodyTileOverlapArea(candidatePosition, tile);
-    if (candidateArea >= currentArea) {
-      return false;
-    }
-    return !this.doesBodyBombEgressCrossCenter(currentPosition, candidatePosition, tile);
+    const normalized = this.normalizeTile(tile);
+    return pureIsMonotonicBodyBombEgress(
+      currentPosition,
+      candidatePosition,
+      normalized,
+      this.getBodyGeometryOptions(),
+    );
   }
 
   private doesBodyBombEgressCrossCenter(
@@ -3444,11 +3448,8 @@ export class GameApp {
   }
 
   private isProjectedPositionOverlappingTile(position: PixelCoord, tile: TileCoord): boolean {
-    const tileCenter = this.getTileCenter(tile);
-    const deltaX = Math.abs(this.getWrappedDelta(position.x, tileCenter.x, this.getArenaPixelWidth()));
-    const deltaY = Math.abs(this.getWrappedDelta(position.y, tileCenter.y, this.getArenaPixelHeight()));
-    return deltaX < PLAYER_HITBOX_HALF + TILE_SIZE * 0.5
-      && deltaY < PLAYER_HITBOX_HALF + TILE_SIZE * 0.5;
+    const normalized = this.normalizeTile(tile);
+    return projectedBodyOverlapsTile(position, normalized, this.getBodyGeometryOptions());
   }
 
   private placeBomb(player: PlayerState, playAudio = true): boolean {
@@ -3866,9 +3867,8 @@ export class GameApp {
       const player = this.players[id];
       if (!player.alive) continue;
       player.tile = this.getTileFromPosition(player.position);
-      // Hitbox is a full tile (PLAYER_HITBOX_HALF = TILE/2). Using only the
-      // discrete floor-tile lets players stand on visible fire and live when
-      // their center is still on a neighbor — match bot lethality overlap.
+      // Body AABB overlap (PLAYER_BODY_HALF < TILE/2). Continuous overlap
+      // matches movement and bot lethality without full-tile unfair kills.
       const flame = this.flames.find((entry) => (
         entry.remainingMs > 0
         && this.isPlayerOverlappingTile(player, entry.tile)
@@ -3882,15 +3882,7 @@ export class GameApp {
     if (flameKeys.size === 0) {
       return;
     }
-    const flameTiles: TileCoord[] = [];
-    for (const key of flameKeys) {
-      const [xs, ys] = key.split(",");
-      const x = Number(xs);
-      const y = Number(ys);
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        flameTiles.push({ x, y });
-      }
-    }
+    const flameTiles = tilesFromKeys(flameKeys);
     for (const id of this.activePlayerIds) {
       const player = this.players[id];
       if (!player.alive) {
@@ -3961,31 +3953,32 @@ export class GameApp {
       if (!player.alive) {
         continue;
       }
-      const tile = this.getTileFromPosition(player.position);
-      player.tile = tile;
+      player.tile = this.getTileFromPosition(player.position);
 
       for (const powerUp of this.arena.powerUps) {
         if (!powerUp.revealed || powerUp.collected) {
           continue;
         }
-        if (powerUp.tile.x === tile.x && powerUp.tile.y === tile.y) {
-          if (isPowerUpMaxed(player, powerUp.type)) {
-            const existingNotice = this.getPowerUpPickupNotice(id, powerUp.type);
-            if (existingNotice?.valueLabel !== "MAX") {
-              this.addPowerUpPickupNotice(id, powerUp.type, false, "MAX");
-            }
-            continue;
-          }
-          powerUp.collected = true;
-          applyPowerUpToPlayer(player, powerUp.type);
-          const chainGuard = registerPickupForChain(this.pickupChains[id], powerUp.type);
-          if (chainGuard) {
-            player.flameGuardMs = Math.max(player.flameGuardMs, PICKUP_CHAIN_GUARD_MS);
-          }
-          player.pickupSprintMs = Math.max(player.pickupSprintMs ?? 0, PICKUP_SPRINT_BOOST_MS);
-          this.addPowerUpPickupNotice(id, powerUp.type, chainGuard);
-          this.soundManager.playOneShot("powerCollect");
+        // Continuous body/tile overlap — same body as walls and flames.
+        if (!this.isPlayerOverlappingTile(player, powerUp.tile)) {
+          continue;
         }
+        if (isPowerUpMaxed(player, powerUp.type)) {
+          const existingNotice = this.getPowerUpPickupNotice(id, powerUp.type);
+          if (existingNotice?.valueLabel !== "MAX") {
+            this.addPowerUpPickupNotice(id, powerUp.type, false, "MAX");
+          }
+          continue;
+        }
+        powerUp.collected = true;
+        applyPowerUpToPlayer(player, powerUp.type);
+        const chainGuard = registerPickupForChain(this.pickupChains[id], powerUp.type);
+        if (chainGuard) {
+          player.flameGuardMs = Math.max(player.flameGuardMs, PICKUP_CHAIN_GUARD_MS);
+        }
+        player.pickupSprintMs = Math.max(player.pickupSprintMs ?? 0, PICKUP_SPRINT_BOOST_MS);
+        this.addPowerUpPickupNotice(id, powerUp.type, chainGuard);
+        this.soundManager.playOneShot("powerCollect");
       }
     }
   }
@@ -4372,27 +4365,15 @@ export class GameApp {
   }
 
   private drawHudPanel(x: number, y: number, width: number, height: number, accent: string): void {
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG;
-    this.ctx.fillRect(x, y, width, height);
-    this.ctx.fillStyle = accent;
-    this.ctx.fillRect(x, y, 3, height);
-    this.ctx.strokeStyle = CANVAS_UI_BORDER;
-    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+    paintHudPanel(this.ctx, x, y, width, height, accent, {
+      panelBg: CANVAS_UI_PANEL_BG,
+      border: CANVAS_UI_BORDER,
+    });
   }
 
   private formatHudStatLine(player: PlayerState, includeShortFuse: boolean): string {
-    // Use spaced tokens so 0 never collides with adjacent letters (S0 → “S 0”).
-    const parts = [
-      `B ${player.maxBombs}`,
-      `F ${player.flameRange}`,
-      `S ${player.speedLevel}`,
-    ];
-    if (includeShortFuse) {
-      parts.push(`Q ${player.shortFuseLevel}`);
-    }
-    return parts.join(" · ");
+    return formatHudStatLinePure(player, includeShortFuse);
   }
-
   private renderCompactPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
     const player = this.players[playerId];
     const palette = PLAYER_COLORS[playerId];
@@ -5771,39 +5752,15 @@ export class GameApp {
 
   private drawExplosionFeedback(): void {
     const feedback = this.getExplosionFeedbackReadModel();
-    if (feedback.cells.length === 0 && feedback.chainReactions.length === 0) {
+    if (feedback.chainReactions.length === 0) {
       return;
     }
 
+    // Do NOT paint orange tile fills/borders or thick blast connectors — they
+    // read as cheap HUD boxes on top of the flame sprites. Chain sparks only.
     this.ctx.save();
-    for (const cell of feedback.cells) {
-      const alpha = Math.min(1, Math.max(0, cell.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
-      const toxic = cell.style === "toxic";
-      this.ctx.fillStyle = toxic
-        ? `rgba(54, 255, 151, ${0.1 + alpha * 0.08})`
-        : `rgba(255, 76, 28, ${0.11 + alpha * 0.09})`;
-      this.ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
-      this.ctx.strokeStyle = toxic
-        ? `rgba(152, 255, 197, ${0.32 + alpha * 0.26})`
-        : `rgba(255, 197, 82, ${0.34 + alpha * 0.28})`;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1);
-    }
-
     this.ctx.lineCap = "round";
     this.ctx.globalCompositeOperation = "lighter";
-    for (const connector of feedback.connectors) {
-      const toxic = connector.style === "toxic";
-      this.ctx.strokeStyle = toxic ? "rgba(90, 255, 165, 0.25)" : "rgba(255, 108, 38, 0.28)";
-      this.ctx.lineWidth = 10;
-      this.ctx.beginPath();
-      this.ctx.moveTo(connector.fromX, connector.fromY);
-      this.ctx.lineTo(connector.toX, connector.toY);
-      this.ctx.stroke();
-      this.ctx.strokeStyle = toxic ? "rgba(192, 255, 213, 0.62)" : "rgba(255, 226, 126, 0.68)";
-      this.ctx.lineWidth = 1.5;
-      this.ctx.stroke();
-    }
 
     for (const effect of feedback.chainReactions) {
       const progress = Math.min(1, effect.elapsedMs / CHAIN_REACTION_FEEDBACK_MS);
@@ -5896,66 +5853,16 @@ export class GameApp {
   }
 
   private drawFlame(flame: FlameState): void {
-    const x = flame.tile.x * TILE_SIZE;
-    const y = flame.tile.y * TILE_SIZE;
-    const alpha = Math.min(1, Math.max(0, flame.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
-    const dissipateScale = 0.9 + alpha * 0.1;
-    const centerX = x + TILE_SIZE * 0.5;
-    const centerY = y + TILE_SIZE * 0.5;
-    if (flame.style === "toxic") {
-      const auraPulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(
-        this.animationClockMs / 110 + flame.tile.x * 0.7 + flame.tile.y * 0.45,
-      ));
-      this.ctx.save();
-      this.ctx.globalAlpha = alpha * (0.34 + auraPulse * 0.18);
-      this.ctx.fillStyle = "rgba(76, 255, 166, 0.34)";
-      this.ctx.beginPath();
-      this.ctx.arc(centerX, centerY, 15 + auraPulse * 3.5, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.globalAlpha = alpha * (0.56 + auraPulse * 0.22);
-      this.ctx.strokeStyle = "rgba(169, 255, 204, 0.9)";
-      this.ctx.lineWidth = 1 + auraPulse * 0.9;
-      this.ctx.beginPath();
-      this.ctx.arc(centerX, centerY, 16.5 + auraPulse * 3, 0, Math.PI * 2);
-      this.ctx.stroke();
-      this.ctx.restore();
-    }
-    if (this.assets.props.flame && (!flame.style || flame.style === "normal")) {
-      this.ctx.save();
-      this.ctx.globalAlpha = alpha;
-      this.ctx.translate(centerX, centerY);
-      this.ctx.scale(dissipateScale, dissipateScale);
-      this.ctx.translate(-centerX, -centerY);
-      this.ctx.drawImage(this.assets.props.flame, x, y, TILE_SIZE, TILE_SIZE);
-      this.ctx.restore();
-      return;
-    }
-
-    const palette = flame.style === "toxic"
-      ? {
-        outer: `rgba(72, 214, 136, ${alpha})`,
-        inner: `rgba(192, 255, 177, ${alpha})`,
-      }
-      : {
-        outer: `rgba(255, 160, 74, ${alpha})`,
-        inner: `rgba(255, 244, 159, ${alpha})`,
-      };
-
-    this.ctx.save();
-    this.ctx.translate(centerX, centerY);
-    this.ctx.scale(dissipateScale, dissipateScale);
-    this.ctx.translate(-centerX, -centerY);
-    this.ctx.fillStyle = palette.outer;
-    this.ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-    this.ctx.fillStyle = palette.inner;
-    this.ctx.beginPath();
-    this.ctx.moveTo(x + 16, y + 5);
-    this.ctx.lineTo(x + 26, y + 16);
-    this.ctx.lineTo(x + 16, y + 27);
-    this.ctx.lineTo(x + 6, y + 16);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.restore();
+    drawFlameTile(this.ctx, flame, {
+      flame: this.assets.props.flame,
+      flameAnimSheet: this.assets.props.flameAnimSheet,
+    }, {
+      animationClockMs: this.animationClockMs,
+      prefersReducedMotion: this.prefersReducedMotion,
+      dissipateTailMs: FLAME_DISSIPATE_TAIL_MS,
+      flameDurationMs: FLAME_DURATION_MS,
+      tileSize: TILE_SIZE,
+    });
   }
 
   private drawChampionWorldEffect(effect: ChampionWorldEffect): void {
