@@ -436,26 +436,36 @@ function renderCharacterSelection(
 function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const region = element(document, "section", "ready-state");
   region.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena");
+  const isLabLaunch = snapshot.activeExperience?.id === "bot-vs-bot-lab";
   const portrait = element(
     document,
     "div",
     "ready-state__portrait ready-state__portrait--" + (snapshot.selectedCharacter?.accent ?? "blue"),
   );
-  const image = createCharacterImage(document, snapshot.selectedCharacter);
-  portrait.append(image);
+  // Lab has no player character; avoid an empty <img src=""> portrait.
+  if (snapshot.selectedCharacter) {
+    portrait.append(createCharacterImage(document, snapshot.selectedCharacter));
+  }
+
+  const choiceLine = isLabLaunch
+    ? (snapshot.activeExperience?.name ?? "")
+    : [snapshot.selectedCharacter?.name, snapshot.activeExperience?.name].filter(Boolean).join(" · ");
+  const reviseLabel = isLabLaunch
+    ? (snapshot.locale === "pt-BR" ? "Revisar configuração" : "Review setup")
+    : snapshot.copy.reviseLabel;
 
   const copy = element(document, "div", "ready-state__copy");
   copy.append(
     element(document, "p", "page-intro__kicker", snapshot.locale === "pt-BR" ? "GAMEPLAY ORIGINAL" : "ORIGINAL GAMEPLAY"),
     element(document, "h2", "page-intro__title", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena"),
-    element(document, "p", "ready-state__choice", (snapshot.selectedCharacter?.name ?? "") + " · " + (snapshot.activeExperience?.name ?? "")),
+    element(document, "p", "ready-state__choice", choiceLine),
     element(document, "p", "page-intro__description", snapshot.locale === "pt-BR" ? "Carregando o motor original de Bomba PvP." : "Loading the original Bomba PvP engine."),
   );
   const actions = element(document, "div", "ready-state__actions");
   actions.append(
     button(
       document,
-      snapshot.copy.reviseLabel,
+      reviseLabel,
       "action action--primary",
       { type: "back-to-selection" },
       dispatch,

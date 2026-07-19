@@ -200,8 +200,14 @@ describe("Bomba PvP app", () => {
     await vi.waitFor(() => expect(start.disabled).toBe(false));
     fireEvent.click(start);
     expect(app.getSnapshot().screen).toBe("game-launch");
+    // Lab launch must not pretend a character was chosen.
+    expect(view.getByText("Laboratório Bot vs Bot")).toBeTruthy();
+    expect(view.queryByText(/^\s*·/)).toBeNull();
+    expect(root.querySelector(".ready-state__portrait img")).toBeNull();
+    expect(view.getByRole("button", { name: "Revisar configuração" })).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Revisar personagem" })).toBeNull();
 
-    fireEvent.click(view.getByRole("button", { name: "Revisar personagem" }));
+    fireEvent.click(view.getByRole("button", { name: "Revisar configuração" }));
     expect(app.getSnapshot()).toMatchObject({
       screen: "laboratory",
       currentPath: "/laboratorio",

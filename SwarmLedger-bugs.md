@@ -122,3 +122,43 @@
 - Commit local: (este commit)
 - **Sem** push/PR/merge para main
 - Nota: WIP residual de `game-assets/audio/workshop/` deixado intocado (outro assunto)
+
+---
+
+## Rodada 008 — 2026-07-18
+
+| Campo | Valor |
+| --- | --- |
+| **Status** | `corrigido` |
+| **Bug escolhido** | Lab game-launch: texto "Revisar personagem", linha " · Laboratório…", e `<img src="">` sem personagem |
+| **Fluxo** | laboratório → iniciar match → tela Abrindo arena |
+| **Branch** | `swarm/bombpvp/bugs` |
+| **Arquivos de fix** | `src/app/view.ts`, `tests/app.test.ts` |
+
+### Reprodução
+
+- **Passos:**
+  1. `/laboratorio` → Iniciar Bot vs Bot.
+  2. Observar tela de game-launch.
+- **Esperado:** sem personagem jogador; CTA de revisar a **configuração** do lab; escolha mostrando só o nome da experiência; sem imagem de personagem vazia.
+- **Observado (antes):** botão "Revisar personagem" (não há personagem no lab), linha `" · Laboratório Bot vs Bot"`, portrait com `<img src="">`.
+- **Impacto:** confunde o fluxo diário do lab (usuário procura personagem que não existe); a11y/perf com img vazia.
+
+### Correção
+
+- `renderGameLaunch`: se experiência é `bot-vs-bot-lab`, label "Revisar configuração" / "Review setup", choice só com nome do lab, portrait sem img se não há character.
+- Offline (treino/jogar) inalterado: ainda usa `reviseLabel` e personagem · experiência.
+- Teste de regressão no fluxo lab (atualiza botão e asserts de UI).
+
+### Evidência
+
+- `npx vitest run tests/app.test.ts` → **19 passed**
+
+### Entrega
+
+- Bug: lab launch copy/portrait
+- Arquivos: `src/app/view.ts`, `tests/app.test.ts`, `SwarmLedger-bugs.md`
+- Branch: `swarm/bombpvp/bugs`
+- Commit local: (este commit)
+- **Sem** push/PR/merge para main
+- Audio workshop WIP intocado
