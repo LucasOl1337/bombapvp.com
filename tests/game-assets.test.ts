@@ -47,6 +47,8 @@ describe("game assets", () => {
     expect(theme?.tilePaths).toMatchObject({
       base: "arena.theme.tournament-clean.floor.base",
       baseAlt: "arena.theme.tournament-clean.floor.base-alt",
+      baseAlt2: "arena.theme.tournament-clean.floor.base-alt2",
+      baseAlt3: "arena.theme.tournament-clean.floor.base-alt3",
       lane: "arena.theme.tournament-clean.floor.lane",
       spawn: "arena.theme.tournament-clean.floor.spawn",
       portal: "arena.theme.tournament-clean.floor.portal",
@@ -75,6 +77,8 @@ describe("game assets", () => {
     ["arena.theme.arcane-citadel.crate", "arenas/themes/arcane-citadel/crate.png"],
     ["arena.theme.tournament-clean.floor.base", "arenas/themes/tournament-clean/floor-base.png"],
     ["arena.theme.tournament-clean.floor.base-alt", "arenas/themes/tournament-clean/floor-base-alt.png"],
+    ["arena.theme.tournament-clean.floor.base-alt2", "arenas/themes/tournament-clean/floor-base-alt2.png"],
+    ["arena.theme.tournament-clean.floor.base-alt3", "arenas/themes/tournament-clean/floor-base-alt3.png"],
     ["arena.theme.tournament-clean.floor.lane", "arenas/themes/tournament-clean/floor-lane.png"],
     ["arena.theme.tournament-clean.floor.spawn", "arenas/themes/tournament-clean/floor-spawn.png"],
     ["arena.theme.tournament-clean.floor.portal", "arenas/themes/tournament-clean/floor-portal.png"],

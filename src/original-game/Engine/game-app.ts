@@ -5262,9 +5262,7 @@ export class GameApp {
             ? (this.assets.floor.portal ?? this.assets.floor.lane)
             : isCenterLane || isSideLane
               ? this.assets.floor.lane
-              : (x + y) % 2 === 1 && this.assets.floor.baseAlt
-                ? this.assets.floor.baseAlt
-                : this.assets.floor.base;
+              : this.pickBaseFloorSprite(x, y);
         if (floorSprite) {
           c.drawImage(floorSprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
         } else {
@@ -5645,6 +5643,23 @@ export class GameApp {
           : "rgba(236, 214, 168, 0.56)";
       this.ctx.strokeRect(screenX + 6.5, screenY + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
     }
+  }
+
+  /** Multi-way base floor: base + up to 3 mean-matched alts via (x+2y)%n. */
+  private pickBaseFloorSprite(tileX: number, tileY: number): HTMLImageElement | null {
+    const variants = [
+      this.assets.floor.base,
+      this.assets.floor.baseAlt,
+      this.assets.floor.baseAlt2,
+      this.assets.floor.baseAlt3,
+    ].filter((img): img is HTMLImageElement => Boolean(img));
+    if (variants.length === 0) {
+      return null;
+    }
+    if (variants.length === 1) {
+      return variants[0];
+    }
+    return variants[(tileX + 2 * tileY) % variants.length] ?? variants[0];
   }
 
   private drawWall(x: number, y: number, tileX = 0, tileY = 0): void {

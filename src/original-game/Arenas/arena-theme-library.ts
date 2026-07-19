@@ -4,6 +4,9 @@ export interface ArenaThemeTilePaths {
   base: GameAssetId;
   /** Optional second base tile for checkerboard (breaks single-tile motif repeat). */
   baseAlt?: GameAssetId;
+  /** Optional 3rd/4th base layouts for multi-way floor variation (mean-matched). */
+  baseAlt2?: GameAssetId;
+  baseAlt3?: GameAssetId;
   lane: GameAssetId;
   spawn: GameAssetId;
   /** Optional wrap-portal floor (open dashed ring). Falls back to lane + stroke. */
@@ -95,6 +98,8 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
     tilePaths: {
       base: "arena.theme.tournament-clean.floor.base",
       baseAlt: "arena.theme.tournament-clean.floor.base-alt",
+      baseAlt2: "arena.theme.tournament-clean.floor.base-alt2",
+      baseAlt3: "arena.theme.tournament-clean.floor.base-alt3",
       lane: "arena.theme.tournament-clean.floor.lane",
       spawn: "arena.theme.tournament-clean.floor.spawn",
       portal: "arena.theme.tournament-clean.floor.portal",

@@ -42,6 +42,9 @@ export interface GameAssets {
     base: HTMLImageElement | null;
     /** Optional checker variant of base (loaded when theme provides baseAlt). */
     baseAlt?: HTMLImageElement | null;
+    /** Optional extra base layouts for multi-way floor variation. */
+    baseAlt2?: HTMLImageElement | null;
+    baseAlt3?: HTMLImageElement | null;
     lane: HTMLImageElement | null;
     spawn: HTMLImageElement | null;
     /** Optional wrap-portal floor (open dashed ring). */
@@ -305,6 +308,12 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       arenaTilePaths?.baseAlt
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt)])
         : Promise.resolve(null),
+      arenaTilePaths?.baseAlt2
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt2)])
+        : Promise.resolve(null),
+      arenaTilePaths?.baseAlt3
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt3)])
+        : Promise.resolve(null),
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.lane), resolveGameAsset("arena.shared.floor.lane")])
         : Promise.resolve(null),
@@ -355,6 +364,8 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     characterRosterFromManifest,
     floorBase,
     floorBaseAlt,
+    floorBaseAlt2,
+    floorBaseAlt3,
     floorLane,
     floorSpawn,
     floorPortal,
@@ -418,6 +429,8 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     floor: {
       base: floorBase,
       baseAlt: floorBaseAlt,
+      baseAlt2: floorBaseAlt2,
+      baseAlt3: floorBaseAlt3,
       lane: floorLane,
       spawn: floorSpawn,
       portal: floorPortal,

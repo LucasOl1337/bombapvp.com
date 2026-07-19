@@ -19,6 +19,8 @@ import tournamentCleanCrateUrl from "./arenas/themes/tournament-clean/crate.png?
 import tournamentCleanCrateAltUrl from "./arenas/themes/tournament-clean/crate-alt.png?url";
 import tournamentCleanFloorBaseUrl from "./arenas/themes/tournament-clean/floor-base.png?url";
 import tournamentCleanFloorBaseAltUrl from "./arenas/themes/tournament-clean/floor-base-alt.png?url";
+import tournamentCleanFloorBaseAlt2Url from "./arenas/themes/tournament-clean/floor-base-alt2.png?url";
+import tournamentCleanFloorBaseAlt3Url from "./arenas/themes/tournament-clean/floor-base-alt3.png?url";
 import tournamentCleanFloorLaneUrl from "./arenas/themes/tournament-clean/floor-lane.png?url";
 import tournamentCleanFloorSpawnUrl from "./arenas/themes/tournament-clean/floor-spawn.png?url";
 import tournamentCleanFloorPortalUrl from "./arenas/themes/tournament-clean/floor-portal.png?url";
@@ -121,6 +123,8 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "arena.theme.arcane-citadel.crate": arcaneCitadelCrateUrl,
   "arena.theme.tournament-clean.floor.base": tournamentCleanFloorBaseUrl,
   "arena.theme.tournament-clean.floor.base-alt": tournamentCleanFloorBaseAltUrl,
+  "arena.theme.tournament-clean.floor.base-alt2": tournamentCleanFloorBaseAlt2Url,
+  "arena.theme.tournament-clean.floor.base-alt3": tournamentCleanFloorBaseAlt3Url,
   "arena.theme.tournament-clean.floor.lane": tournamentCleanFloorLaneUrl,
   "arena.theme.tournament-clean.floor.spawn": tournamentCleanFloorSpawnUrl,
   "arena.theme.tournament-clean.floor.portal": tournamentCleanFloorPortalUrl,
