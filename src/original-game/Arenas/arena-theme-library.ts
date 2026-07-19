@@ -2,6 +2,8 @@ import type { GameAssetId } from "../../../game-assets/index.ts";
 
 export interface ArenaThemeTilePaths {
   base: GameAssetId;
+  /** Optional second base tile for checkerboard (breaks single-tile motif repeat). */
+  baseAlt?: GameAssetId;
   lane: GameAssetId;
   spawn: GameAssetId;
   wall: GameAssetId;
@@ -81,8 +83,17 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
       "Wall family is dark charcoal and structural.",
       "Crate family is the only warm terrain category, so breakables pop instantly.",
     ],
-    pixellabDescription: "Not used directly. This theme is procedurally rendered to keep the arena clean, structured, and category-led.",
-    renderMode: "procedural",
+    pixellabDescription:
+      "1). warm limestone floor tile, anonymous grain, seamless edges 2). brighter cream lane tile with thin edge frame only 3). spawn tile with thin warm-gold open ring 4). charcoal slab wall with top lip and sand accent line 5). top-down wood crate lid with iron cross-bands (orthographic, not isometric)",
+    renderMode: "sprite",
+    tilePaths: {
+      base: "arena.theme.tournament-clean.floor.base",
+      baseAlt: "arena.theme.tournament-clean.floor.base-alt",
+      lane: "arena.theme.tournament-clean.floor.lane",
+      spawn: "arena.theme.tournament-clean.floor.spawn",
+      wall: "arena.theme.tournament-clean.wall",
+      crate: "arena.theme.tournament-clean.crate",
+    },
     palette: {
       floorBase: "#d8d0c2",
       floorBaseAlt: "#cec5b7",

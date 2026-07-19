@@ -40,6 +40,20 @@ describe("game assets", () => {
     });
   });
 
+  it("ships tournament-clean as top-down sprite pack for the default continuous arena", () => {
+    const theme = getArenaThemeById("tournament-clean");
+    expect(theme?.renderMode).toBe("sprite");
+    expect(theme?.palette.floorBase).toBe("#d8d0c2");
+    expect(theme?.tilePaths).toMatchObject({
+      base: "arena.theme.tournament-clean.floor.base",
+      baseAlt: "arena.theme.tournament-clean.floor.base-alt",
+      lane: "arena.theme.tournament-clean.floor.lane",
+      spawn: "arena.theme.tournament-clean.floor.spawn",
+      wall: "arena.theme.tournament-clean.wall",
+      crate: "arena.theme.tournament-clean.crate",
+    });
+  });
+
   it.each([
     ["gameplay.bomb.sprite", "bomb.png"],
     ["gameplay.bomb.sprite.ruins", "bomb-ruins.png"],
@@ -56,6 +70,12 @@ describe("game assets", () => {
     ["arena.theme.arcane-citadel.floor.spawn", "arenas/themes/arcane-citadel/floor-spawn.png"],
     ["arena.theme.arcane-citadel.wall", "arenas/themes/arcane-citadel/wall.png"],
     ["arena.theme.arcane-citadel.crate", "arenas/themes/arcane-citadel/crate.png"],
+    ["arena.theme.tournament-clean.floor.base", "arenas/themes/tournament-clean/floor-base.png"],
+    ["arena.theme.tournament-clean.floor.base-alt", "arenas/themes/tournament-clean/floor-base-alt.png"],
+    ["arena.theme.tournament-clean.floor.lane", "arenas/themes/tournament-clean/floor-lane.png"],
+    ["arena.theme.tournament-clean.floor.spawn", "arenas/themes/tournament-clean/floor-spawn.png"],
+    ["arena.theme.tournament-clean.wall", "arenas/themes/tournament-clean/wall.png"],
+    ["arena.theme.tournament-clean.crate", "arenas/themes/tournament-clean/crate.png"],
     ["arena.theme.verdant-ruins.floor.base", "arenas/themes/verdant-ruins/floor-base.png"],
     ["arena.theme.verdant-ruins.floor.lane", "arenas/themes/verdant-ruins/floor-lane.png"],
     ["arena.theme.verdant-ruins.floor.spawn", "arenas/themes/verdant-ruins/floor-spawn.png"],

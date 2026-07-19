@@ -5257,7 +5257,9 @@ export class GameApp {
           ? this.assets.floor.spawn
           : isWrapPortal || isCenterLane || isSideLane
             ? this.assets.floor.lane
-            : this.assets.floor.base;
+            : (x + y) % 2 === 1 && this.assets.floor.baseAlt
+              ? this.assets.floor.baseAlt
+              : this.assets.floor.base;
         if (floorSprite) {
           c.drawImage(floorSprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
         } else {

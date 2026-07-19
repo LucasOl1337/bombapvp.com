@@ -40,6 +40,8 @@ export interface GameAssets {
   arenaTheme: ArenaThemeDefinition;
   floor: {
     base: HTMLImageElement | null;
+    /** Optional checker variant of base (loaded when theme provides baseAlt). */
+    baseAlt?: HTMLImageElement | null;
     lane: HTMLImageElement | null;
     spawn: HTMLImageElement | null;
   };
@@ -294,6 +296,9 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.base), resolveGameAsset("arena.shared.floor.base")])
         : Promise.resolve(null),
+      arenaTilePaths?.baseAlt
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt)])
+        : Promise.resolve(null),
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.lane), resolveGameAsset("arena.shared.floor.lane")])
         : Promise.resolve(null),
@@ -334,6 +339,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     playerTwo,
     characterRosterFromManifest,
     floorBase,
+    floorBaseAlt,
     floorLane,
     floorSpawn,
     wall,
@@ -393,6 +399,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       : fallbackRoster,
     floor: {
       base: floorBase,
+      baseAlt: floorBaseAlt,
       lane: floorLane,
       spawn: floorSpawn,
     },
