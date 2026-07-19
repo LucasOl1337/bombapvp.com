@@ -791,7 +791,7 @@ export class GameApp {
   }
 
   private getHudRenderHeight(): number {
-    return this.mode === "match" ? HUD_LAYOUT.height : HUD_HEIGHT;
+    return this.mode === "match" ? FULLSCREEN_HUD_HEIGHT : HUD_HEIGHT;
   }
 
   private getArenaRenderMetrics(): ArenaRenderMetrics {
