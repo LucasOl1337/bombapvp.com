@@ -93,7 +93,12 @@ describe("launch request", () => {
     });
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) throw new Error(resolved.error);
-    expect(resolved.request.character).toBeNull();
+    expect(resolved.request).toEqual({
+      mode: "training",
+      character: null,
+      bot: "pingo",
+      botSelection: "explicit",
+    });
     expect(launchRequestToSearchParams(resolved.request).toString()).toBe(
       "mode=training&bot=pingo",
     );
