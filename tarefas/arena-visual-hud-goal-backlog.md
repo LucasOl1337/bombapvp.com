@@ -26,13 +26,14 @@
 | G6x Crate outer rim lift (no dark frame grid) | **done** — `g6x-crate-rim-lift-DONE.md` |
 | G6y Floor alt edge flatten (no cell-edge tone grid) | **done** — `g6y-floor-edge-flatten-DONE.md` |
 | G6z Wall/wallAlt edge flatten (shared face mean) | **done** — `g6z-wall-edge-flatten-DONE.md` |
+| G6 quality gate (through G6z) | **PASS** — `g6-quality-gate-G6z-PASS.md` |
 
 ## Main arena (tournament-clean) — READY
 
-Seamless cobble + 4-way mean-matched base variants (edge-flattened alts), pure continuous cream lanes, pure continuous masonry walls + wallAlt (edge-matched joins), strong portal dashed rings (≠ spawn solid), full-bleed crate + crateAlt (lifted outer rim, iron cross kept) + matched break FX, spawn rings only on pads. Live training screenshots green.
+Seamless cobble + 4-way mean-matched base variants (edge-flattened alts), pure continuous cream lanes, pure continuous masonry walls + wallAlt (edge-matched joins), strong portal dashed rings (≠ spawn solid), full-bleed crate + crateAlt (lifted outer rim, iron cross kept) + matched break FX, spawn rings only on pads. Live training screenshots green. Quality gate PASS — field-tile micro-polish exhausted.
 
 ## Optional next
 
-- Owner commit/push when ordered  
+- **Owner commit/push when ordered** (blocking for public)  
 - Other themes; arcane-citadel flat floor-base  
 - HUD frame wire-up if pending  

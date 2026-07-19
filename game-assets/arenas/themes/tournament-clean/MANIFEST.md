@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v4.0 wall edge flatten)
+# Tournament Clean — top-down sprite tile pack (v4.0 quality-gate PASS)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -34,6 +34,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 | Top-down crate + alpha | PASS |
 | Readable at TILE_SIZE=40 | PASS — `_preview-arena-mock.png` |
 | Wall multi-cell continuous | PASS — edge−inner ~1; field join ~2.4 (was ~6.9); no per-cell rim/lip |
+| Full pack quality gate (G6–G6z) | **PASS** — `tarefas/claims/g6-quality-gate-G6z-PASS.md` |
 
 ## Palette anchors
 
