@@ -51,26 +51,32 @@ describe("Bomba PvP app", () => {
       currentPath: "/",
     });
     expect(app.getSnapshot().experiences.map(({ name }) => name)).toEqual([
-      "Sala contínua",
+      "Jogo online PvP",
       "Treino contra bots",
       "Laboratório Bot vs Bot",
     ]);
     expect(within(portugueseRoot).getByRole("heading", { name: "Bomba PvP", level: 1 })).toBeTruthy();
+    expect(within(portugueseRoot).getByRole("heading", { name: "Bomba PvP", level: 2 })).toBeTruthy();
     expect(
       within(portugueseRoot).getByRole("complementary", { name: "Personagens" }),
     ).toBeTruthy();
+    expect(within(portugueseRoot).getByRole("button", { name: "Próximo personagem" })).toBeTruthy();
+    expect(within(portugueseRoot).getByRole("button", { name: "Personagem anterior" })).toBeTruthy();
     expect(within(portugueseRoot).getByRole("group", { name: "Idioma" })).toBeTruthy();
     expect(portugueseRoot.querySelector(".experience-region")).not.toBeNull();
-    const citadelFeature = within(portugueseRoot).getByRole("region", { name: "Citadel Breach" });
-    expect(within(citadelFeature).getByRole("heading", { name: "Citadel Breach" })).toBeTruthy();
-    expect(within(citadelFeature).getByRole("link", { name: "Entrar na Cidadela" }).getAttribute("href"))
-      .toBe("/arena/?mode=training&bot=v3&arenaTheme=arcane-citadel");
+    expect(portugueseRoot.querySelector(".citadel-feature")).toBeNull();
+    expect(portugueseRoot.querySelector(".roster-showcase")).not.toBeNull();
 
     app.dispose();
     const englishRoot = createRoot();
     app = createBombApp({ hostname: "www.bombpvp.com", root: englishRoot });
     expect(app.getSnapshot().locale).toBe("en");
-    expect(within(englishRoot).getByRole("heading", { name: "Choose your experience" })).toBeTruthy();
+    expect(within(englishRoot).getByRole("heading", { name: "Bomba PvP", level: 2 })).toBeTruthy();
+    expect(app.getSnapshot().experiences.map(({ name }) => name)).toEqual([
+      "Online PvP",
+      "Bot training",
+      "Bot vs Bot Lab",
+    ]);
     expect(englishRoot.querySelector(".experience-region")).not.toBeNull();
   });
 
@@ -88,7 +94,7 @@ describe("Bomba PvP app", () => {
     expect(app.getSnapshot()).toMatchObject({
       screen: "character-selection",
       currentPath: "/jogar/personagem",
-      activeExperience: { id: "continuous-room", name: "Sala contínua" },
+      activeExperience: { id: "continuous-room", name: "Jogo online PvP" },
       selectedCharacter: null,
       selectedBot: "v1",
     });

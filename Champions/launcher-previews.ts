@@ -1,0 +1,125 @@
+/// <reference types="vite/client" />
+/**
+ * Launcher-only south-facing preview clips.
+ * Intentionally NOT the full assets-catalog — keeps the home page lean.
+ */
+import {
+  CHAMPION_MEMBERSHIP,
+  type CharacterId,
+  type ChampionSlug,
+  listChampionMembership,
+} from "./membership";
+
+export type LauncherClipName = "idle" | "walk" | "run" | "cast" | "attack";
+
+export type LauncherClip = Readonly<{
+  name: LauncherClipName;
+  frames: readonly string[];
+}>;
+
+export type LauncherPreview = Readonly<{
+  characterId: CharacterId;
+  /** Ordered showreel clips (only non-empty animations). */
+  clips: readonly LauncherClip[];
+}>;
+
+// Vite requires static glob strings (no runtime template interpolation).
+const IDLE_MODULES = import.meta.glob("./*/assets/animations/idle-south-*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const WALK_MODULES = import.meta.glob("./*/assets/animations/walk-south-*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const RUN_MODULES = import.meta.glob("./*/assets/animations/run-south-*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const CAST_MODULES = import.meta.glob("./*/assets/animations/cast-south-*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const ATTACK_MODULES = import.meta.glob("./*/assets/animations/attack-south-*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+
+const MODULES_BY_CLIP: Record<LauncherClipName, Record<string, string>> = {
+  idle: IDLE_MODULES,
+  walk: WALK_MODULES,
+  run: RUN_MODULES,
+  cast: CAST_MODULES,
+  attack: ATTACK_MODULES,
+};
+
+function framesFromModules(
+  modules: Record<string, string>,
+  kind: LauncherClipName,
+): Map<ChampionSlug, string[]> {
+  const bySlug = new Map<ChampionSlug, Array<{ index: number; url: string }>>();
+  const pattern = new RegExp(
+    `^\\./([^/]+)/assets/animations/${kind}-south-(\\d+)\\.png$`,
+  );
+
+  for (const [path, url] of Object.entries(modules)) {
+    const match = pattern.exec(path.replaceAll("\\", "/"));
+    if (!match) continue;
+    const slug = match[1];
+    if (!slug || !(slug in CHAMPION_MEMBERSHIP)) continue;
+    const list = bySlug.get(slug as ChampionSlug) ?? [];
+    list.push({ index: Number(match[2]), url });
+    bySlug.set(slug as ChampionSlug, list);
+  }
+
+  const sorted = new Map<ChampionSlug, string[]>();
+  for (const [slug, frames] of bySlug) {
+    frames.sort((a, b) => a.index - b.index);
+    sorted.set(
+      slug,
+      frames.map((frame) => frame.url),
+    );
+  }
+  return sorted;
+}
+
+const FRAMES_BY_CLIP = {
+  idle: framesFromModules(MODULES_BY_CLIP.idle, "idle"),
+  walk: framesFromModules(MODULES_BY_CLIP.walk, "walk"),
+  run: framesFromModules(MODULES_BY_CLIP.run, "run"),
+  cast: framesFromModules(MODULES_BY_CLIP.cast, "cast"),
+  attack: framesFromModules(MODULES_BY_CLIP.attack, "attack"),
+} as const;
+
+/** Preferred showreel order: presence → movement → action. */
+const SHOWREEL_ORDER: readonly LauncherClipName[] = [
+  "idle",
+  "walk",
+  "run",
+  "cast",
+  "attack",
+];
+
+const PREVIEWS_BY_ID = new Map<CharacterId, LauncherPreview>(
+  listChampionMembership().map(({ slug, characterId }) => {
+    const clips: LauncherClip[] = [];
+    for (const name of SHOWREEL_ORDER) {
+      const frames = FRAMES_BY_CLIP[name].get(slug) ?? [];
+      if (frames.length === 0) continue;
+      clips.push(Object.freeze({ name, frames: Object.freeze([...frames]) }));
+    }
+    return [
+      characterId,
+      Object.freeze({ characterId, clips: Object.freeze(clips) }) as LauncherPreview,
+    ] as const;
+  }),
+);
+
+export function getLauncherPreview(characterId: CharacterId): LauncherPreview | null {
+  return PREVIEWS_BY_ID.get(characterId) ?? null;
+}

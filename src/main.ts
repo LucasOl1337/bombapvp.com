@@ -13,8 +13,8 @@ document.documentElement.lang = isEnglish ? "en" : "pt-BR";
 document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute(
   "content",
   isEnglish
-    ? "Bomba PvP — choose Continuous Room, Bot Training, or the Bot vs Bot Lab."
-    : "Bomba PvP — escolha entre Sala contínua, Treino contra bots e Laboratório Bot vs Bot.",
+    ? "Bomba PvP — browser bomber arena. Online PvP, bot training, and bot lab."
+    : "Bomba PvP — arena de bombardeiros no navegador. Jogo online PvP, treino contra bots e laboratório.",
 );
 
 const app = createBombApp({

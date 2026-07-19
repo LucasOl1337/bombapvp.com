@@ -41,6 +41,7 @@ export type ProductCopy = Readonly<{
   backLabel: string;
   backToLauncherLabel: string;
   reviseLabel: string;
+  reviseLabLabel: string;
   readyKicker: string;
   readyTitle: string;
   readyMessage: string;
@@ -54,7 +55,7 @@ export type ProductCopy = Readonly<{
 const PT_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
-    name: "Sala contínua",
+    name: "Jogo online PvP",
     description: "Entre em uma sequência de rodadas com outros jogadores e Completers.",
     actionLabel: "Jogar agora",
     journeyLabel: "Entrada imediata",
@@ -78,7 +79,7 @@ const PT_EXPERIENCES: readonly Experience[] = Object.freeze([
 const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
-    name: "Continuous room",
+    name: "Online PvP",
     description: "Join a sequence of rounds with other players and Completers.",
     actionLabel: "Play now",
     journeyLabel: "Instant entry",
@@ -100,10 +101,10 @@ const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
 ]);
 
 const PT_COPY: ProductCopy = Object.freeze({
-  launcherTitle: "Escolha sua experiência",
-  launcherIntroduction: "Três formas claras de entrar no mesmo universo competitivo.",
-  launcherKicker: "ESCOLHA SEU CAMINHO",
-  experiencesLabel: "Experiências",
+  launcherTitle: "Bomba PvP",
+  launcherIntroduction: "Arena de bombardeiros no navegador. Conheça o elenco e entre na partida.",
+  launcherKicker: "BROWSER BATTLE ARENA",
+  experiencesLabel: "Modos de jogo",
   selectionKicker: "PREPARE SUA ENTRADA",
   selectionTitle: "Escolha seu personagem",
   selectionIntroduction: "Esta escolha acompanha você até a próxima etapa da experiência.",
@@ -115,21 +116,22 @@ const PT_COPY: ProductCopy = Object.freeze({
   backLabel: "Voltar",
   backToLauncherLabel: "Voltar ao início",
   reviseLabel: "Revisar personagem",
+  reviseLabLabel: "Revisar configuração",
   readyKicker: "ESCOLHA CONFIRMADA",
   readyTitle: "Pronto para entrar",
   readyMessage: "Seu personagem e destino estão definidos. A entrada na arena será liberada quando esta experiência estiver pronta.",
   labKicker: "OBSERVAÇÃO COMPETITIVA",
   labTitle: "Laboratório Bot vs Bot",
   labIntroduction: "Compare de dois a quatro competidores, combinando Bomb, Pingo e os bots V1, V2 e V3 com modelos do 9Router.",
-  footerLabel: "UM PRODUTO · TRÊS EXPERIÊNCIAS",
+  footerLabel: "BOMBA PVP · ARENA NO NAVEGADOR",
   languageLabel: "English",
 });
 
 const EN_COPY: ProductCopy = Object.freeze({
-  launcherTitle: "Choose your experience",
-  launcherIntroduction: "Three clear ways into the same competitive universe.",
-  launcherKicker: "CHOOSE YOUR PATH",
-  experiencesLabel: "Experiences",
+  launcherTitle: "Bomba PvP",
+  launcherIntroduction: "Browser bomber arena. Meet the roster and jump into a match.",
+  launcherKicker: "BROWSER BATTLE ARENA",
+  experiencesLabel: "Game modes",
   selectionKicker: "PREPARE YOUR ENTRY",
   selectionTitle: "Choose your character",
   selectionIntroduction: "This choice follows you into the next step of the experience.",
@@ -141,13 +143,14 @@ const EN_COPY: ProductCopy = Object.freeze({
   backLabel: "Back",
   backToLauncherLabel: "Back to start",
   reviseLabel: "Review character",
+  reviseLabLabel: "Review setup",
   readyKicker: "CHOICE CONFIRMED",
   readyTitle: "Ready to enter",
   readyMessage: "Your character and destination are set. Arena entry will open when this experience is ready.",
   labKicker: "COMPETITIVE OBSERVATION",
   labTitle: "Bot vs Bot Lab",
   labIntroduction: "Compare two to four competitors by combining Bomb, Pingo, V1, V2, and V3 with 9Router models.",
-  footerLabel: "ONE PRODUCT · THREE EXPERIENCES",
+  footerLabel: "BOMBA PVP · BROWSER ARENA",
   languageLabel: "Português",
 });
 

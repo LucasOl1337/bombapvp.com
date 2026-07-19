@@ -1,5 +1,6 @@
 import type { AppIntent, AppSnapshot } from "./state.ts";
-import { CITADEL_BREACH_MARKETING, type MarketingVisual } from "../../game-assets/marketing.ts";
+import brandMarkUrl from "../../game-assets/ui/branding/brand-mark.png?url";
+import { getLauncherPreview } from "../../Champions/launcher-previews.ts";
 import { createLabClient, type LabModelProfile } from "../lab/client.ts";
 import {
   LAB_BOMB_MODEL,
@@ -111,8 +112,16 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
     "aria-label",
     snapshot.locale === "pt-BR" ? "Ir para o início" : "Go to start",
   );
-  const mark = element(document, "span", "brand__mark", "B");
+  const mark = element(document, "span", "brand__mark");
   mark.setAttribute("aria-hidden", "true");
+  const markImage = document.createElement("img");
+  markImage.src = brandMarkUrl;
+  markImage.alt = "";
+  markImage.width = 48;
+  markImage.height = 48;
+  markImage.draggable = false;
+  markImage.className = "brand__mark-image";
+  mark.append(markImage);
   const copy = element(document, "span", "brand__copy");
   copy.append(
     element(document, "span", "brand__eyebrow", "BROWSER BATTLE ARENA"),
@@ -145,112 +154,259 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
   return header;
 }
 
-function renderRosterPanel(document: Document, snapshot: AppSnapshot): HTMLElement {
-  const panel = element(document, "aside", "roster-panel");
+function prefersReducedMotion(document: Document): boolean {
+  return document.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+}
+
+type ShowcaseClip = Readonly<{ frames: readonly string[] }>;
+
+function createShowcaseAnimator(
+  image: HTMLImageElement,
+  document: Document,
+): {
+  setShowreel: (clips: readonly ShowcaseClip[], options?: Readonly<{ fps?: number; holdMs?: number }>) => void;
+  stop: () => void;
+} {
+  let clips: readonly ShowcaseClip[] = [];
+  let clipIndex = 0;
+  let frameIndex = 0;
+  let timer: number | null = null;
+  let fps = 6;
+  let holdMs = 420;
+  const win = document.defaultView;
+
+  function clearTimer(): void {
+    if (timer !== null && win) {
+      win.clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function schedule(ms: number, fn: () => void): void {
+    if (!win) return;
+    timer = win.setTimeout(fn, ms);
+  }
+
+  function showCurrentFrame(): void {
+    const clip = clips[clipIndex];
+    const frame = clip?.frames[frameIndex];
+    if (frame) image.src = frame;
+  }
+
+  function advance(): void {
+    clearTimer();
+    if (clips.length === 0 || !win || prefersReducedMotion(document)) return;
+
+    const clip = clips[clipIndex];
+    if (!clip || clip.frames.length === 0) return;
+
+    const frameMs = Math.max(70, Math.round(1000 / Math.max(1, fps)));
+    const atLastFrame = frameIndex >= clip.frames.length - 1;
+
+    if (!atLastFrame) {
+      frameIndex += 1;
+      showCurrentFrame();
+      schedule(frameMs, advance);
+      return;
+    }
+
+    // Hold on the last frame of each clip, then move to the next clip.
+    schedule(holdMs, () => {
+      clipIndex = (clipIndex + 1) % clips.length;
+      frameIndex = 0;
+      showCurrentFrame();
+      schedule(frameMs, advance);
+    });
+  }
+
+  function setShowreel(
+    nextClips: readonly ShowcaseClip[],
+    options: Readonly<{ fps?: number; holdMs?: number }> = {},
+  ): void {
+    clearTimer();
+    clips = nextClips.filter((clip) => clip.frames.length > 0);
+    clipIndex = 0;
+    frameIndex = 0;
+    fps = options.fps ?? 6;
+    holdMs = options.holdMs ?? 420;
+    if (clips.length === 0) return;
+    showCurrentFrame();
+    if (prefersReducedMotion(document) || !win) return;
+    const frameMs = Math.max(70, Math.round(1000 / Math.max(1, fps)));
+    schedule(frameMs, advance);
+  }
+
+  return {
+    setShowreel,
+    stop: clearTimer,
+  };
+}
+
+function clipsForCharacter(character: CharacterSnapshot): ShowcaseClip[] {
+  const preview = getLauncherPreview(character.id);
+  if (preview && preview.clips.length > 0) {
+    // Idle twice for presence, then the rest of the kit.
+    const idle = preview.clips.find((clip) => clip.name === "idle");
+    const rest = preview.clips.filter((clip) => clip.name !== "idle");
+    const ordered: ShowcaseClip[] = [];
+    if (idle) {
+      ordered.push(idle, idle);
+    }
+    ordered.push(...rest);
+    return ordered;
+  }
+  return [{ frames: [character.assetPath] }];
+}
+
+function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLElement {
+  const characters = snapshot.characters;
+  const isPortuguese = snapshot.locale === "pt-BR";
+  let index = 0;
+  let hovering = false;
+
+  const panel = element(document, "aside", "roster-showcase");
   panel.setAttribute("aria-label", snapshot.copy.charactersLabel);
-  const fighters = element(document, "div", "roster-panel__fighters");
 
-  snapshot.characters.forEach((character, index) => {
-    const fighter = element(document, "div", "roster-panel__fighter");
-    fighter.append(
-      renderFighterStage(document, character, {
-        compact: true,
-        decorative: true,
-        delay: index * 450,
-      }),
-      element(document, "span", "roster-panel__name", character.name),
-    );
-    fighters.append(fighter);
+  const stageWrap = element(document, "div", "roster-showcase__stage");
+  const portraitHost = element(document, "div", "roster-showcase__viewport");
+  portraitHost.setAttribute("aria-hidden", "true");
+
+  const sprite = document.createElement("img");
+  sprite.className = "roster-showcase__sprite";
+  sprite.alt = "";
+  sprite.draggable = false;
+  sprite.decoding = "async";
+  portraitHost.append(sprite);
+  const animator = createShowcaseAnimator(sprite, document);
+
+  const prev = element(document, "button", "roster-showcase__nav roster-showcase__nav--prev", "‹") as HTMLButtonElement;
+  prev.type = "button";
+  prev.setAttribute("aria-label", isPortuguese ? "Personagem anterior" : "Previous character");
+
+  const next = element(document, "button", "roster-showcase__nav roster-showcase__nav--next", "›") as HTMLButtonElement;
+  next.type = "button";
+  next.setAttribute("aria-label", isPortuguese ? "Próximo personagem" : "Next character");
+
+  stageWrap.append(prev, portraitHost, next);
+
+  const detail = element(document, "div", "roster-showcase__detail");
+  const label = element(document, "p", "roster-showcase__label");
+  const name = element(document, "h3", "roster-showcase__name");
+  const description = element(document, "p", "roster-showcase__description");
+  const counter = element(document, "p", "roster-showcase__counter");
+  counter.setAttribute("aria-live", "polite");
+  detail.append(label, name, description, counter);
+
+  const thumbs = element(document, "div", "roster-showcase__thumbs");
+  thumbs.setAttribute("role", "tablist");
+  thumbs.setAttribute("aria-label", snapshot.copy.charactersLabel);
+
+  const thumbButtons: HTMLButtonElement[] = [];
+  characters.forEach((character, thumbIndex) => {
+    const thumb = element(
+      document,
+      "button",
+      "roster-showcase__thumb",
+    ) as HTMLButtonElement;
+    thumb.type = "button";
+    thumb.setAttribute("role", "tab");
+    thumb.setAttribute("aria-label", character.name);
+    thumb.setAttribute("aria-selected", "false");
+    const thumbImage = createCharacterImage(document, character, {
+      decorative: true,
+      width: 64,
+      height: 64,
+    });
+    thumb.append(thumbImage);
+    thumb.addEventListener("click", () => {
+      index = thumbIndex;
+      paint();
+    });
+    thumbs.append(thumb);
+    thumbButtons.push(thumb);
   });
 
-  const footer = element(document, "div", "roster-panel__footer");
-  const dots = element(document, "span", "roster-panel__dots");
-  dots.setAttribute("aria-hidden", "true");
-  snapshot.characters.forEach((character) => {
-    dots.append(element(document, "i", "roster-panel__dot roster-panel__dot--" + character.accent));
+  function playForCurrent(): void {
+    const character = characters[index];
+    if (!character) return;
+    const clips = clipsForCharacter(character);
+    // Hover leans into movement/action; default is full showreel at a calm pace.
+    if (hovering) {
+      const motion = clips.filter((_, clipIndex) => {
+        // Prefer walk/run/cast/attack when available (skip the doubled idle pair).
+        return clipIndex >= 2 || clips.length <= 2;
+      });
+      animator.setShowreel(motion.length > 0 ? motion : clips, { fps: 8, holdMs: 220 });
+      return;
+    }
+    animator.setShowreel(clips, { fps: 6, holdMs: 480 });
+  }
+
+  function paint(): void {
+    const character = characters[index];
+    if (!character) return;
+
+    portraitHost.dataset.accent = character.accent;
+    label.textContent = character.label;
+    name.textContent = character.name;
+    description.textContent = character.description;
+    counter.textContent = `${index + 1} / ${characters.length}`;
+    playForCurrent();
+
+    thumbButtons.forEach((thumb, thumbIndex) => {
+      const selected = thumbIndex === index;
+      thumb.classList.toggle("is-active", selected);
+      thumb.setAttribute("aria-selected", String(selected));
+    });
+  }
+
+  function step(delta: number): void {
+    index = (index + delta + characters.length) % characters.length;
+    paint();
+  }
+
+  prev.addEventListener("click", () => step(-1));
+  next.addEventListener("click", () => step(1));
+
+  portraitHost.addEventListener("pointerenter", () => {
+    hovering = true;
+    playForCurrent();
   });
-  footer.append(element(document, "span", "roster-panel__label", snapshot.copy.charactersLabel), dots);
-  panel.append(fighters, footer);
+  portraitHost.addEventListener("pointerleave", () => {
+    hovering = false;
+    playForCurrent();
+  });
+
+  panel.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      step(-1);
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      step(1);
+    }
+  });
+
+  // Stop timers when the launcher node is discarded on re-render.
+  const observer = new MutationObserver(() => {
+    if (!panel.isConnected) {
+      animator.stop();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  panel.append(stageWrap, detail, thumbs);
+  paint();
   return panel;
 }
 
-function createCitadelVisual(
+function renderExperienceGrid(
   document: Document,
-  visual: MarketingVisual,
-  className: string,
-): HTMLImageElement {
-  const image = document.createElement("img");
-  image.src = visual.url;
-  image.alt = "";
-  image.className = className;
-  image.loading = "lazy";
-  image.decoding = "async";
-  image.draggable = false;
-  image.dataset.assetId = visual.id;
-  return image;
-}
-
-function renderCitadelFeature(document: Document, snapshot: AppSnapshot): HTMLElement {
-  const isPortuguese = snapshot.locale === "pt-BR";
-  const feature = element(document, "section", "citadel-feature");
-  feature.setAttribute("aria-label", "Citadel Breach");
-
-  const media = element(document, "div", "citadel-feature__media");
-  media.setAttribute("aria-hidden", "true");
-  // Launcher-only marketing bundle — never import full citadel catalog here.
-  media.append(
-    createCitadelVisual(document, CITADEL_BREACH_MARKETING.banner, "citadel-feature__banner"),
-    createCitadelVisual(document, CITADEL_BREACH_MARKETING.keyArt, "citadel-feature__key-art"),
-  );
-
-  const copy = element(document, "div", "citadel-feature__copy");
-  copy.append(
-    element(document, "p", "citadel-feature__kicker", isPortuguese ? "PACOTE VISUAL INTEGRADO" : "INTEGRATED VISUAL PACK"),
-    element(document, "h3", "citadel-feature__title", "Citadel Breach"),
-    element(
-      document,
-      "p",
-      "citadel-feature__description",
-      isPortuguese
-        ? "Nova linguagem visual para a Cidadela Arcana: piso, obstáculos, reator, alertas, HUD e efeitos agora fazem parte do build do jogo."
-        : "A new visual language for the Arcane Citadel: floor, obstacles, reactor, alerts, HUD, and effects are now part of the game build.",
-    ),
-  );
-  const tags = element(document, "p", "citadel-feature__tags");
-  for (const label of isPortuguese
-    ? ["ARENA", "COMBATE", "HUD", "EFEITOS"]
-    : ["ARENA", "COMBAT", "HUD", "EFFECTS"]) {
-    tags.append(element(document, "span", "citadel-feature__tag", label));
-  }
-  const link = element(
-    document,
-    "a",
-    "action action--primary citadel-feature__action",
-    isPortuguese ? "Entrar na Cidadela" : "Enter the Citadel",
-  );
-  link.href = "/arena/?mode=training&bot=v3&arenaTheme=arcane-citadel";
-  const arrow = element(document, "span", "action__arrow", "→");
-  arrow.setAttribute("aria-hidden", "true");
-  link.append(arrow);
-  copy.append(tags, link);
-
-  feature.append(media, copy);
-  return feature;
-}
-
-function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
-  const region = element(document, "section", "experience-region");
-  region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
-
-  const hero = element(document, "div", "launcher-hero");
-  const intro = element(document, "header", "page-intro page-intro--launcher");
-  intro.append(
-    element(document, "p", "page-intro__kicker", snapshot.copy.launcherKicker),
-    element(document, "h2", "page-intro__title", snapshot.copy.launcherTitle),
-    element(document, "p", "page-intro__description", snapshot.copy.launcherIntroduction),
-  );
-  hero.append(intro, renderRosterPanel(document, snapshot));
-
+  snapshot: AppSnapshot,
+  dispatch: Dispatch,
+): HTMLElement {
   const grid = element(document, "div", "experience-grid");
   snapshot.experiences.forEach((experience, index) => {
     const article = element(
@@ -259,7 +415,8 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
       "experience-card experience-card--" + String(index + 1),
     );
     article.dataset.experience = experience.id;
-    article.style.setProperty("--reveal-delay", `${340 + index * 90}ms`);
+
+    const header = element(document, "div", "experience-card__header");
     const number = element(
       document,
       "span",
@@ -267,13 +424,17 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
       String(index + 1).padStart(2, "0"),
     );
     number.setAttribute("aria-hidden", "true");
-    const meta = element(document, "div", "experience-card__meta");
-    meta.append(element(document, "p", "experience-card__journey", experience.journeyLabel), number);
+    header.append(
+      number,
+      element(document, "p", "experience-card__journey", experience.journeyLabel),
+    );
+
     const copy = element(document, "div", "experience-card__copy");
     copy.append(
       element(document, "h3", "experience-card__name", experience.name),
       element(document, "p", "experience-card__description", experience.description),
     );
+
     const action = button(
       document,
       experience.actionLabel,
@@ -282,10 +443,42 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
       dispatch,
     );
     addArrow(document, action);
-    article.append(meta, copy, action);
+    article.append(header, copy, action);
     grid.append(article);
   });
-  region.append(hero, grid, renderCitadelFeature(document, snapshot));
+  return grid;
+}
+
+function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
+  const region = element(document, "section", "experience-region");
+  region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
+
+  // Modes first: play CTAs visible without scrolling. Roster sits below.
+  const intro = element(document, "header", "page-intro page-intro--launcher");
+  intro.append(
+    element(document, "p", "page-intro__kicker", snapshot.copy.launcherKicker),
+    element(document, "h2", "page-intro__title page-intro__title--brand", snapshot.copy.launcherTitle),
+    element(document, "p", "page-intro__description", snapshot.copy.launcherIntroduction),
+  );
+
+  const modes = element(document, "div", "launcher-modes");
+  modes.append(
+    element(document, "p", "launcher-modes__label", snapshot.copy.experiencesLabel),
+    renderExperienceGrid(document, snapshot, dispatch),
+  );
+
+  const roster = element(document, "div", "launcher-roster");
+  roster.append(
+    element(
+      document,
+      "p",
+      "launcher-roster__label",
+      snapshot.locale === "pt-BR" ? "Elenco" : "Roster",
+    ),
+    renderRosterShowcase(document, snapshot),
+  );
+
+  region.append(intro, modes, roster);
   return region;
 }
 
@@ -460,7 +653,7 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
       opponentBotLabel ? `vs ${opponentBotLabel}` : null,
     ].filter(Boolean).join(" · ");
   const reviseLabel = isLabLaunch
-    ? (snapshot.locale === "pt-BR" ? "Revisar configuração" : "Review setup")
+    ? snapshot.copy.reviseLabLabel
     : snapshot.copy.reviseLabel;
 
   const copy = element(document, "div", "ready-state__copy");
