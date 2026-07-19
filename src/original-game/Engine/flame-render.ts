@@ -4,8 +4,8 @@
 import type { FlameState } from "../Gameplay/types";
 import { FLAME_DURATION_MS, TILE_SIZE } from "../PersonalConfig/config";
 
-/** Bomb explosion multi-frame sheet: 6×4 = 24 frames, row-major. */
-export const FLAME_ANIM_COLS = 6;
+/** Bomb explosion multi-frame sheet: 4×4 = 16 frames, row-major (arc-flare pack). */
+export const FLAME_ANIM_COLS = 4;
 export const FLAME_ANIM_ROWS = 4;
 export const FLAME_ANIM_FRAME_COUNT = FLAME_ANIM_COLS * FLAME_ANIM_ROWS;
 
@@ -50,9 +50,13 @@ function drawDissipatingImage(
   const centerX = x + tileSize * 0.5;
   const centerY = y + tileSize * 0.5;
   ctx.save();
+  // Additive-ish blend makes fire read hotter over arena tiles without orange HUD boxes.
+  ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = alpha;
   ctx.translate(centerX, centerY);
-  ctx.scale(dissipateScale, dissipateScale);
+  // Slight overscale so blast fills the tile instead of looking like a tiny sticker.
+  const scale = dissipateScale * 1.12;
+  ctx.scale(scale, scale);
   ctx.translate(-centerX, -centerY);
   if (source) {
     ctx.drawImage(image, source.sx, source.sy, source.sw, source.sh, x, y, tileSize, tileSize);
