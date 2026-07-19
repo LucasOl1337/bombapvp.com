@@ -4527,12 +4527,14 @@ export class GameApp {
         ? chrome?.panelCenter
         : chrome?.panelRival;
     if (frame && frame.complete && frame.naturalWidth > 0) {
-      this.drawNineSlicePanel(frame, x, y, width, height, variant === "local" ? 32 : 24);
+      // Keep slice small so thin rival slots (~40px) still show edge chrome, not only corners.
+      const slice = variant === "local" ? 28 : variant === "center" ? 22 : 14;
+      this.drawNineSlicePanel(frame, x, y, width, height, slice);
       // Player identity rail (ember/player color) — crisp product accent.
       if (accent) {
         this.ctx.fillStyle = accent;
-        this.ctx.globalAlpha = 0.9;
-        this.ctx.fillRect(x + 3, y + 2, Math.max(0, width - 6), 2);
+        this.ctx.globalAlpha = 0.95;
+        this.ctx.fillRect(x + 3, y + 2, Math.max(0, width - 6), 3);
         this.ctx.globalAlpha = 1;
       }
       return;
@@ -4612,13 +4614,13 @@ export class GameApp {
     const suddenDeathHud = this.roundOutcome ? null : this.getSuddenDeathHudState();
 
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 8px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(modeLabel, cx, y + 11, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
-    this.ctx.font = "800 18px Space Grotesk, Inter, sans-serif";
+    this.ctx.font = "700 10px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(modeLabel, cx, y + 12, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 22px Space Grotesk, Inter, sans-serif";
     this.drawHudText(
       Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
       cx,
-      y + (suddenDeathHud ? 24 : 26),
+      y + (suddenDeathHud ? 28 : 30),
       CANVAS_UI_TEXT,
       CANVAS_UI_SHADOW,
     );
@@ -4665,19 +4667,19 @@ export class GameApp {
 
     // Row 1: P#  Name… ................. K/W
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(slotLabel, x + 10, y + 14, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 11px Inter, sans-serif";
-    this.drawHudText(name, x + 34, y + 14, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(slotLabel, x + 10, y + 16, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 12px Inter, sans-serif";
+    this.drawHudText(name, x + 36, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     this.ctx.textAlign = "right";
-    this.ctx.font = "700 11px Inter, sans-serif";
-    this.drawHudText(scoreText, x + slotW - 10, y + 14, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 12px Inter, sans-serif";
+    this.drawHudText(scoreText, x + slotW - 10, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     // Row 2: ult / alive (isolated from name)
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 10px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(ultLabel, x + 10, y + height - 9, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(ultLabel, x + 10, y + height - 10, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
   }
 
   private getRivalUltLabel(playerId: PlayerId, status: HudPlayerStatus): string {
@@ -4734,18 +4736,18 @@ export class GameApp {
     this.drawHudPanel(x, y, width, height, palette.glow, "local");
 
     // Left identity band: YOU + name on top, status + score on bottom
-    const identityWidth = 210;
+    const identityWidth = 220;
     this.ctx.textAlign = "left";
-    this.ctx.font = "800 13px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(youLabel, x + 14, y + 17, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 12px Inter, sans-serif";
-    this.drawHudText(nameText, x + 62, y + 17, nameColor, CANVAS_UI_SHADOW);
+    this.ctx.font = "800 15px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(youLabel, x + 14, y + 20, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 14px Inter, sans-serif";
+    this.drawHudText(nameText, x + 68, y + 20, nameColor, CANVAS_UI_SHADOW);
 
-    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
+    this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
     this.drawHudText(
       status.label,
       x + 14,
-      y + height - 11,
+      y + height - 12,
       this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
@@ -4763,10 +4765,10 @@ export class GameApp {
     const slotsLeft = x + identityWidth + 10;
     const slotsRight = x + width - rightPad - ultChipWidth - ultGap;
     const slotsWidth = Math.max(100, slotsRight - slotsLeft);
-    const slotGap = 6;
+    const slotGap = 8;
     const slotCount = Math.max(1, skillSlots.length);
-    const slotW = Math.max(40, Math.min(64, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
-    const slotH = 24;
+    const slotW = Math.max(48, Math.min(72, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
+    const slotH = 30;
     const slotY = y + Math.round((height - slotH) / 2);
     for (let index = 0; index < skillSlots.length; index += 1) {
       const slot = skillSlots[index];
@@ -5160,14 +5162,14 @@ export class GameApp {
   private drawHudSkillSlot(x: number, y: number, width: number, height: number, slot: HudSkillSlot): void {
     const definition = getPowerUpDefinition(slot.type);
     const tint = slot.acquired ? definition.tint : "rgba(180, 167, 147, 0.4)";
-    this.ctx.fillStyle = slot.acquired ? "rgba(16, 16, 22, 0.92)" : "rgba(12, 12, 16, 0.7)";
-    this.roundRectPath(x, y, width, height, 4);
+    this.ctx.fillStyle = slot.acquired ? "rgba(28, 28, 36, 0.95)" : "rgba(18, 18, 24, 0.78)";
+    this.roundRectPath(x, y, width, height, 6);
     this.ctx.fill();
     if (slot.recentlyCollected) {
       const pulse = 0.12 + slot.pickupProgress * 0.24;
       this.ctx.globalAlpha = pulse;
       this.ctx.fillStyle = definition.tint;
-      this.roundRectPath(x, y, width, height, 4);
+      this.roundRectPath(x, y, width, height, 6);
       this.ctx.fill();
       this.ctx.globalAlpha = 1;
     }
@@ -5175,17 +5177,17 @@ export class GameApp {
       ? definition.tint
       : (slot.acquired ? "rgba(255, 90, 31, 0.45)" : CANVAS_UI_BORDER);
     this.ctx.lineWidth = slot.recentlyCollected ? 1.5 : 1;
-    this.roundRectPath(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), 4);
+    this.roundRectPath(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), 6);
     this.ctx.stroke();
     this.ctx.lineWidth = 1;
 
-    const iconSize = Math.min(18, height - 4);
+    const iconSize = Math.min(22, height - 6);
     const icon = this.resolveHudPowerIcon(slot.type);
     if (icon && icon.complete && icon.naturalWidth > 0) {
-      this.ctx.globalAlpha = slot.acquired ? 1 : 0.45;
+      this.ctx.globalAlpha = slot.acquired ? 1 : 0.5;
       this.ctx.drawImage(
         icon,
-        x + 4,
+        x + 5,
         y + Math.max(1, (height - iconSize) / 2),
         iconSize,
         iconSize,
@@ -5193,11 +5195,11 @@ export class GameApp {
       this.ctx.globalAlpha = 1;
     } else {
       this.ctx.textAlign = "left";
-      this.ctx.font = "700 10px Inter";
+      this.ctx.font = "800 12px Inter";
       this.drawHudText(
         definition.shortLabel.slice(0, 1),
-        x + 4,
-        y + height - 4,
+        x + 6,
+        y + height - 6,
         tint,
         CANVAS_UI_SHADOW,
       );
@@ -5205,9 +5207,9 @@ export class GameApp {
 
     // Value only — key labels in chips caused the "SPC OK" overlay mess.
     this.ctx.textAlign = "right";
-    this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
+    this.ctx.font = "800 14px Space Grotesk, Inter, sans-serif";
     const valueColor = slot.acquired ? CANVAS_UI_TEXT : CANVAS_UI_MUTED_SOFT;
-    this.drawHudText(slot.valueLabel, x + width - 5, y + height - 5, valueColor, CANVAS_UI_SHADOW);
+    this.drawHudText(slot.valueLabel, x + width - 6, y + height - 7, valueColor, CANVAS_UI_SHADOW);
   }
 
   private rebuildArenaStaticCache(): void {

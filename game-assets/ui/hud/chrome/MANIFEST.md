@@ -1,4 +1,4 @@
-# Match HUD kit v1 — night + ember (launcher-aligned)
+# Match HUD kit v2 — night + ember (readable at 40–52px strip heights)
 
 ## Contract
 - Night fill `#0a0a0f` / `#121219`
