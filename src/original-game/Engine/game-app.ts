@@ -5273,9 +5273,9 @@ export class GameApp {
 
         if (this.arena.solid.has(key)) {
           if (this.suddenDeathClosedTiles.has(key)) {
-            this.drawSuddenDeathClosedSlot(screenX, screenY);
+            this.drawSuddenDeathClosedSlot(screenX, screenY, x, y);
           } else {
-            this.drawWall(screenX, screenY);
+            this.drawWall(screenX, screenY, x, y);
           }
         } else if (this.arena.breakable.has(key)) {
           this.drawCrate(screenX, screenY, x, y);
@@ -5647,11 +5647,15 @@ export class GameApp {
     }
   }
 
-  private drawWall(x: number, y: number): void {
-    if (this.assets.props.wall) {
+  private drawWall(x: number, y: number, tileX = 0, tileY = 0): void {
+    const wallSprite =
+      (tileX + tileY) % 2 === 1 && this.assets.props.wallAlt
+        ? this.assets.props.wallAlt
+        : this.assets.props.wall;
+    if (wallSprite) {
       this.ctx.fillStyle = "rgba(8, 10, 14, 0.35)";
       this.ctx.fillRect(x + 1, y + TILE_SIZE - 5, TILE_SIZE - 2, 5);
-      this.ctx.drawImage(this.assets.props.wall, x, y, TILE_SIZE, TILE_SIZE);
+      this.ctx.drawImage(wallSprite, x, y, TILE_SIZE, TILE_SIZE);
       this.ctx.fillStyle = "rgba(226, 221, 190, 0.08)";
       this.ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, 2);
       return;
@@ -5688,8 +5692,8 @@ export class GameApp {
     this.ctx.strokeRect(x + 2.5, y + 3.5, TILE_SIZE - 5, TILE_SIZE - 7);
   }
 
-  private drawSuddenDeathClosedSlot(x: number, y: number): void {
-    this.drawWall(x, y);
+  private drawSuddenDeathClosedSlot(x: number, y: number, tileX = 0, tileY = 0): void {
+    this.drawWall(x, y, tileX, tileY);
     const palette = this.getArenaPalette();
     this.ctx.fillStyle = palette.suddenDeathWash;
     this.ctx.fillRect(x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
@@ -5720,7 +5724,7 @@ export class GameApp {
     this.ctx.fill();
 
     this.ctx.globalAlpha = effect.impacted ? 1 : Math.max(0.66, 0.78 + fallProgress * 0.22);
-    this.drawSuddenDeathClosedSlot(x, y - dropOffset);
+    this.drawSuddenDeathClosedSlot(x, y - dropOffset, effect.tile.x, effect.tile.y);
     this.ctx.restore();
 
     if (!effect.impacted) {

@@ -9,6 +9,8 @@ export interface ArenaThemeTilePaths {
   /** Optional wrap-portal floor (open dashed ring). Falls back to lane + stroke. */
   portal?: GameAssetId;
   wall: GameAssetId;
+  /** Optional second wall for checker (breaks identical masonry motif). */
+  wallAlt?: GameAssetId;
   crate: GameAssetId;
   /** Optional second crate for checker (breaks identical prop stamp field). */
   crateAlt?: GameAssetId;
@@ -97,6 +99,7 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
       spawn: "arena.theme.tournament-clean.floor.spawn",
       portal: "arena.theme.tournament-clean.floor.portal",
       wall: "arena.theme.tournament-clean.wall",
+      wallAlt: "arena.theme.tournament-clean.wall-alt",
       crate: "arena.theme.tournament-clean.crate",
       crateAlt: "arena.theme.tournament-clean.crate-alt",
     },

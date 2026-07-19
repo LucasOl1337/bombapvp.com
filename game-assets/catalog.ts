@@ -23,6 +23,7 @@ import tournamentCleanFloorLaneUrl from "./arenas/themes/tournament-clean/floor-
 import tournamentCleanFloorSpawnUrl from "./arenas/themes/tournament-clean/floor-spawn.png?url";
 import tournamentCleanFloorPortalUrl from "./arenas/themes/tournament-clean/floor-portal.png?url";
 import tournamentCleanWallUrl from "./arenas/themes/tournament-clean/wall.png?url";
+import tournamentCleanWallAltUrl from "./arenas/themes/tournament-clean/wall-alt.png?url";
 import emberKilnCrateUrl from "./arenas/themes/ember-kiln/crate.png?url";
 import emberKilnFloorBaseUrl from "./arenas/themes/ember-kiln/floor-base.png?url";
 import emberKilnFloorLaneUrl from "./arenas/themes/ember-kiln/floor-lane.png?url";
@@ -124,6 +125,7 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "arena.theme.tournament-clean.floor.spawn": tournamentCleanFloorSpawnUrl,
   "arena.theme.tournament-clean.floor.portal": tournamentCleanFloorPortalUrl,
   "arena.theme.tournament-clean.wall": tournamentCleanWallUrl,
+  "arena.theme.tournament-clean.wall-alt": tournamentCleanWallAltUrl,
   "arena.theme.tournament-clean.crate": tournamentCleanCrateUrl,
   "arena.theme.tournament-clean.crate-alt": tournamentCleanCrateAltUrl,
   "arena.theme.verdant-ruins.floor.base": verdantRuinsFloorBaseUrl,

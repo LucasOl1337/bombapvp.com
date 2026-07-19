@@ -51,6 +51,7 @@ describe("game assets", () => {
       spawn: "arena.theme.tournament-clean.floor.spawn",
       portal: "arena.theme.tournament-clean.floor.portal",
       wall: "arena.theme.tournament-clean.wall",
+      wallAlt: "arena.theme.tournament-clean.wall-alt",
       crate: "arena.theme.tournament-clean.crate",
       crateAlt: "arena.theme.tournament-clean.crate-alt",
     });
@@ -78,6 +79,7 @@ describe("game assets", () => {
     ["arena.theme.tournament-clean.floor.spawn", "arenas/themes/tournament-clean/floor-spawn.png"],
     ["arena.theme.tournament-clean.floor.portal", "arenas/themes/tournament-clean/floor-portal.png"],
     ["arena.theme.tournament-clean.wall", "arenas/themes/tournament-clean/wall.png"],
+    ["arena.theme.tournament-clean.wall-alt", "arenas/themes/tournament-clean/wall-alt.png"],
     ["arena.theme.tournament-clean.crate", "arenas/themes/tournament-clean/crate.png"],
     ["arena.theme.tournament-clean.crate-alt", "arenas/themes/tournament-clean/crate-alt.png"],
     ["arena.theme.verdant-ruins.floor.base", "arenas/themes/verdant-ruins/floor-base.png"],

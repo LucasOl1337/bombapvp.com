@@ -49,6 +49,8 @@ export interface GameAssets {
   };
   props: {
     wall: HTMLImageElement | null;
+    /** Optional second wall for checkerboard masonry variation. */
+    wallAlt?: HTMLImageElement | null;
     crate: HTMLImageElement | null;
     /** Optional second crate for checkerboard prop variation. */
     crateAlt?: HTMLImageElement | null;
@@ -315,6 +317,9 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wall), resolveGameAsset("arena.shared.wall")])
         : Promise.resolve(null),
+      arenaTilePaths?.wallAlt
+        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wallAlt)])
+        : Promise.resolve(null),
       arenaTilePaths
         ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crate), resolveGameAsset("gameplay.crate.sprite")])
         : Promise.resolve(null),
@@ -354,6 +359,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     floorSpawn,
     floorPortal,
     wall,
+    wallAlt,
     crate,
     crateAlt,
     crateBreak0,
@@ -418,6 +424,7 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     },
     props: {
       wall,
+      wallAlt,
       crate,
       crateAlt,
       crateBreakFrames: [crateBreak0, crateBreak1, crateBreak2, crateBreak3]
