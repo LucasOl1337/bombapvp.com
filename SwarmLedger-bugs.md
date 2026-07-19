@@ -202,3 +202,39 @@
 - Commit local: (este commit)
 - **Sem** push/PR/merge para main
 - Audio workshop WIP intocado
+
+---
+
+## Rodada 010 — 2026-07-19
+
+| Campo | Valor |
+| --- | --- |
+| **Status** | `corrigido` |
+| **Bug escolhido** | Gameplay: player plantado em soft-block (crate) — soft-lock (screenshot Ranni) |
+| **Fluxo** | arena / treino / skills (embed ilegal em solid/breakable) |
+| **Branch** | `swarm/bombpvp/bugs` |
+| **Arquivos de fix** | `src/original-game/Engine/game-app.ts`, `Champions/mirelle/skill.ts`, `tests/player-terrain-egress.test.mjs`, `tests/player-body-engine-smoke.test.mjs` |
+
+### Diagnóstico consolidado
+
+- Colisão de **entrada** em breakable/solid já bloqueava movimento normal (fuzz 0 violações).
+- Se o **centro do body** fosse forçado para dentro de crate/parede (skill force-write, snapshot, glitch), o player ficava **preso para sempre**: todo step ainda overlapava o tile e `canOccupy` rejeitava tudo.
+- Mirelle Tide Swap setava `position = tileCenter(...)` **sem** `canOccupyPosition`.
+
+### Correção
+
+1. **Egress monotônico de terreno** (mesmo critério de bomb egress): se o body já está embedded em solid/breakable, permitir sair sem permitir entrar mais fundo.
+2. **Hard eject** após cada step de input/skill: se o centro ainda está em solid/breakable, teleportar para o open tile mais próximo ocupável.
+3. **Mirelle**: validar `canOccupy` nos landings de swap (inimigo e bomba); recusar se landing for solid/breakable.
+4. Teste de smoke de power-up ajustado para não usar centro em tile breakable da arena default.
+
+### Evidência
+
+- `npx vitest run tests/player-terrain-egress.test.mjs tests/wave2-skills.test.ts tests/player-body-engine-smoke.test.mjs tests/player-body-hitbox.test.mjs tests/rival-body-bomb-egress-unit.test.mjs tests/flame-contact.test.ts tests/ranni-bomb-egress-engine.test.mjs` → **60 passed**
+
+### Entrega
+
+- Bug: soft-lock em soft-block / embed ilegal
+- Arquivos: `game-app.ts`, `mirelle/skill.ts`, `player-terrain-egress.test.mjs`, `player-body-engine-smoke.test.mjs`, `SwarmLedger-bugs.md`
+- Branch: `swarm/bombpvp/bugs`
+- **Sem** push/PR/merge para main

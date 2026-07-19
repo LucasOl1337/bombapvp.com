@@ -2043,6 +2043,7 @@ export class GameApp {
 
     if (this.updatePlayerSkillChannel(player, input.direction, input.skillPressed, Boolean(input.skillHeld), deltaMs)) {
       player.tile = this.getTileFromPosition(player.position);
+      this.ejectPlayerFromBlockedTerrain(player);
       return false;
     }
 
@@ -2063,6 +2064,7 @@ export class GameApp {
       player.velocity.y = 0;
     }
     player.tile = this.getTileFromPosition(player.position);
+    this.ejectPlayerFromBlockedTerrain(player);
     return placedBomb;
   }
 
@@ -3307,6 +3309,10 @@ export class GameApp {
     return true;
   }
 
+  private isTerrainBlockedKey(key: string): boolean {
+    return this.arena.solid.has(key) || this.arena.breakable.has(key);
+  }
+
   private isTileBlockedForPlayer(
     player: PlayerState,
     tileX: number,
@@ -3318,7 +3324,26 @@ export class GameApp {
   ): boolean {
     const normalized = this.normalizeTile({ x: tileX, y: tileY });
     const key = tileKey(normalized.x, normalized.y);
-    if (this.arena.solid.has(key) || this.arena.breakable.has(key)) {
+    if (this.isTerrainBlockedKey(key)) {
+      // Soft/hard walls normally block entry. If the body is already embedded
+      // (spawn glitch, skill force-write, desync), allow monotonic egress so
+      // the player is not permanently soft-locked inside the tile.
+      const alreadyEmbedded = bodyOverlapsTile(
+        player.position,
+        normalized,
+        this.getBodyGeometryOptions(),
+      );
+      if (
+        alreadyEmbedded
+        && pureIsMonotonicBodyBombEgress(
+          player.position,
+          candidatePosition,
+          normalized,
+          this.getBodyGeometryOptions(),
+        )
+      ) {
+        return false;
+      }
       return true;
     }
 
@@ -3353,6 +3378,62 @@ export class GameApp {
     }
 
     return false;
+  }
+
+  /**
+   * Hard recovery when the body center sits inside solid/breakable.
+   * Movement egress covers walk-out once the player presses a direction; this
+   * covers idle embed and skills that landed on illegal terrain.
+   */
+  private ejectPlayerFromBlockedTerrain(player: PlayerState): boolean {
+    if (!player.alive || !player.active) {
+      return false;
+    }
+    const centerTile = this.getTileFromPosition(player.position);
+    const centerKey = tileKey(centerTile.x, centerTile.y);
+    if (!this.isTerrainBlockedKey(centerKey)) {
+      return false;
+    }
+    const freeTile = this.findNearestOpenTileForPlayer(player, centerTile);
+    if (!freeTile) {
+      return false;
+    }
+    player.position = this.normalizeArenaPosition(this.getTileCenter(freeTile));
+    player.tile = this.getTileFromPosition(player.position);
+    player.velocity = { x: 0, y: 0 };
+    return true;
+  }
+
+  private findNearestOpenTileForPlayer(
+    player: PlayerState,
+    origin: TileCoord = this.getTileFromPosition(player.position),
+  ): TileCoord | null {
+    const width = this.getArenaGridWidth();
+    const height = this.getArenaGridHeight();
+    const maxRadius = Math.max(width, height);
+    for (let radius = 0; radius <= maxRadius; radius += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== radius) {
+            continue;
+          }
+          const tile = this.normalizeTile({ x: origin.x + dx, y: origin.y + dy });
+          const key = tileKey(tile.x, tile.y);
+          if (this.isTerrainBlockedKey(key)) {
+            continue;
+          }
+          const center = this.getTileCenter(tile);
+          // Probe occupancy from a temporary free pose so egress exceptions for
+          // the embedded tile do not mask a bomb sitting on the candidate.
+          const probe = { ...player, position: { ...center } };
+          if (!this.canOccupyPosition(probe, center, [], false, false)) {
+            continue;
+          }
+          return tile;
+        }
+      }
+    }
+    return null;
   }
 
   private getTileCenter(tile: TileCoord): PixelCoord {

@@ -116,11 +116,13 @@ describe("GameApp body integration smoke", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     const powerTile = { x: 2, y: 1 };
-    // Center sits on neighbor tile 3, but body still clips power tile 2.
-    const x = 3 * TILE_SIZE + HALF_TILE - (PLAYER_BODY_HALF - 1);
-    expect(Math.floor(x / TILE_SIZE)).toBe(3);
+    // Center on open neighbor tile 1 (tile 3 is breakable on the default arena);
+    // body still clips power tile 2 so pickup is continuous, not center-tile-only.
+    const x = 2 * TILE_SIZE - (PLAYER_BODY_HALF - 1);
+    expect(Math.floor(x / TILE_SIZE)).toBe(1);
+    expect(x + PLAYER_BODY_HALF).toBeGreaterThan(powerTile.x * TILE_SIZE);
     snapshot.players[1].position = { x, y: powerTile.y * TILE_SIZE + HALF_TILE };
-    snapshot.players[1].tile = { x: 3, y: powerTile.y };
+    snapshot.players[1].tile = { x: 1, y: powerTile.y };
     snapshot.players[1].spawnProtectionMs = 0;
     snapshot.players[1].alive = true;
     snapshot.players[2].position = { x: 220, y: 220 };

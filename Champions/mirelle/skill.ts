@@ -137,10 +137,19 @@ export function fireTideSwap(
     const aTile = context.getTileFromPosition(caster.position);
     const bTile = context.getTileFromPosition(enemy.position);
     if (aTile.x === bTile.x && aTile.y === bTile.y) return false;
+    const casterLanding = context.normalizeArenaPosition(tileCenter(bTile));
+    const enemyLanding = context.normalizeArenaPosition(tileCenter(aTile));
+    // Never land either body on solid/breakable (or other blocked occupancy).
+    if (
+      !context.canOccupyPosition(caster, casterLanding)
+      || !context.canOccupyPosition(enemy, enemyLanding)
+    ) {
+      return false;
+    }
     const fromPx = { ...caster.position };
     const toPx = { ...enemy.position };
-    caster.position = context.normalizeArenaPosition(tileCenter(bTile));
-    enemy.position = context.normalizeArenaPosition(tileCenter(aTile));
+    caster.position = casterLanding;
+    enemy.position = enemyLanding;
     caster.tile = context.getTileFromPosition(caster.position);
     enemy.tile = context.getTileFromPosition(enemy.position);
     caster.velocity = { x: 0, y: 0 };
@@ -169,9 +178,12 @@ export function fireTideSwap(
   if (aTile.x === bTile.x && aTile.y === bTile.y) return false;
   // Bomb lands on caster's old tile only if free of other bombs/solids.
   const bombKey = `${aTile.x},${aTile.y}`;
+  const landingKey = `${bTile.x},${bTile.y}`;
   if (
     context.arena.solid.has(bombKey) ||
     context.arena.breakable.has(bombKey) ||
+    context.arena.solid.has(landingKey) ||
+    context.arena.breakable.has(landingKey) ||
     context.bombs.some(
       (b) => b.id !== bomb.id && b.tile.x === aTile.x && b.tile.y === aTile.y,
     )
@@ -179,8 +191,11 @@ export function fireTideSwap(
     return false;
   }
   const fromPx = { ...caster.position };
-  const toPx = tileCenter(bTile);
-  caster.position = context.normalizeArenaPosition(toPx);
+  const toPx = context.normalizeArenaPosition(tileCenter(bTile));
+  if (!context.canOccupyPosition(caster, toPx)) {
+    return false;
+  }
+  caster.position = toPx;
   caster.tile = context.getTileFromPosition(caster.position);
   caster.velocity = { x: 0, y: 0 };
   bomb.tile = { ...aTile };
