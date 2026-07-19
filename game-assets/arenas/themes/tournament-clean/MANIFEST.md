@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v3.4 pure lane)
+# Tournament Clean — top-down sprite tile pack (v3.5 pure wall)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -13,7 +13,7 @@ Default continuous arena (`tournament-clean`). Warm limestone cobble, textured c
 | `floor-lane.png` | `…floor.lane` | Brighter cobble only — pure cream lift, no edge darken |
 | `floor-spawn.png` | `…floor.spawn` | Cobble + solid open gold ring |
 | `floor-portal.png` | `…floor.portal` | Cobble + **double dashed** open gold ring (strong @40px; ≠ spawn) |
-| `wall.png` | `…wall` | Charcoal masonry (running-bond courses), soft dark rim + top lip (no gold frame) |
+| `wall.png` | `…wall` | Charcoal masonry (running-bond courses), edge-to-edge — no rim / top lip |
 | `wall-alt.png` | `…wall-alt` | Offset bond layout; mean-matched; checker via `(x+y)%2` |
 | `crate.png` | `…crate` | Top-down wood lid, iron cross-bands, RGBA, pad≈6 (solid cell fill) |
 | `crate-alt.png` | `…crate-alt` | Micro-variant wood tint/grain; checker via `(x+y)%2` |
@@ -32,6 +32,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 | Edge delta (base seed 45) | lr≈6.8, tb≈4.3 mean abs/channel |
 | Top-down crate + alpha | PASS |
 | Readable at TILE_SIZE=40 | PASS — `_preview-arena-mock.png` |
+| Wall multi-cell continuous | PASS — edge−inner ~3 (was ~46); no per-cell rim/lip |
 
 ## Palette anchors
 

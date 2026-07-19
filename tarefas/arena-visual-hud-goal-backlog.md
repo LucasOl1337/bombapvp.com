@@ -20,10 +20,11 @@
 | G6r Crate fill expand (pad 15→6) | **done** — `g6r-crate-fill-DONE.md` |
 | G6s Floor 4-way base (alt2/alt3) | **done** — `g6s-floor-4way-DONE.md` |
 | G6t Pure continuous lane (no edge darken) | **done** — `g6t-lane-pure-continuous-DONE.md` |
+| G6u Pure continuous wall (no rim / top lip) | **done** — `g6u-wall-pure-continuous-DONE.md` |
 
 ## Main arena (tournament-clean) — READY
 
-Seamless cobble + 4-way mean-matched base variants, pure continuous cream lanes, masonry walls + wallAlt, strong portal dashed rings (≠ spawn solid), solid-fill crate + crateAlt + matched break FX, spawn rings only on pads. Live training screenshots green.
+Seamless cobble + 4-way mean-matched base variants, pure continuous cream lanes, pure continuous masonry walls + wallAlt (no per-cell rim/lip), strong portal dashed rings (≠ spawn solid), solid-fill crate + crateAlt + matched break FX, spawn rings only on pads. Live training screenshots green.
 
 ## Optional next
 
