@@ -1,6 +1,6 @@
-# Tournament Clean — top-down sprite tile pack (v2.3 baseAlt)
+# Tournament Clean — top-down sprite tile pack (v2.4 lane+wall craft)
 
-Default continuous arena (`tournament-clean`). Warm limestone cobble, solid charcoal walls, orthographic wood crates.
+Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
 ## Runtime files (128×128)
 
