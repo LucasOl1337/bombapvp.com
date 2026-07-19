@@ -59,6 +59,16 @@ export interface GameAssets {
     victoryEmblem: HTMLImageElement | null;
     stalemateEmblem: HTMLImageElement | null;
   };
+  /** Match HUD chrome + power chips (launcher night/ember kit). */
+  hud?: {
+    panelLocal: HTMLImageElement | null;
+    panelRival: HTMLImageElement | null;
+    panelCenter: HTMLImageElement | null;
+    chipUlt: HTMLImageElement | null;
+    iconBomb: HTMLImageElement | null;
+    iconFlame: HTMLImageElement | null;
+    iconSpeed: HTMLImageElement | null;
+  };
   powerUps: Partial<Record<PowerUpType, HTMLImageElement | null>>;
 }
 
@@ -306,6 +316,13 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
       loadImage(resolveGameAsset("effect.movement.speed-spark-trail")),
       loadImage(resolveGameAsset("ui.arena.victory-emblem")),
       loadImage(resolveGameAsset("ui.arena.stalemate-emblem")),
+      loadImage(resolveGameAsset("ui.hud.chrome.local")),
+      loadImage(resolveGameAsset("ui.hud.chrome.rival")),
+      loadImage(resolveGameAsset("ui.hud.chrome.center")),
+      loadImage(resolveGameAsset("ui.hud.chrome.ult")),
+      loadImage(resolveGameAsset("ui.hud.icon.bomb")),
+      loadImage(resolveGameAsset("ui.hud.icon.flame")),
+      loadImage(resolveGameAsset("ui.hud.icon.speed")),
     ]),
     Promise.all(powerUpDefinitions.map(async (definition) => ([
       definition.type,
@@ -331,6 +348,13 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     speedSparkTrail,
     victoryEmblem,
     stalemateEmblem,
+    hudPanelLocal,
+    hudPanelRival,
+    hudPanelCenter,
+    hudChipUlt,
+    hudIconBomb,
+    hudIconFlame,
+    hudIconSpeed,
   ] = baseAssets;
   const playerSprites: Partial<Record<PlayerId, DirectionalSprites>> = {
     1: playerOne,
@@ -387,6 +411,15 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     ui: {
       victoryEmblem,
       stalemateEmblem,
+    },
+    hud: {
+      panelLocal: hudPanelLocal,
+      panelRival: hudPanelRival,
+      panelCenter: hudPanelCenter,
+      chipUlt: hudChipUlt,
+      iconBomb: hudIconBomb,
+      iconFlame: hudIconFlame,
+      iconSpeed: hudIconSpeed,
     },
     powerUps: Object.fromEntries(powerUpEntries) as Partial<Record<PowerUpType, HTMLImageElement | null>>,
     characterSpriteLoader,

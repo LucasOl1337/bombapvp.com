@@ -1,11 +1,27 @@
-# HUD chrome v1 (quality path)
+# Match HUD kit v1 — night + ember (launcher-aligned)
 
-Style: launcher night + ember (#0a0a0f / #ff5a1f), modern flat, no cyan, no pixel, no text.
-World bomb/crate sprites: intentionally NOT changed (keep animated legacy bomb).
+## Contract
+- Night fill `#0a0a0f` / `#121219`
+- Ember accent `#ff5a1f`
+- Modern flat esports chrome (not pixel-citadel, not mint cyan)
+- **No lettering** in PNGs — game draws text
+- World bomb/crate/tiles **not** part of this kit
 
-| File | Use |
+## Chrome
+| File | Catalog id | Role |
+| --- | --- | --- |
+| `panel-local-v1.png` | `ui.hud.chrome.local` | Local YOU strip |
+| `panel-rival-v1.png` | `ui.hud.chrome.rival` | Rival compact slot |
+| `panel-center-v1.png` | `ui.hud.chrome.center` | Timer / meta badge |
+| `chip-ult-v1.png` | `ui.hud.chrome.ult` | ULT chip + pause chip fallback |
+
+## Icons (`../icons/`)
+| File | Catalog id |
 | --- | --- |
-| panel-local-v1.png | Local player strip / pause chip chrome reference |
+| `icon-bomb-v1.png` | `ui.hud.icon.bomb` |
+| `icon-flame-v1.png` | `ui.hud.icon.flame` |
+| `icon-speed-v1.png` | `ui.hud.icon.speed` |
 
-Not yet forced into canvas draw — code HUD uses matching palette first.
-Next: rival strip + power chips after in-arena QA.
+## Draw path
+`src/original-game/Engine/game-app.ts` — `drawHudPanel` / skill slots / ULT / overlays.
+Fallback to fillRect if images fail to load.

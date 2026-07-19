@@ -264,7 +264,6 @@ const PLAYER_SPRITE_MAX_WIDTH_SCALE = 1.2;
 /** Match launcher front: night + ember (not legacy mint HUD). */
 const CANVAS_UI_PANEL_BG = "rgba(10, 10, 15, 0.88)";
 const CANVAS_UI_PANEL_BG_STRONG = "rgba(8, 8, 12, 0.94)";
-const CANVAS_UI_PANEL_BG_SOFT = "rgba(16, 16, 22, 0.78)";
 const CANVAS_UI_BORDER = "rgba(255, 255, 255, 0.10)";
 const CANVAS_UI_BORDER_STRONG = "rgba(255, 90, 31, 0.55)";
 const CANVAS_UI_TEXT = "#f5f4ef";
@@ -2204,7 +2203,6 @@ export class GameApp {
     );
     this.updatePlayers(deltaMs);
     this.updateBombs(deltaMs);
-    this.resolvePlayerDeathsFromFlames();
     this.updateFlames(deltaMs);
     this.collectPowerUps();
     this.evaluateRoundState();
@@ -3965,20 +3963,6 @@ export class GameApp {
     this.flames = this.flames.filter((flame) => flame.remainingMs > 0);
   }
 
-  resolvePlayerDeathsFromFlames(): void {
-    for (const id of this.activePlayerIds) {
-      const player = this.players[id];
-      if (!player.alive) continue;
-      player.tile = this.getTileFromPosition(player.position);
-      // Flame damage uses a smaller central hurtbox than physical collision.
-      const flame = this.flames.find((entry) => (
-        entry.remainingMs > 0
-        && this.isPlayerHitByFlameTile(player, entry.tile)
-      ));
-      if (flame) this.tryAbsorbInstantHit(player, flame.ownerId ?? null);
-    }
-  }
-
   private resolvePlayerDeathsAtTileKeys(keys: Iterable<string>, attackerId: PlayerId | null = null): void {
     const flameKeys = new Set(keys);
     if (flameKeys.size === 0) {
@@ -4466,7 +4450,31 @@ export class GameApp {
     }
   }
 
-  private drawHudPanel(x: number, y: number, width: number, height: number, accent: string): void {
+  private drawHudPanel(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    accent: string,
+    variant: "local" | "rival" | "center" = "rival",
+  ): void {
+    const chrome = this.assets.hud;
+    const frame = variant === "local"
+      ? chrome?.panelLocal
+      : variant === "center"
+        ? chrome?.panelCenter
+        : chrome?.panelRival;
+    if (frame && frame.complete && frame.naturalWidth > 0) {
+      this.ctx.drawImage(frame, x, y, width, height);
+      // Thin accent underline for player identity (does not fight chrome art).
+      if (accent && accent !== CANVAS_UI_BORDER_STRONG) {
+        this.ctx.fillStyle = accent;
+        this.ctx.globalAlpha = 0.55;
+        this.ctx.fillRect(x + 2, y + height - 2, Math.max(0, width - 4), 2);
+        this.ctx.globalAlpha = 1;
+      }
+      return;
+    }
     paintHudPanel(this.ctx, x, y, width, height, accent, {
       panelBg: CANVAS_UI_PANEL_BG,
       border: CANVAS_UI_BORDER,
@@ -4541,7 +4549,7 @@ export class GameApp {
   }
 
   private renderMatchCenterMeta(x: number, y: number, width: number, height: number): void {
-    this.drawHudPanel(x, y, width, height, CANVAS_UI_BORDER_STRONG);
+    this.drawHudPanel(x, y, width, height, CANVAS_UI_BORDER_STRONG, "center");
     const cx = x + width / 2;
     const modeLabel = this.onlineRoomMode === "endless"
       ? `R${this.roundNumber} · ENDLESS`
@@ -4598,23 +4606,23 @@ export class GameApp {
     const name = this.getCharacterLabel(playerId, nameBudget);
     const ultLabel = this.getRivalUltLabel(playerId, status);
 
-    this.drawHudPanel(x, y, slotW, height, palette.glow);
+    this.drawHudPanel(x, y, slotW, height, palette.glow, "rival");
 
     // Row 1: P#  Name… ................. K/W
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 8px Inter";
-    this.drawHudText(slotLabel, x + 7, y + 10, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 8px Inter";
-    this.drawHudText(name, x + 28, y + 10, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 9px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(slotLabel, x + 8, y + 11, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 9px Inter, sans-serif";
+    this.drawHudText(name, x + 30, y + 11, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     this.ctx.textAlign = "right";
-    this.ctx.font = "700 8px Inter";
-    this.drawHudText(scoreText, x + slotW - 6, y + 10, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 9px Inter, sans-serif";
+    this.drawHudText(scoreText, x + slotW - 8, y + 11, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     // Row 2: ult / alive (isolated from name)
     this.ctx.textAlign = "left";
-    this.ctx.font = "600 8px Inter";
-    this.drawHudText(ultLabel, x + 7, y + height - 6, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "600 8px Inter, sans-serif";
+    this.drawHudText(ultLabel, x + 8, y + height - 7, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
   }
 
   private getRivalUltLabel(playerId: PlayerId, status: HudPlayerStatus): string {
@@ -4668,21 +4676,21 @@ export class GameApp {
     const skillSlots = this.getLocalHudPowerSlots(playerId);
     const hasUltimate = Boolean(player.skill.id);
 
-    this.drawHudPanel(x, y, width, height, palette.glow);
+    this.drawHudPanel(x, y, width, height, palette.glow, "local");
 
     // Left identity band (~190px): YOU + name on top, status + score on bottom
     const identityWidth = 190;
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 10px Inter";
-    this.drawHudText(youLabel, x + 8, y + 14, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 9px Inter";
-    this.drawHudText(nameText, x + 46, y + 14, nameColor, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 11px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(youLabel, x + 12, y + 15, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 10px Inter, sans-serif";
+    this.drawHudText(nameText, x + 52, y + 15, nameColor, CANVAS_UI_SHADOW);
 
-    this.ctx.font = "700 9px Inter";
+    this.ctx.font = "700 9px Inter, sans-serif";
     this.drawHudText(
       status.label,
-      x + 8,
-      y + height - 8,
+      x + 12,
+      y + height - 9,
       this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
@@ -4769,20 +4777,31 @@ export class GameApp {
       label = `${(player.skill.cooldownRemainingMs / 1000).toFixed(1)}`;
     }
 
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-    this.ctx.fillRect(x, y, width, height);
-    if (progress > 0) {
-      this.ctx.fillStyle = fill;
-      this.ctx.fillRect(x, y, Math.max(1, width * progress), height);
+    const ultChrome = this.assets.hud?.chipUlt;
+    if (ultChrome && ultChrome.complete && ultChrome.naturalWidth > 0) {
+      this.ctx.drawImage(ultChrome, x, y, width, height);
+      if (progress > 0 && progress < 1) {
+        this.ctx.fillStyle = fill;
+        this.ctx.globalAlpha = 0.35;
+        this.ctx.fillRect(x + 2, y + 2, Math.max(1, (width - 4) * progress), height - 4);
+        this.ctx.globalAlpha = 1;
+      }
+    } else {
+      this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+      this.ctx.fillRect(x, y, width, height);
+      if (progress > 0) {
+        this.ctx.fillStyle = fill;
+        this.ctx.fillRect(x, y, Math.max(1, width * progress), height);
+      }
+      this.ctx.strokeStyle = border;
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
     }
-    this.ctx.strokeStyle = border;
-    this.ctx.lineWidth = 1;
-    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
 
     // Never concatenate keybind + status ("SPC OK") — unreadable soup.
     // Chip is status only; keybind is implied for the local player.
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 8px Inter";
+    this.ctx.font = "700 9px Space Grotesk, Inter, sans-serif";
     const text = ready
       ? (this.language === "pt" ? "ULT" : "ULT")
       : label;
@@ -5075,32 +5094,43 @@ export class GameApp {
     return etaMs === undefined ? null : Math.max(0, etaMs);
   }
 
+  private resolveHudPowerIcon(type: SkillPowerUpType): HTMLImageElement | null {
+    const hud = this.assets.hud;
+    if (type === "bomb-up") return hud?.iconBomb ?? this.assets.powerUps[type] ?? null;
+    if (type === "flame-up") return hud?.iconFlame ?? this.assets.powerUps[type] ?? null;
+    if (type === "speed-up") return hud?.iconSpeed ?? this.assets.powerUps[type] ?? null;
+    return this.assets.powerUps[type] ?? null;
+  }
+
   private drawHudSkillSlot(x: number, y: number, width: number, height: number, slot: HudSkillSlot): void {
     const definition = getPowerUpDefinition(slot.type);
     const tint = slot.acquired ? definition.tint : "rgba(180, 167, 147, 0.4)";
-    this.ctx.fillStyle = slot.acquired ? CANVAS_UI_PANEL_BG_STRONG : CANVAS_UI_PANEL_BG_SOFT;
-    this.ctx.fillRect(x, y, width, height);
+    this.ctx.fillStyle = slot.acquired ? "rgba(16, 16, 22, 0.92)" : "rgba(12, 12, 16, 0.7)";
+    this.roundRectPath(x, y, width, height, 4);
+    this.ctx.fill();
     if (slot.recentlyCollected) {
       const pulse = 0.12 + slot.pickupProgress * 0.24;
       this.ctx.globalAlpha = pulse;
       this.ctx.fillStyle = definition.tint;
-      this.ctx.fillRect(x, y, width, height);
+      this.roundRectPath(x, y, width, height, 4);
+      this.ctx.fill();
       this.ctx.globalAlpha = 1;
     }
     this.ctx.strokeStyle = slot.recentlyCollected
       ? definition.tint
-      : (slot.acquired ? tint : CANVAS_UI_BORDER);
+      : (slot.acquired ? "rgba(255, 90, 31, 0.45)" : CANVAS_UI_BORDER);
     this.ctx.lineWidth = slot.recentlyCollected ? 1.5 : 1;
-    this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+    this.roundRectPath(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), 4);
+    this.ctx.stroke();
     this.ctx.lineWidth = 1;
 
-    const iconSize = Math.min(10, height - 2);
-    const icon = this.assets.powerUps[slot.type];
-    if (icon) {
+    const iconSize = Math.min(14, height - 4);
+    const icon = this.resolveHudPowerIcon(slot.type);
+    if (icon && icon.complete && icon.naturalWidth > 0) {
       this.ctx.globalAlpha = slot.acquired ? 1 : 0.45;
       this.ctx.drawImage(
         icon,
-        x + 2,
+        x + 3,
         y + Math.max(1, (height - iconSize) / 2),
         iconSize,
         iconSize,
@@ -5108,7 +5138,7 @@ export class GameApp {
       this.ctx.globalAlpha = 1;
     } else {
       this.ctx.textAlign = "left";
-      this.ctx.font = "700 7px Inter";
+      this.ctx.font = "700 8px Inter";
       this.drawHudText(
         definition.shortLabel.slice(0, 1),
         x + 3,
@@ -6545,18 +6575,21 @@ export class GameApp {
       this.ctx.fillRect(0, hudH, CANVAS_WIDTH, CANVAS_HEIGHT - hudH);
     }
 
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-    this.roundRectPath(panelX, panelY, panelW, panelH, 8);
-    this.ctx.fill();
-    this.ctx.strokeStyle = isPause ? CANVAS_UI_BORDER_STRONG : (showVictory ? CANVAS_UI_SUCCESS : showStalemate ? CANVAS_UI_DANGER : CANVAS_UI_BORDER_STRONG);
-    this.ctx.lineWidth = 1.5;
-    this.ctx.stroke();
-
-    // Ember top rail
-    this.ctx.fillStyle = CANVAS_UI_GOLD;
-    this.ctx.globalAlpha = 0.85;
-    this.ctx.fillRect(panelX + 10, panelY + 1, panelW - 20, 2);
-    this.ctx.globalAlpha = 1;
+    const pauseChrome = isPause ? this.assets.hud?.chipUlt : this.assets.hud?.panelCenter;
+    if (pauseChrome && pauseChrome.complete && pauseChrome.naturalWidth > 0) {
+      this.ctx.drawImage(pauseChrome, panelX, panelY, panelW, panelH);
+    } else {
+      this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
+      this.roundRectPath(panelX, panelY, panelW, panelH, 8);
+      this.ctx.fill();
+      this.ctx.strokeStyle = isPause ? CANVAS_UI_BORDER_STRONG : (showVictory ? CANVAS_UI_SUCCESS : showStalemate ? CANVAS_UI_DANGER : CANVAS_UI_BORDER_STRONG);
+      this.ctx.lineWidth = 1.5;
+      this.ctx.stroke();
+      this.ctx.fillStyle = CANVAS_UI_GOLD;
+      this.ctx.globalAlpha = 0.85;
+      this.ctx.fillRect(panelX + 10, panelY + 1, panelW - 20, 2);
+      this.ctx.globalAlpha = 1;
+    }
 
     const textX = panelX + panelW / 2;
     this.ctx.textAlign = "center";

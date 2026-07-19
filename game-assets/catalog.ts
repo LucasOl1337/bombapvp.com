@@ -86,6 +86,13 @@ import breachStatusBadgeUrl from "./ui/hud/breach-status-badge-v1-20260718-1545.
 import chainComboMeterUrl from "./ui/hud/chain-combo-meter-v1.png?url";
 import echoChargeReadyBadgeUrl from "./ui/hud/echo-charge-ready-badge-v1-20260718-1616.png?url";
 import fuseHeatMeterUrl from "./ui/hud/fuse-heat-meter-v1-20260718-1705.png?url";
+import hudChromeLocalUrl from "./ui/hud/chrome/panel-local-v1.png?url";
+import hudChromeRivalUrl from "./ui/hud/chrome/panel-rival-v1.png?url";
+import hudChromeCenterUrl from "./ui/hud/chrome/panel-center-v1.png?url";
+import hudChromeUltUrl from "./ui/hud/chrome/chip-ult-v1.png?url";
+import hudIconBombUrl from "./ui/hud/icons/icon-bomb-v1.png?url";
+import hudIconFlameUrl from "./ui/hud/icons/icon-flame-v1.png?url";
+import hudIconSpeedUrl from "./ui/hud/icons/icon-speed-v1.png?url";
 
 const GAME_ASSET_CATALOG = Object.freeze({
   "gameplay.bomb.sprite": bombUrl,
@@ -174,6 +181,13 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "ui.hud.breach-status": breachStatusBadgeUrl,
   "ui.hud.echo-charge-ready": echoChargeReadyBadgeUrl,
   "ui.hud.fuse-heat-meter": fuseHeatMeterUrl,
+  "ui.hud.chrome.local": hudChromeLocalUrl,
+  "ui.hud.chrome.rival": hudChromeRivalUrl,
+  "ui.hud.chrome.center": hudChromeCenterUrl,
+  "ui.hud.chrome.ult": hudChromeUltUrl,
+  "ui.hud.icon.bomb": hudIconBombUrl,
+  "ui.hud.icon.flame": hudIconFlameUrl,
+  "ui.hud.icon.speed": hudIconSpeedUrl,
   "marketing.citadel-breach.key-art": citadelBreachKeyArtUrl,
   "marketing.citadel-breach.launcher-banner": citadelBreachLauncherBannerUrl,
 } as const);
