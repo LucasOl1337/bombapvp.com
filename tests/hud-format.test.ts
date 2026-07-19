@@ -30,12 +30,15 @@ describe("ellipsisText", () => {
 
 describe("formatHudStatLine", () => {
   it("spaces B/F/S tokens so levels never glue to letters", () => {
-    const line = formatHudStatLine({
-      maxBombs: 2,
-      flameRange: 3,
-      speedLevel: 1,
-      shortFuseLevel: 0,
-    });
+    const line = formatHudStatLine(
+      {
+        maxBombs: 2,
+        flameRange: 3,
+        speedLevel: 1,
+        shortFuseLevel: 0,
+      },
+      false,
+    );
     expect(line).toMatch(/B\s+2/);
     expect(line).toMatch(/F\s+3/);
     expect(line).toMatch(/S\s+1/);
@@ -44,9 +47,9 @@ describe("formatHudStatLine", () => {
   it("optionally appends short-fuse level", () => {
     const line = formatHudStatLine(
       { maxBombs: 1, flameRange: 1, speedLevel: 0, shortFuseLevel: 2 },
-      { includeShortFuse: true },
+      true,
     );
-    expect(line).toMatch(/Q\s+2|SF\s+2|Fuse/i);
+    expect(line).toMatch(/Q\s+2/);
   });
 });
 
