@@ -162,3 +162,43 @@
 - Commit local: (este commit)
 - **Sem** push/PR/merge para main
 - Audio workshop WIP intocado
+
+---
+
+## Rodada 009 — 2026-07-19
+
+| Campo | Valor |
+| --- | --- |
+| **Status** | `corrigido` |
+| **Bug escolhido** | Treino/jogar: tela "Abrindo arena" não mostrava o bot adversário escolhido |
+| **Fluxo** | seleção de personagem + bot → confirmar → game-launch |
+| **Branch** | `swarm/bombpvp/bugs` |
+| **Arquivos de fix** | `src/app/view.ts`, `tests/app.test.ts` |
+
+### Reprodução
+
+- **Passos:**
+  1. `/treino/personagem` → escolher bot Pingo → personagem Nico → Confirmar.
+  2. Ler a linha de resumo na tela de game-launch.
+- **Esperado:** resumo inclui o oponente (ex.: `Nico · Treino contra bots · vs Pingo`).
+- **Observado (antes):** só `Nico · Treino contra bots` — bot escolhido (ou default) invisível no ready state.
+- **Impacto:** uso diário: jogador troca o bot e não tem confirmação visual antes da arena; parece que a seleção de bot "não pegou".
+
+### Correção
+
+- `renderGameLaunch`: para offline (treino/contínua), acrescenta `vs {label}` do `selectedBot` na linha de escolha.
+- Lab inalterado (sem personagem/bot único).
+- Teste de treino com Pingo atualizado.
+
+### Evidência
+
+- `npx vitest run tests/app.test.ts` → **19 passed**
+
+### Entrega
+
+- Bug: ready-state omitia bot adversário
+- Arquivos: `src/app/view.ts`, `tests/app.test.ts`, `SwarmLedger-bugs.md`
+- Branch: `swarm/bombpvp/bugs`
+- Commit local: (este commit)
+- **Sem** push/PR/merge para main
+- Audio workshop WIP intocado

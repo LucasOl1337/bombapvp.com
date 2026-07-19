@@ -145,7 +145,8 @@ describe("Bomba PvP app", () => {
       currentPath: "/arena/?mode=training&character=5474c45c-2987-43e0-af2c-a6500c836881&bot=pingo",
       selectedCharacter: { name: "Nico" },
     });
-    expect(view.getByText("Nico · Treino contra bots")).toBeTruthy();
+    // Ready screen must echo the chosen opponent bot (daily confusion if missing).
+    expect(view.getByText("Nico · Treino contra bots · vs Pingo")).toBeTruthy();
   });
 
   it.each(BOT_SELECTION_CASES)(

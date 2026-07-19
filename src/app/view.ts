@@ -447,9 +447,18 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
     portrait.append(createCharacterImage(document, snapshot.selectedCharacter));
   }
 
+  // Offline treino/jogar always pick an opponent bot — surface it so the ready
+  // screen matches what the user chose (defaults included).
+  const opponentBotLabel = isLabLaunch
+    ? null
+    : (snapshot.bots.find((bot) => bot.id === snapshot.selectedBot)?.label ?? null);
   const choiceLine = isLabLaunch
     ? (snapshot.activeExperience?.name ?? "")
-    : [snapshot.selectedCharacter?.name, snapshot.activeExperience?.name].filter(Boolean).join(" · ");
+    : [
+      snapshot.selectedCharacter?.name,
+      snapshot.activeExperience?.name,
+      opponentBotLabel ? `vs ${opponentBotLabel}` : null,
+    ].filter(Boolean).join(" · ");
   const reviseLabel = isLabLaunch
     ? (snapshot.locale === "pt-BR" ? "Revisar configuração" : "Review setup")
     : snapshot.copy.reviseLabel;
