@@ -1,4 +1,4 @@
-# Tournament Clean — top-down sprite tile pack (v3.9 floor edge flatten)
+# Tournament Clean — top-down sprite tile pack (v4.0 wall edge flatten)
 
 Default continuous arena (`tournament-clean`). Warm limestone cobble, textured charcoal walls, orthographic wood crates.
 
@@ -33,7 +33,7 @@ Procedural wrap-around (toroidal) Voronoi cells so stones continue across tile e
 | Edge delta (base seed 45) | lr≈6.8, tb≈4.3 mean abs/channel |
 | Top-down crate + alpha | PASS |
 | Readable at TILE_SIZE=40 | PASS — `_preview-arena-mock.png` |
-| Wall multi-cell continuous | PASS — edge−inner ~3 (was ~46); no per-cell rim/lip |
+| Wall multi-cell continuous | PASS — edge−inner ~1; field join ~2.4 (was ~6.9); no per-cell rim/lip |
 
 ## Palette anchors
 
