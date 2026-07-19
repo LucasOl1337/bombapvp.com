@@ -9,7 +9,7 @@ import { BOT_V3_CHARACTER_INDEX, getBotV3Decision } from "../src/original-game/E
 import { getBotV2Decision } from "../src/original-game/Engine/bot-v2.ts";
 
 // Compatibility floor for this safety patch. Promotion still requires the
-// independent 10-consecutive-win gate documented in docs/gameplay.md.
+// independent 10-consecutive-win gate (see docs/gameplay.md).
 const DEPLOYED_BASELINE_V3_WINS = 1;
 
 function assets() {

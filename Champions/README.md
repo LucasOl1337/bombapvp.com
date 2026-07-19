@@ -43,7 +43,7 @@ As policies de bot continuam no módulo de bots porque decidem *quando* usar uma
 
 `public/Assets/Characters/Animations/default-players/` é o fallback genérico do engine. Não representa nenhum Champion canônico. `_legacy/` guarda material sem personagem canônico atribuído e nunca é importado em runtime.
 
-Pacotes experimentais que pertencem inequivocamente a um personagem podem permanecer localmente em `Champions/<slug>/experiments/` ou `rebuild/`, mas o Git normal guarda apenas manifests, documentação, checksums, receitas e assets finais. Binários brutos seguem `docs/champion-asset-storage.md`. Nix Ember está no roster ao vivo; apenas seu `experiments/lab-pack/` permanece um pacote-fonte de revisão, cujo manifesto `notLiveRoster: true` indica que o runtime não carrega diretamente o material bruto do laboratório.
+Pacotes experimentais que pertencem inequivocamente a um personagem podem permanecer localmente em `Champions/<slug>/experiments/` ou `rebuild/`, mas o Git normal guarda apenas manifests, documentação, checksums, receitas e assets finais. Binários brutos ficam locais (ver `docs/sprites.md`). Nix Ember está no roster ao vivo; apenas seu `experiments/lab-pack/` permanece um pacote-fonte de revisão, cujo manifesto `notLiveRoster: true` indica que o runtime não carrega diretamente o material bruto do laboratório.
 
 ## APIs
 
@@ -58,7 +58,7 @@ Pacotes experimentais que pertencem inequivocamente a um personagem podem perman
 
 ## Adicionando um personagem
 
-**Antes de gerar arte ou frames**, leia `docs/champion-sprite-pipeline.md` (direções reais, alpha/transparente, plant sem bomba, naming do loader, anti-padrões do Nix Ember).
+**Antes de gerar arte ou frames**, leia `docs/sprites.md` (direções reais, alpha/transparente, plant sem bomba, naming do loader).
 
 1. Adicione uma identidade em `membership.ts`; esse é o único registro raiz de pertença.
 2. Crie `Champions/<slug>/` usando a estrutura acima.

@@ -64,7 +64,7 @@ Se o personagem “vira só fogo/olhos” no jogo, o key comeu a armadura escura
 3. **Vídeo** (`image_to_video`) por direção: um motion simples, câmera fixa, fundo preto puro.
 4. **Harvest** (`ffmpeg` fps=12) → escolher 4 idle + 8 walk (+ cast/attack).
 5. **Key alpha** cuidadoso → resize centrado em **124×124** (ou o `size` do Champion).
-6. Instalar em `Champions/<slug>/assets/`; material bruto fica em `Champions/<slug>/experiments/…`.
+6. Instalar os finais em `Champions/<slug>/assets/`; material bruto pode ficar localmente em `experiments/` ou `rebuild/`, mas é ignorado pelo Git normal e segue `docs/champion-asset-storage.md`.
 
 Não entregue no `assets/` frames de laboratório com fundo opaco ou resolução/video “sujo” sem passar pelo key.
 
@@ -76,7 +76,7 @@ Seguir `Champions/README.md`:
 2. `skill.ts` — adapter da ultimate (sem hardcode no `GameApp`).
 3. `visuals.ts` — frames de cast durante channel, se precisar.
 4. `assets.ts` + PNGs em `assets/`.
-5. Registrar em `catalog.ts`, `runtime.ts`, `visual-runtime.ts`, `assets-catalog.ts`, `contracts.ts` (`CharacterId` / `CharacterSkillId`), `index.ts`.
+5. Registrar slug, ID e skill ID uma vez em `membership.ts`; as quatro projeções descobrem os exports canônicos da pasta.
 6. Atualizar testes de catálogo/roster (`tests/character-catalog.test.ts`, `tests/champions-module.test.ts`, `tests/character-runtime-roster.test.mjs`).
 
 Lab pack opcional: `experiments/lab-pack/` + validador em `src/shared/grok-character-package.ts` — **não** é o path que o engine carrega.
