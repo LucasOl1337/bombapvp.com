@@ -88,15 +88,13 @@ import {
   projectedBodyOverlapsTile,
   isMonotonicBodyBombEgress as pureIsMonotonicBodyBombEgress,
 } from "../Gameplay/player-body";
-import { tilesFromKeys } from "../Gameplay/flame-contact";
+import {
+  tilesFromKeys,
+} from "../Gameplay/flame-contact";
 import { drawFlameTile } from "./flame-render";
 import {
-  computeRivalSlotWidth,
   drawHudPanel as paintHudPanel,
-  ellipsisText,
-  formatHudScoreLine,
-  HUD_LAYOUT,
-  partitionHudPlayers,
+  formatHudStatLine as formatHudStatLinePure,
 } from "./hud-format";
 import type {
   LobbyMode,
@@ -218,9 +216,8 @@ const LOCAL_BOT_TOGGLE_KEY = "KeyB";
 const LOCAL_BOT_CYCLE_KEY = "KeyN";
 const MAX_LOCAL_BOT_FILL = 3;
 const BOT_BOMB_COOLDOWN_MS = 900;
-/** Fullscreen shares the two-row layout height (was 34 — too cramped for 4p). */
-const FULLSCREEN_HUD_HEIGHT = HUD_LAYOUT.height;
-const FULLSCREEN_HUD_CENTER_WIDTH = HUD_LAYOUT.centerMaxWidth;
+const FULLSCREEN_HUD_HEIGHT = 34;
+const FULLSCREEN_HUD_CENTER_WIDTH = 224;
 const WALK_FRAME_MS = 100;
 const SKILL_FRAME_MS = 100;
 const DEATH_FRAME_MS = 90;
@@ -791,7 +788,7 @@ export class GameApp {
   }
 
   private getHudRenderHeight(): number {
-    return this.mode === "match" ? FULLSCREEN_HUD_HEIGHT : HUD_HEIGHT;
+    return this.isFullscreenMatchLayoutActive() ? FULLSCREEN_HUD_HEIGHT : HUD_HEIGHT;
   }
 
   private getArenaRenderMetrics(): ArenaRenderMetrics {
@@ -2588,18 +2585,10 @@ export class GameApp {
   }
 
   private shortenCharacterName(name: string, maxLength = 30): string {
-    return ellipsisText(name, maxLength);
-  }
-
-  /** Local seat for HUD "YOU" panel (online guest, automation, or P1). */
-  private getMatchLocalPlayerId(): PlayerId {
-    if (this.onlineSession) {
-      return this.onlineLocalPlayerId;
+    if (name.length <= maxLength) {
+      return name;
     }
-    if (this.automationMode) {
-      return this.automationControlledPlayer;
-    }
-    return 1;
+    return `${name.slice(0, maxLength - 3)}...`;
   }
 
   private createPlayer(
@@ -4463,252 +4452,253 @@ export class GameApp {
     });
   }
 
-  /**
-   * Two-row match HUD (windowed + fullscreen):
-   *  Top  — rival compact slots + isolated match meta (round/timer/mode)
-   *  Bottom — dedicated local panel (status, icon+level power slots, skill)
-   */
-  private renderHud(): void {
-    if (this.hideNativeHud) return;
-    this.renderMatchHud();
+  private formatHudStatLine(player: PlayerState, includeShortFuse: boolean): string {
+    return formatHudStatLinePure(player, includeShortFuse);
+  }
+  private renderCompactPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
+    const player = this.players[playerId];
+    const palette = PLAYER_COLORS[playerId];
+    const compactWidth = Math.max(120, width);
+    const status = this.getPlayerHudStatus(playerId);
+    const scoreText = this.onlineRoomMode === "endless"
+      ? `K${this.endlessKills[playerId]} W${this.endlessRoundWins[playerId]}`
+      : `W${this.score[playerId]}`;
+    const statText = this.formatHudStatLine(player, false);
+
+    this.drawHudPanel(x, y, compactWidth, 22, palette.glow);
+    this.ctx.textAlign = "left";
+    this.ctx.font = "700 9px Inter";
+    this.drawHudText(this.getPlayerSlotLabel(playerId), x + 8, y + 9, palette.primary, CANVAS_UI_SHADOW);
+    this.ctx.font = "600 8px Inter";
+    this.drawHudText(scoreText, x + 34, y + 9, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    this.ctx.textAlign = "right";
+    this.drawHudText(status.label, x + compactWidth - 6, y + 9, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.ctx.font = "600 7px Inter";
+    this.drawHudText(statText, x + compactWidth - 6, y + 18, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
   }
 
-  private renderMatchHud(): void {
+  private renderCompactHud(): void {
+    if (this.hideNativeHud) return;
     const hudHeight = this.getHudRenderHeight();
-    const compact = this.isFullscreenMatchLayoutActive();
-    const localId = this.getMatchLocalPlayerId();
-    const { leftRivals, rightRivals } = partitionHudPlayers(this.activePlayerIds, localId);
+    const leftPlayers = this.activePlayerIds.filter((playerId) => playerId === 1 || playerId === 3);
+    const rightPlayers = this.activePlayerIds.filter((playerId) => playerId === 2 || playerId === 4);
+    const centerWidth = Math.min(FULLSCREEN_HUD_CENTER_WIDTH, CANVAS_WIDTH - 240);
+    const centerX = Math.round((CANVAS_WIDTH - centerWidth) / 2);
+    const suddenDeathHud = this.getSuddenDeathHudState();
+    const sideWidth = Math.max(140, Math.floor((centerX - 14) / Math.max(1, leftPlayers.length || 1)));
+    const rightStartX = centerX + centerWidth + 10;
+    const rightAvailable = Math.max(0, CANVAS_WIDTH - rightStartX - 10);
+    const rightWidth = Math.max(140, Math.floor(rightAvailable / Math.max(1, rightPlayers.length || 1)));
 
     const hudGradient = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, hudHeight);
-    if (compact) {
-      hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.76)");
-      hudGradient.addColorStop(0.5, "rgba(24, 20, 16, 0.72)");
-      hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.76)");
-    } else {
-      hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.96)");
-      hudGradient.addColorStop(0.5, "rgba(25, 21, 17, 0.96)");
-      hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.96)");
-    }
+    hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.76)");
+    hudGradient.addColorStop(0.5, "rgba(24, 20, 16, 0.72)");
+    hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.76)");
     this.ctx.fillStyle = hudGradient;
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, hudHeight);
     this.ctx.fillStyle = CANVAS_UI_BORDER;
-    this.ctx.fillRect(0, hudHeight - (compact ? 1 : 2), CANVAS_WIDTH, compact ? 1 : 2);
+    this.ctx.fillRect(0, hudHeight - 1, CANVAS_WIDTH, 1);
 
-    const pad = HUD_LAYOUT.paddingX;
-    const gap = HUD_LAYOUT.gap;
-    const centerWidth = Math.min(FULLSCREEN_HUD_CENTER_WIDTH, HUD_LAYOUT.centerWidth + 20);
-    const centerX = Math.round((CANVAS_WIDTH - centerWidth) / 2);
-    const topY = HUD_LAYOUT.topRowY;
-    const topH = HUD_LAYOUT.topRowHeight;
-
-    // --- Top: left rivals | center meta | right rivals ---
-    this.renderMatchCenterMeta(centerX, topY, centerWidth, topH);
-
-    const leftGutter = Math.max(0, centerX - pad - gap);
-    const leftSlotW = computeRivalSlotWidth(leftGutter, Math.max(1, leftRivals.length));
-    leftRivals.forEach((playerId, index) => {
-      const x = pad + index * (leftSlotW + gap);
-      this.renderRivalHudSlot(playerId, x, topY, leftSlotW, topH);
+    leftPlayers.forEach((playerId, index) => {
+      this.renderCompactPlayerHud(playerId, 6 + index * sideWidth, 7, sideWidth - 4);
+    });
+    rightPlayers.forEach((playerId, index) => {
+      this.renderCompactPlayerHud(playerId, rightStartX + index * rightWidth, 7, rightWidth - 4);
     });
 
-    const rightStartX = centerX + centerWidth + gap;
-    const rightGutter = Math.max(0, CANVAS_WIDTH - pad - rightStartX);
-    const rightSlotW = computeRivalSlotWidth(rightGutter, Math.max(1, rightRivals.length));
-    rightRivals.forEach((playerId, index) => {
-      const x = rightStartX + index * (rightSlotW + gap);
-      this.renderRivalHudSlot(playerId, x, topY, rightSlotW, topH);
-    });
-
-    // --- Bottom: dedicated local player panel ---
-    const localWidth = CANVAS_WIDTH - pad * 2;
-    this.renderLocalPlayerHud(
-      localId,
-      pad,
-      HUD_LAYOUT.localPanelY,
-      localWidth,
-      HUD_LAYOUT.localPanelHeight,
-    );
-  }
-
-  private renderMatchCenterMeta(x: number, y: number, width: number, height: number): void {
-    this.drawHudPanel(x, y, width, height, CANVAS_UI_BORDER_STRONG);
-    const cx = x + width / 2;
-    const modeLabel = this.onlineRoomMode === "endless"
-      ? `R${this.roundNumber} · ENDLESS`
-      : `R${this.roundNumber} · FT${TARGET_WINS}`;
-    const suddenDeathHud = this.roundOutcome ? null : this.getSuddenDeathHudState();
-
+    this.drawHudPanel(centerX, 5, centerWidth, 22, CANVAS_UI_BORDER_STRONG);
     this.ctx.textAlign = "center";
     this.ctx.font = "700 7px Inter";
-    this.drawHudText(modeLabel, cx, y + 8, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
-    this.ctx.font = "700 13px Inter";
+    this.drawHudText(
+      this.onlineRoomMode === "endless"
+        ? `R${this.roundNumber}  ENDLESS`
+        : `R${this.roundNumber}  FT${TARGET_WINS}`,
+      centerX + centerWidth / 2,
+      7,
+      CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
+    );
+    this.ctx.font = "700 15px Inter";
     this.drawHudText(
       Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
-      cx,
-      y + (suddenDeathHud ? 18 : 20),
+      centerX + centerWidth / 2,
+      18,
       CANVAS_UI_TEXT,
       CANVAS_UI_SHADOW,
     );
-
-    if (suddenDeathHud) {
-      // Meter only under timer — avoid stacking SD text on the timer digits.
+    this.ctx.font = "600 6px Inter";
+    if (!this.roundOutcome) {
+      this.drawHudText(
+        suddenDeathHud.label,
+        centerX + centerWidth / 2,
+        25,
+        suddenDeathHud.active ? CANVAS_UI_DANGER : CANVAS_UI_MUTED,
+        CANVAS_UI_SHADOW,
+      );
       this.drawSuddenDeathMeter(
-        x + 12,
-        y + height - 6,
-        width - 24,
+        centerX + 8,
+        28,
+        centerWidth - 16,
         suddenDeathHud.progress,
         suddenDeathHud.active,
       );
     }
   }
 
-  /** Compact rival/opponent slot: name ellipsis, K/W, ult/alive state — no BFS string soup. */
-  private renderRivalHudSlot(
-    playerId: PlayerId,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
-    const palette = PLAYER_COLORS[playerId];
-    const slotW = Math.max(HUD_LAYOUT.rivalSlotMinWidth, width);
-    const status = this.getPlayerHudStatus(playerId);
-    const scoreText = formatHudScoreLine(
-      this.onlineRoomMode === "endless" ? "endless" : "standard",
-      {
-        kills: this.endlessKills[playerId],
-        wins: this.onlineRoomMode === "endless"
-          ? this.endlessRoundWins[playerId]
-          : this.score[playerId],
-      },
+  private renderHud(): void {
+    if (this.hideNativeHud) return;
+    if (this.isFullscreenMatchLayoutActive()) {
+      this.renderCompactHud();
+      return;
+    }
+    const hudGradient = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, HUD_HEIGHT);
+    hudGradient.addColorStop(0, "rgba(18, 15, 13, 0.96)");
+    hudGradient.addColorStop(0.5, "rgba(25, 21, 17, 0.96)");
+    hudGradient.addColorStop(1, "rgba(18, 15, 13, 0.96)");
+    this.ctx.fillStyle = hudGradient;
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, HUD_HEIGHT);
+    this.ctx.fillStyle = CANVAS_UI_BORDER;
+    this.ctx.fillRect(0, HUD_HEIGHT - 2, CANVAS_WIDTH, 2);
+
+    const playerCount = Math.max(1, this.activePlayerIds.length);
+    const twoPlayerLayout = playerCount === 2;
+    const hudPanelY = 14;
+
+    if (twoPlayerLayout) {
+      const panelWidth = 168;
+      const leftPlayerId = this.activePlayerIds[0];
+      const rightPlayerId = this.activePlayerIds[1];
+      if (leftPlayerId !== undefined) {
+        this.renderPlayerHud(leftPlayerId, 8, hudPanelY, panelWidth);
+      }
+      if (rightPlayerId !== undefined) {
+        this.renderPlayerHud(rightPlayerId, CANVAS_WIDTH - panelWidth - 8, hudPanelY, panelWidth);
+      }
+    } else {
+      const slotWidth = (CANVAS_WIDTH - 12) / playerCount;
+      this.activePlayerIds.forEach((playerId, index) => {
+        this.renderPlayerHud(playerId, 6 + index * slotWidth, hudPanelY, slotWidth - 6);
+      });
+    }
+
+    this.ctx.textAlign = "center";
+    this.ctx.font = "700 7px Inter";
+    this.drawHudText(
+      this.onlineRoomMode === "endless"
+        ? `R${this.roundNumber} | ENDLESS`
+        : `R${this.roundNumber} | FIRST TO ${TARGET_WINS}`,
+      CANVAS_WIDTH / 2,
+      6,
+      CANVAS_UI_MUTED,
+      CANVAS_UI_SHADOW,
     );
-    const slotLabel = this.getPlayerSlotLabel(playerId);
-    // Reserve right edge for score (~36px) so name never collides with K/W.
-    const nameBudget = slotW < 130 ? HUD_LAYOUT.rivalNameMax - 2 : HUD_LAYOUT.rivalNameMax;
-    const name = this.getCharacterLabel(playerId, nameBudget);
-    const ultLabel = this.getRivalUltLabel(playerId, status);
-
-    this.drawHudPanel(x, y, slotW, height, palette.glow);
-
-    // Row 1: P#  Name… ................. K/W
-    this.ctx.textAlign = "left";
     this.ctx.font = "700 8px Inter";
-    this.drawHudText(slotLabel, x + 7, y + 10, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "600 8px Inter";
-    this.drawHudText(name, x + 28, y + 10, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
-
-    this.ctx.textAlign = "right";
-    this.ctx.font = "700 8px Inter";
-    this.drawHudText(scoreText, x + slotW - 6, y + 10, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
-
-    // Row 2: ult / alive (isolated from name)
-    this.ctx.textAlign = "left";
-    this.ctx.font = "600 8px Inter";
-    this.drawHudText(ultLabel, x + 7, y + height - 6, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
+    this.drawHudText("TIME", CANVAS_WIDTH / 2, 14, CANVAS_UI_GOLD, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 16px Inter";
+    this.drawHudText(
+      Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
+      CANVAS_WIDTH / 2,
+      27,
+      CANVAS_UI_TEXT,
+      CANVAS_UI_SHADOW,
+    );
+    if (!this.roundOutcome) {
+      const suddenDeathHud = this.getSuddenDeathHudState();
+      this.ctx.textAlign = "center";
+      this.ctx.font = "700 8px Inter";
+      this.drawHudText(
+        suddenDeathHud.label,
+        240,
+        HUD_HEIGHT - 18,
+        suddenDeathHud.active ? CANVAS_UI_DANGER : CANVAS_UI_MUTED,
+        CANVAS_UI_SHADOW,
+      );
+      this.drawSuddenDeathMeter(
+        CANVAS_WIDTH / 2 - 80,
+        HUD_HEIGHT - 12,
+        160,
+        suddenDeathHud.progress,
+        suddenDeathHud.active,
+      );
+    }
   }
 
-  private getRivalUltLabel(playerId: PlayerId, status: HudPlayerStatus): string {
-    const player = this.players[playerId];
-    if (!player.alive) {
-      return "DOWN";
-    }
-    if (status.tone === "danger" && status.critical) {
-      return status.label;
-    }
-    if (!player.skill.id) {
-      return player.alive ? "LIVE" : "DOWN";
-    }
-    const phase = player.skill.phase;
-    if (phase === "channeling" || phase === "releasing") {
-      return "CAST";
-    }
-    if (phase === "cooldown" && player.skill.cooldownRemainingMs > 0) {
-      return `ULT ${(player.skill.cooldownRemainingMs / 1000).toFixed(1)}`;
-    }
-    if (phase === "idle") {
-      return this.language === "pt" ? "ULT OK" : "ULT RDY";
-    }
-    return "LIVE";
-  }
-
-  /**
-   * Local player panel: YOU + name, alive status, icon+number power slots, skill chip.
-   * Does not rely on a single jammed "B 2 · F 3 · S 1" string for primary stats.
-   */
-  private renderLocalPlayerHud(
-    playerId: PlayerId,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
+  private renderPlayerHud(playerId: PlayerId, x: number, y: number, width: number): void {
     const player = this.players[playerId];
     const palette = PLAYER_COLORS[playerId];
+    const title = this.getPlayerSlotLabel(playerId);
+    const statLine = this.formatHudStatLine(player, true);
     const status = this.getPlayerHudStatus(playerId);
     const recentPickup = this.getLatestPowerUpPickupNotice(playerId);
-    const nameBudget = width < 520 ? HUD_LAYOUT.localNameMax - 4 : HUD_LAYOUT.localNameMax;
-    const nameText = recentPickup
+    const nameBudget = width < 170 ? 10 : 14;
+    const subtitleText = recentPickup
       ? this.formatPowerUpPickupNotice(recentPickup, nameBudget)
-      : this.getCharacterLabel(playerId, nameBudget);
-    const nameColor = recentPickup
-      ? (recentPickup.chainGuard ? CANVAS_UI_GOLD_BRIGHT : getPowerUpDefinition(recentPickup.type).tint)
+      : this.shortenCharacterName(this.getCharacterLabel(playerId, nameBudget), nameBudget);
+    const subtitleColor = recentPickup
+      ? recentPickup.chainGuard ? CANVAS_UI_GOLD_BRIGHT : getPowerUpDefinition(recentPickup.type).tint
       : CANVAS_UI_TEXT;
-    const youLabel = this.language === "pt" ? "VOCÊ" : "YOU";
-    // Absolute B/F/S counts as icon+number slots (not jammed "B 2 · F 3 · S 1").
-    const skillSlots = this.getLocalHudPowerSlots(playerId);
-    const hasUltimate = Boolean(player.skill.id);
+    // Always compact the power row: show only owned powers + dedicated ULT chip.
+    // Avoids the old "SPC OK" soup of empty slots + status + key labels.
+    const skillSlots = this.getCompactHudSkillSlots(this.getHudSkillSlots(playerId));
+    const panelHeight = 46;
 
-    this.drawHudPanel(x, y, width, height, palette.glow);
+    this.drawHudPanel(x, y, width, panelHeight, palette.glow);
 
-    // Left identity band (~190px): YOU + name on top, status + score on bottom
-    const identityWidth = 190;
+    // Row 1: P# · name ........................ status
     this.ctx.textAlign = "left";
     this.ctx.font = "700 10px Inter";
-    this.drawHudText(youLabel, x + 8, y + 14, palette.primary, CANVAS_UI_SHADOW);
+    this.drawHudText(title, x + 8, y + 12, palette.primary, CANVAS_UI_SHADOW);
     this.ctx.font = "600 9px Inter";
-    this.drawHudText(nameText, x + 46, y + 14, nameColor, CANVAS_UI_SHADOW);
-
+    this.drawHudText(subtitleText, x + 30, y + 12, subtitleColor, CANVAS_UI_SHADOW);
+    this.ctx.textAlign = "right";
     this.ctx.font = "700 9px Inter";
     this.drawHudText(
       status.label,
-      x + 8,
-      y + height - 8,
+      x + width - 8,
+      y + 12,
       this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
 
+    // Row 2: score pips ............... B F S Q
     if (this.onlineRoomMode === "endless") {
-      this.drawEndlessHudStats(x + 100, y + height - 8, playerId, palette);
+      this.drawEndlessHudStats(x + 8, y + 22, playerId, palette);
     } else {
-      this.drawRoundPips(x + 100, y + height - 16, this.score[playerId], palette);
+      this.drawRoundPips(x + 8, y + 20, this.score[playerId], palette);
     }
+    this.ctx.textAlign = "right";
+    this.ctx.font = "600 8px Inter";
+    this.drawHudText(
+      statLine,
+      x + width - 8,
+      y + 24,
+      player.alive ? CANVAS_UI_MUTED : CANVAS_UI_MUTED_SOFT,
+      CANVAS_UI_SHADOW,
+    );
 
-    // Center/right: power slots (icon + level) — primary stat presentation
-    const rightPad = 8;
-    const ultChipWidth = hasUltimate ? 52 : 0;
-    const ultGap = hasUltimate ? 6 : 0;
-    const slotsLeft = x + identityWidth + 8;
-    const slotsRight = x + width - rightPad - ultChipWidth - ultGap;
-    const slotsWidth = Math.max(80, slotsRight - slotsLeft);
-    const slotGap = 4;
+    // Row 3: power icons + ULT chip only (no key spam)
+    const insetX = x + 6;
+    const insetY = y + 30;
+    const insetWidth = Math.max(12, width - 12);
+    const gap = 3;
+    const hasUltimate = Boolean(player.skill.id);
+    const ultChipWidth = hasUltimate ? Math.min(42, Math.max(34, Math.floor(insetWidth * 0.28))) : 0;
+    const powerInsetWidth = hasUltimate
+      ? Math.max(12, insetWidth - ultChipWidth - gap)
+      : insetWidth;
     const slotCount = Math.max(1, skillSlots.length);
-    const slotW = Math.max(30, Math.min(52, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
-    const slotH = 18;
-    const slotY = y + Math.round((height - slotH) / 2);
+    const slotWidth = Math.max(14, Math.floor((powerInsetWidth - gap * (slotCount - 1)) / slotCount));
     for (let index = 0; index < skillSlots.length; index += 1) {
       const slot = skillSlots[index];
-      if (!slot) continue;
-      const slotX = slotsLeft + index * (slotW + slotGap);
-      this.drawHudSkillSlot(slotX, slotY, slotW, slotH, slot);
+      const slotX = insetX + index * (slotWidth + gap);
+      this.drawHudSkillSlot(slotX, insetY, slotWidth, 12, slot);
     }
-
     if (hasUltimate) {
-      // Skill chip: cooldown / ready — name is implied by champion; status on chip
       this.drawHudUltimateChip(
-        x + width - rightPad - ultChipWidth,
-        slotY - 1,
+        insetX + powerInsetWidth + gap,
+        insetY,
         ultChipWidth,
-        slotH + 2,
+        12,
         playerId,
       );
     }
@@ -4854,29 +4844,6 @@ export class GameApp {
       if (selected.size >= 5) break;
     }
     return allSkillSlots.filter((slot) => selected.has(slot.type));
-  }
-
-  /** Local panel power row: absolute bomb/flame/speed counts as icon+number. */
-  private getLocalHudPowerSlots(playerId: PlayerId): HudSkillSlot[] {
-    const player = this.players[playerId];
-    const slots = this.getCompactHudSkillSlots(this.getHudSkillSlots(playerId));
-    return slots.map((slot) => {
-      if (slot.type === "bomb-up") {
-        return { ...slot, valueLabel: String(player.maxBombs), acquired: true, level: player.maxBombs };
-      }
-      if (slot.type === "flame-up") {
-        return { ...slot, valueLabel: String(player.flameRange), acquired: true, level: player.flameRange };
-      }
-      if (slot.type === "speed-up") {
-        return {
-          ...slot,
-          valueLabel: String(player.speedLevel),
-          acquired: true,
-          level: player.speedLevel,
-        };
-      }
-      return slot;
-    });
   }
 
   private getHudSkillSlot(playerId: PlayerId, type: SkillPowerUpType): HudSkillSlot {

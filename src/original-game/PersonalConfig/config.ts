@@ -2,7 +2,6 @@ import type { MenuPlayerId, PlayerId } from "../Gameplay/types";
 
 export const CANVAS_WIDTH = 960;
 export const CANVAS_HEIGHT = 690;
-/** Stable world/menu HUD geometry; match rendering may use a taller visual band. */
 export const HUD_HEIGHT = 60;
 export const TILE_SIZE = 40;
 export const GRID_WIDTH = 11;
