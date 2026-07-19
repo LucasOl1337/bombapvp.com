@@ -5752,39 +5752,15 @@ export class GameApp {
 
   private drawExplosionFeedback(): void {
     const feedback = this.getExplosionFeedbackReadModel();
-    if (feedback.cells.length === 0 && feedback.chainReactions.length === 0) {
+    if (feedback.chainReactions.length === 0) {
       return;
     }
 
+    // Do NOT paint orange tile fills/borders or thick blast connectors — they
+    // read as cheap HUD boxes on top of the flame sprites. Chain sparks only.
     this.ctx.save();
-    for (const cell of feedback.cells) {
-      const alpha = Math.min(1, Math.max(0, cell.remainingMs) / FLAME_DISSIPATE_TAIL_MS);
-      const toxic = cell.style === "toxic";
-      this.ctx.fillStyle = toxic
-        ? `rgba(54, 255, 151, ${0.1 + alpha * 0.08})`
-        : `rgba(255, 76, 28, ${0.11 + alpha * 0.09})`;
-      this.ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
-      this.ctx.strokeStyle = toxic
-        ? `rgba(152, 255, 197, ${0.32 + alpha * 0.26})`
-        : `rgba(255, 197, 82, ${0.34 + alpha * 0.28})`;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1);
-    }
-
     this.ctx.lineCap = "round";
     this.ctx.globalCompositeOperation = "lighter";
-    for (const connector of feedback.connectors) {
-      const toxic = connector.style === "toxic";
-      this.ctx.strokeStyle = toxic ? "rgba(90, 255, 165, 0.25)" : "rgba(255, 108, 38, 0.28)";
-      this.ctx.lineWidth = 10;
-      this.ctx.beginPath();
-      this.ctx.moveTo(connector.fromX, connector.fromY);
-      this.ctx.lineTo(connector.toX, connector.toY);
-      this.ctx.stroke();
-      this.ctx.strokeStyle = toxic ? "rgba(192, 255, 213, 0.62)" : "rgba(255, 226, 126, 0.68)";
-      this.ctx.lineWidth = 1.5;
-      this.ctx.stroke();
-    }
 
     for (const effect of feedback.chainReactions) {
       const progress = Math.min(1, effect.elapsedMs / CHAIN_REACTION_FEEDBACK_MS);
