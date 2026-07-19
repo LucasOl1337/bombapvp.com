@@ -64,6 +64,7 @@ export function listCharacterPresentations(
         name: c.name,
         assetPath: c.presentation.portraitPath,
         accent: c.presentation.accent,
+        skillCooldownMs: c.skill.cooldownMs,
         ...c.presentation.localized[locale],
       }),
     ),

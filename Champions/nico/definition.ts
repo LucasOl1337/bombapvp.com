@@ -14,12 +14,24 @@ export const NICO_DEFINITION = deepFreeze({
     accent: "red",
     localized: {
       "pt-BR": {
-        label: "Personagem 4",
-        description: "Combatente 04 · personagem canônico",
+        label: "Zona de fogo",
+        description:
+          "Maga de feixe que corta corredores. Joga de longe: mira a linha, canaliza e pune quem fica preso na rota.",
+        skillName: "Arcane Beam",
+        skillSummary:
+          "Canaliza um feixe arcano na direção mirada. O disparo atravessa a rota até encontrar uma parede.",
+        analysis:
+          "Domina corredores longos, mas fica vulnerável durante a canalização; proteja os flancos antes de disparar.",
       },
       en: {
-        label: "Character 4",
-        description: "Fighter 04 · canonical character",
+        label: "Lane pressure",
+        description:
+          "Beam mage who cuts corridors. She plays from range: aim the line, channel, punish whoever is stuck on the path.",
+        skillName: "Arcane Beam",
+        skillSummary:
+          "Channels an arcane beam in the aimed direction. Tiles along the path take the beam effect while it lives.",
+        analysis:
+          "Dominant on long lanes and open mids. Weak if boxed during cast — clear your flank before you fire.",
       },
     },
   },

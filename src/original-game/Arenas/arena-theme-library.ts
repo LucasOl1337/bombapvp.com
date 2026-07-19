@@ -81,8 +81,15 @@ export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
       "Wall family is dark charcoal and structural.",
       "Crate family is the only warm terrain category, so breakables pop instantly.",
     ],
-    pixellabDescription: "Not used directly. This theme is procedurally rendered to keep the arena clean, structured, and category-led.",
-    renderMode: "procedural",
+    pixellabDescription: "1). warm beige limestone floor tile with subtle grain and quiet center 2). brighter cream combat-lane slab with restrained cross edge cuts 3). protected spawn tile with thin warm-gold ring and open center 4). dark charcoal slab wall with crisp top lip and sand accent line 5). warm brown classic crate with iron bands and readable crack seams",
+    renderMode: "sprite",
+    tilePaths: {
+      base: "arena.theme.tournament-clean.floor.base",
+      lane: "arena.theme.tournament-clean.floor.lane",
+      spawn: "arena.theme.tournament-clean.floor.spawn",
+      wall: "arena.theme.tournament-clean.wall",
+      crate: "arena.theme.tournament-clean.crate",
+    },
     palette: {
       floorBase: "#d8d0c2",
       floorBaseAlt: "#cec5b7",

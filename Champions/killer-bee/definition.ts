@@ -14,12 +14,24 @@ export const KILLER_BEE_DEFINITION = deepFreeze({
     accent: "gold",
     localized: {
       "pt-BR": {
-        label: "Personagem 2",
-        description: "Combatente 02 · personagem canônico",
+        label: "Assalto móvel",
+        description:
+          "Caçadora de ritmo alto. Pressiona rotas, coleta melhorias e foge antes da retaliação: vence pela velocidade.",
+        skillName: "Wing Dash",
+        skillSummary:
+          "Avança rapidamente na direção atual enquanto o caminho estiver livre, cruzando corredores e escapando de ameaças.",
+        analysis:
+          "Recompensa agressão precisa, mas uma rota bloqueada ou sem saída transforma o avanço em armadilha.",
       },
       en: {
-        label: "Character 2",
-        description: "Fighter 02 · canonical character",
+        label: "Mobile assault",
+        description:
+          "High-tempo hunter. She pressures lanes, steals power-ups, and leaves before the punish — speed over walls.",
+        skillName: "Wing Dash",
+        skillSummary:
+          "Directional dash along open pathing. Crosses corridors, gaps, and fire if the line is clear.",
+        analysis:
+          "Rewards precise aggression, but a blocked route or dead end turns the dash into a trap.",
       },
     },
   },

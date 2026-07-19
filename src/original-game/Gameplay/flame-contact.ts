@@ -39,7 +39,7 @@ export function findActiveFlameHittingBody(
   return null;
 }
 
-/** True when any listed tile overlaps the body. */
+/** True when any listed tile overlaps the body at `position`. */
 export function bodyOverlapsAnyTile(
   position: PixelCoord,
   tiles: readonly TileCoord[],

@@ -25,11 +25,24 @@ export type Experience = Readonly<{
 
 export type Character = CharacterPresentation;
 
+export type ControlsGuideBinding = Readonly<{
+  keys: readonly string[];
+  action: string;
+}>;
+
+export type ControlsGuideCopy = Readonly<{
+  label: string;
+  title: string;
+  tip: string;
+  bindings: readonly ControlsGuideBinding[];
+}>;
+
 export type ProductCopy = Readonly<{
   launcherTitle: string;
   launcherIntroduction: string;
   launcherKicker: string;
   experiencesLabel: string;
+  controlsGuide: ControlsGuideCopy;
   selectionKicker: string;
   selectionTitle: string;
   selectionIntroduction: string;
@@ -100,11 +113,38 @@ const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
   }),
 ]);
 
+const PT_CONTROLS_GUIDE: ControlsGuideCopy = Object.freeze({
+  label: "Como jogar",
+  title: "Comandos da arena",
+  tip: "Os mesmos atalhos valem no jogo online e no treino. A habilidade especial depende do personagem escolhido.",
+  bindings: Object.freeze([
+    Object.freeze({ keys: Object.freeze(["W", "A", "S", "D", "↑", "↓", "←", "→"]), action: "Mover" }),
+    Object.freeze({ keys: Object.freeze(["Q"]), action: "Soltar bomba" }),
+    Object.freeze({ keys: Object.freeze(["R"]), action: "Detonar bomba remota" }),
+    Object.freeze({ keys: Object.freeze(["Espaço"]), action: "Habilidade especial" }),
+    Object.freeze({ keys: Object.freeze(["E"]), action: "Pronto no lobby" }),
+  ]),
+});
+
+const EN_CONTROLS_GUIDE: ControlsGuideCopy = Object.freeze({
+  label: "How to play",
+  title: "Arena controls",
+  tip: "The same controls apply online and in training. The special ability depends on your chosen fighter.",
+  bindings: Object.freeze([
+    Object.freeze({ keys: Object.freeze(["W", "A", "S", "D", "↑", "↓", "←", "→"]), action: "Move" }),
+    Object.freeze({ keys: Object.freeze(["Q"]), action: "Drop bomb" }),
+    Object.freeze({ keys: Object.freeze(["R"]), action: "Detonate remote bomb" }),
+    Object.freeze({ keys: Object.freeze(["Space"]), action: "Special ability" }),
+    Object.freeze({ keys: Object.freeze(["E"]), action: "Ready in lobby" }),
+  ]),
+});
+
 const PT_COPY: ProductCopy = Object.freeze({
   launcherTitle: "Bomba PvP",
   launcherIntroduction: "Arena de bombardeiros no navegador. Conheça o elenco e entre na partida.",
   launcherKicker: "BROWSER BATTLE ARENA",
   experiencesLabel: "Modos de jogo",
+  controlsGuide: PT_CONTROLS_GUIDE,
   selectionKicker: "PREPARE SUA ENTRADA",
   selectionTitle: "Escolha seu personagem",
   selectionIntroduction: "Esta escolha acompanha você até a próxima etapa da experiência.",
@@ -132,6 +172,7 @@ const EN_COPY: ProductCopy = Object.freeze({
   launcherIntroduction: "Browser bomber arena. Meet the roster and jump into a match.",
   launcherKicker: "BROWSER BATTLE ARENA",
   experiencesLabel: "Game modes",
+  controlsGuide: EN_CONTROLS_GUIDE,
   selectionKicker: "PREPARE YOUR ENTRY",
   selectionTitle: "Choose your character",
   selectionIntroduction: "This choice follows you into the next step of the experience.",

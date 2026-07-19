@@ -4,6 +4,7 @@ dist/
 .wrangler/
 coverage/
 *.log
+.slim/deepwork/
 
 # Champion authoring output stays local or in external artifact storage.
 # Normal Git keeps runtime assets plus experiment manifests/documentation.

@@ -16,12 +16,24 @@ export const PENDULA_DEFINITION = deepFreeze({
     accent: "gold",
     localized: {
       "pt-BR": {
-        label: "Personagem 6",
-        description: "Autômata de relojoaria · Command: Pull",
+        label: "Controle de posição",
+        description:
+          "Autômata de relojoaria. Reorganiza o combate puxando adversários para perto e desmontando posições seguras.",
+        skillName: "Command: Pull",
+        skillSummary:
+          "Após uma breve canalização, puxa adversários em um raio de quatro casas para posições livres próximas.",
+        analysis:
+          "Quebra formações e aproxima alvos das bombas; adversários já adjacentes não são movidos.",
       },
       en: {
-        label: "Character 6",
-        description: "Clockwork ballerina · Command: Pull",
+        label: "Position control",
+        description:
+          "Clockwork ballerina. She reshapes fights by pulling opponents close and dismantling safe positions.",
+        skillName: "Command: Pull",
+        skillSummary:
+          "After a short channel, pulls opponents within four tiles toward nearby open positions.",
+        analysis:
+          "Breaks formations and draws targets toward bombs; already adjacent opponents are not moved.",
       },
     },
   },

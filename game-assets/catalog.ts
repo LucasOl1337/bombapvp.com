@@ -39,6 +39,11 @@ import verdantRuinsFloorBaseUrl from "./arenas/themes/verdant-ruins/floor-base.p
 import verdantRuinsFloorLaneUrl from "./arenas/themes/verdant-ruins/floor-lane.png?url";
 import verdantRuinsFloorSpawnUrl from "./arenas/themes/verdant-ruins/floor-spawn.png?url";
 import verdantRuinsWallUrl from "./arenas/themes/verdant-ruins/wall.png?url";
+import tournamentCleanCrateUrl from "./arenas/themes/tournament-clean/crate.png?url";
+import tournamentCleanFloorBaseUrl from "./arenas/themes/tournament-clean/floor-base.png?url";
+import tournamentCleanFloorLaneUrl from "./arenas/themes/tournament-clean/floor-lane.png?url";
+import tournamentCleanFloorSpawnUrl from "./arenas/themes/tournament-clean/floor-spawn.png?url";
+import tournamentCleanWallUrl from "./arenas/themes/tournament-clean/wall.png?url";
 import arcRuneDangerTelegraphUrl from "./arenas/shared/arc-rune-danger-telegraph-v1.png?url";
 import citadelReactorBlockUrl from "./arenas/shared/citadel-breach-reactor-block-v1-20260718-1527.png?url";
 import citadelConduitFloorUrl from "./arenas/shared/citadel-conduit-floor-tile-v2-20260718-1635.png?url";
@@ -86,6 +91,24 @@ import breachStatusBadgeUrl from "./ui/hud/breach-status-badge-v1-20260718-1545.
 import chainComboMeterUrl from "./ui/hud/chain-combo-meter-v1.png?url";
 import echoChargeReadyBadgeUrl from "./ui/hud/echo-charge-ready-badge-v1-20260718-1616.png?url";
 import fuseHeatMeterUrl from "./ui/hud/fuse-heat-meter-v1-20260718-1705.png?url";
+import hudIconBombUrl from "./ui/hud/icons/hud-icon-bomb.png?url";
+import hudIconFlameUrl from "./ui/hud/icons/hud-icon-flame.png?url";
+import hudIconSpeedUrl from "./ui/hud/icons/hud-icon-speed.png?url";
+import hudIconRemoteUrl from "./ui/hud/icons/hud-icon-remote.png?url";
+import hudIconShieldUrl from "./ui/hud/icons/hud-icon-shield.png?url";
+import hudIconBombPassUrl from "./ui/hud/icons/hud-icon-bomb-pass.png?url";
+import hudIconKickUrl from "./ui/hud/icons/hud-icon-kick.png?url";
+import hudIconShortFuseUrl from "./ui/hud/icons/hud-icon-short-fuse.png?url";
+import hudIconUltReadyUrl from "./ui/hud/icons/hud-icon-ult-ready.png?url";
+import hudIconAliveUrl from "./ui/hud/icons/hud-icon-alive.png?url";
+import hudIconDeadUrl from "./ui/hud/icons/hud-icon-dead.png?url";
+import hudFrameRivalNormalUrl from "./ui/hud/frames/frame-rival-normal.png?url";
+import hudFrameRivalDeadUrl from "./ui/hud/frames/frame-rival-dead.png?url";
+import hudFrameRivalUltReadyUrl from "./ui/hud/frames/frame-rival-ult-ready.png?url";
+import hudFrameLocalNormalUrl from "./ui/hud/frames/frame-local-normal.png?url";
+import hudFrameLocalDeadUrl from "./ui/hud/frames/frame-local-dead.png?url";
+import hudFrameLocalUltReadyUrl from "./ui/hud/frames/frame-local-ult-ready.png?url";
+import hudFrameMatchCenterUrl from "./ui/hud/frames/frame-match-center.png?url";
 
 const GAME_ASSET_CATALOG = Object.freeze({
   "gameplay.bomb.sprite": bombUrl,
@@ -123,6 +146,11 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "arena.theme.ember-kiln.floor.spawn": emberKilnFloorSpawnUrl,
   "arena.theme.ember-kiln.wall": emberKilnWallUrl,
   "arena.theme.ember-kiln.crate": emberKilnCrateUrl,
+  "arena.theme.tournament-clean.floor.base": tournamentCleanFloorBaseUrl,
+  "arena.theme.tournament-clean.floor.lane": tournamentCleanFloorLaneUrl,
+  "arena.theme.tournament-clean.floor.spawn": tournamentCleanFloorSpawnUrl,
+  "arena.theme.tournament-clean.wall": tournamentCleanWallUrl,
+  "arena.theme.tournament-clean.crate": tournamentCleanCrateUrl,
   "arena.shared.floor.base": sharedFloorBaseUrl,
   "arena.shared.floor.lane": sharedFloorLaneUrl,
   "arena.shared.floor.spawn": sharedFloorSpawnUrl,
@@ -174,11 +202,34 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "ui.hud.breach-status": breachStatusBadgeUrl,
   "ui.hud.echo-charge-ready": echoChargeReadyBadgeUrl,
   "ui.hud.fuse-heat-meter": fuseHeatMeterUrl,
+  "ui.hud.icon.bomb": hudIconBombUrl,
+  "ui.hud.icon.flame": hudIconFlameUrl,
+  "ui.hud.icon.speed": hudIconSpeedUrl,
+  "ui.hud.icon.remote": hudIconRemoteUrl,
+  "ui.hud.icon.shield": hudIconShieldUrl,
+  "ui.hud.icon.bomb-pass": hudIconBombPassUrl,
+  "ui.hud.icon.kick": hudIconKickUrl,
+  "ui.hud.icon.short-fuse": hudIconShortFuseUrl,
+  "ui.hud.icon.ult-ready": hudIconUltReadyUrl,
+  "ui.hud.icon.alive": hudIconAliveUrl,
+  "ui.hud.icon.dead": hudIconDeadUrl,
+  "ui.hud.frame.rival.normal": hudFrameRivalNormalUrl,
+  "ui.hud.frame.rival.dead": hudFrameRivalDeadUrl,
+  "ui.hud.frame.rival.ult-ready": hudFrameRivalUltReadyUrl,
+  "ui.hud.frame.local.normal": hudFrameLocalNormalUrl,
+  "ui.hud.frame.local.dead": hudFrameLocalDeadUrl,
+  "ui.hud.frame.local.ult-ready": hudFrameLocalUltReadyUrl,
+  "ui.hud.frame.match-center": hudFrameMatchCenterUrl,
   "marketing.citadel-breach.key-art": citadelBreachKeyArtUrl,
   "marketing.citadel-breach.launcher-banner": citadelBreachLauncherBannerUrl,
 } as const);
 
 export type GameAssetId = keyof typeof GAME_ASSET_CATALOG;
+
+/** Stable ordered list of every catalog id (audio + visual). */
+export const GAME_ASSET_IDS = Object.freeze(
+  Object.keys(GAME_ASSET_CATALOG) as GameAssetId[],
+);
 
 export function resolveGameAsset(assetId: GameAssetId): string {
   return GAME_ASSET_CATALOG[assetId];

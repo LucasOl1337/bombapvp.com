@@ -16,12 +16,24 @@ export const NIX_EMBER_DEFINITION = deepFreeze({
     accent: "red",
     localized: {
       "pt-BR": {
-        label: "Personagem 5",
-        description: "Sabotador de brasas · vault de sobrevivência",
+        label: "Sobrevivência",
+        description:
+          "Sabotador de brasas. Vive no limite do fogo: planta bombas, provoca e salta quando o mapa fecha.",
+        skillName: "Ember Vault",
+        skillSummary:
+          "Salto de sobrevivência sobre uma bomba ou linha de chamas para alcançar uma posição segura do outro lado.",
+        analysis:
+          "É uma forte rota de fuga; guarde o salto para quando as saídas normais realmente desaparecerem.",
       },
       en: {
-        label: "Character 5",
-        description: "Ember saboteur · survival vault hop",
+        label: "Survival",
+        description:
+          "Ember saboteur. Lives on the fire line: plant, bait, then hop the death row when the map shrinks.",
+        skillName: "Ember Vault",
+        skillSummary:
+          "Survival hop over a bomb or flame line. Crosses the threat and lands on the far side still standing.",
+        analysis:
+          "A strong escape route; save the vault for when normal exits truly disappear.",
       },
     },
   },

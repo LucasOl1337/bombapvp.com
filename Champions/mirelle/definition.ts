@@ -16,12 +16,24 @@ export const MIRELLE_DEFINITION = deepFreeze({
     accent: "blue",
     localized: {
       "pt-BR": {
-        label: "Personagem 7",
-        description: "Sereia das mares · Tide Exchange (troca posicao ou bomba)",
+        label: "Troca tática",
+        description:
+          "Sereia das marés. Vira a mesa trocando de lugar com um rival ou reposicionando uma bomba.",
+        skillName: "Tide Exchange",
+        skillSummary:
+          "Troca de posição com o adversário mais próximo ou, se não houver um alvo, com uma bomba no alcance.",
+        analysis:
+          "Exige leitura do alvo mais próximo: uma boa troca escapa do cerco, enquanto uma escolha ruim leva você ao perigo.",
       },
       en: {
-        label: "Character 7",
-        description: "Tide siren · Tide Exchange (swap foe or bomb)",
+        label: "Tactical swap",
+        description:
+          "Tide siren. She flips the board by trading places with an opponent or repositioning a bomb.",
+        skillName: "Tide Exchange",
+        skillSummary:
+          "Swaps with the nearest opponent or, when no opponent is in range, with a nearby bomb.",
+        analysis:
+          "Target reading matters: a good exchange escapes a trap, while a poor choice places her in danger.",
       },
     },
   },

@@ -70,8 +70,6 @@ describe("letalidade autoritativa da chama residual", () => {
 
     const result = app.exportOnlineSnapshot();
     expect(result.flames[0].remainingMs).toBeGreaterThan(0);
-    // Death uses hitbox overlap: player may die as soon as the body touches the
-    // flame tile, before floor(position) reports that discrete tile.
     expect(result.players[1].alive).toBe(false);
     expect(result.endlessStats.kills[2]).toBe(1);
     expect(result.endlessStats.opponentDeaths[1]).toBe(1);
@@ -185,8 +183,7 @@ describe("letalidade autoritativa da chama residual", () => {
   it("mata no instante da explosao se o corpo so sobrepoe tile de blast adjacente", () => {
     const app = createMatch([1, 2, 3]);
     const snapshot = app.exportOnlineSnapshot();
-    // Standing near right edge of (1,1); bomb on (2,1) range 1 covers (1,1) and (2,1) and (3,1)...
-    // Place player so discrete tile is (1,1) but body overlaps bomb tile (2,1) which will flame.
+    // Standing near right edge of (1,1); bomb on (2,1) range 1 covers adjacent tiles.
     snapshot.players[1].position = { x: 79, y: 60 }; // tile 1,1 center-ish right edge (tile1: 40-80)
     snapshot.players[1].tile = { x: 1, y: 1 };
     snapshot.players[1].spawnProtectionMs = 0;

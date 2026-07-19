@@ -66,6 +66,9 @@ describe("Bomba PvP app", () => {
     expect(portugueseRoot.querySelector(".experience-region")).not.toBeNull();
     expect(portugueseRoot.querySelector(".citadel-feature")).toBeNull();
     expect(portugueseRoot.querySelector(".roster-showcase")).not.toBeNull();
+    expect(within(portugueseRoot).getByRole("region", { name: "Comandos da arena" })).toBeTruthy();
+    expect(within(portugueseRoot).getByText("Soltar bomba")).toBeTruthy();
+    expect(within(portugueseRoot).getByText("Habilidade especial")).toBeTruthy();
 
     app.dispose();
     const englishRoot = createRoot();

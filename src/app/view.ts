@@ -14,6 +14,7 @@ import {
 
 type Dispatch = (intent: AppIntent) => void;
 type CharacterSnapshot = AppSnapshot["characters"][number];
+type ExperienceSnapshot = AppSnapshot["experiences"][number];
 
 function element<K extends keyof HTMLElementTagNameMap>(
   document: Document,
@@ -123,10 +124,7 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
   markImage.className = "brand__mark-image";
   mark.append(markImage);
   const copy = element(document, "span", "brand__copy");
-  copy.append(
-    element(document, "span", "brand__eyebrow", "BROWSER BATTLE ARENA"),
-    element(document, "span", "brand__name", snapshot.brand),
-  );
+  copy.append(element(document, "span", "brand__name", snapshot.brand));
   home.append(mark, copy);
 
   const languages = element(document, "div", "brand__languages");
@@ -150,7 +148,19 @@ function renderBrand(document: Document, snapshot: AppSnapshot, dispatch: Dispat
     languages.append(link);
   });
 
-  header.append(productHeading, home, languages);
+  const status = element(document, "span", "brand__status");
+  status.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Launcher pronto" : "Launcher ready");
+  status.append(
+    element(document, "span", "brand__status-dot"),
+    element(
+      document,
+      "span",
+      "brand__status-copy",
+      snapshot.locale === "pt-BR" ? "LAUNCHER PRONTO" : "LAUNCHER READY",
+    ),
+  );
+
+  header.append(productHeading, home, status, languages);
   return header;
 }
 
@@ -267,6 +277,8 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
   const panel = element(document, "aside", "roster-showcase");
   panel.setAttribute("aria-label", snapshot.copy.charactersLabel);
 
+  const main = element(document, "div", "roster-showcase__main");
+
   const stageWrap = element(document, "div", "roster-showcase__stage");
   const portraitHost = element(document, "div", "roster-showcase__viewport");
   portraitHost.setAttribute("aria-hidden", "true");
@@ -287,18 +299,28 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
   next.type = "button";
   next.setAttribute("aria-label", isPortuguese ? "Próximo personagem" : "Next character");
 
+  // Nav over the portrait so the fighter keeps a full square stage.
   stageWrap.append(prev, portraitHost, next);
 
   const detail = element(document, "div", "roster-showcase__detail");
   const label = element(document, "p", "roster-showcase__label");
   const name = element(document, "h3", "roster-showcase__name");
   const description = element(document, "p", "roster-showcase__description");
+  const skillBlock = element(document, "div", "roster-showcase__skill");
+  const skillTitle = element(document, "p", "roster-showcase__skill-title");
+  const skillSummary = element(document, "p", "roster-showcase__skill-summary");
+  skillBlock.append(skillTitle, skillSummary);
+  const analysis = element(document, "p", "roster-showcase__analysis");
   const counter = element(document, "p", "roster-showcase__counter");
   counter.setAttribute("aria-live", "polite");
-  detail.append(label, name, description, counter);
+  const profile = element(document, "section", "roster-showcase__profile");
+  profile.setAttribute("aria-label", isPortuguese ? "Ficha do personagem" : "Character profile");
+  profile.append(label, name, description, skillBlock, analysis, counter);
+  detail.append(renderControlsGuide(document, snapshot), profile);
+
+  main.append(stageWrap, detail);
 
   const thumbs = element(document, "div", "roster-showcase__thumbs");
-  thumbs.setAttribute("role", "tablist");
   thumbs.setAttribute("aria-label", snapshot.copy.charactersLabel);
 
   const thumbButtons: HTMLButtonElement[] = [];
@@ -309,9 +331,8 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
       "roster-showcase__thumb",
     ) as HTMLButtonElement;
     thumb.type = "button";
-    thumb.setAttribute("role", "tab");
     thumb.setAttribute("aria-label", character.name);
-    thumb.setAttribute("aria-selected", "false");
+    thumb.setAttribute("aria-pressed", "false");
     const thumbImage = createCharacterImage(document, character, {
       decorative: true,
       width: 64,
@@ -346,17 +367,26 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
     const character = characters[index];
     if (!character) return;
 
+    const cooldownSec = Math.round(character.skillCooldownMs / 100) / 10;
+    const skillHeading = isPortuguese
+      ? `Habilidade · ${character.skillName} · ${cooldownSec}s`
+      : `Ability · ${character.skillName} · ${cooldownSec}s`;
+    const analysisPrefix = isPortuguese ? "Leitura: " : "Read: ";
+
     portraitHost.dataset.accent = character.accent;
     label.textContent = character.label;
     name.textContent = character.name;
     description.textContent = character.description;
+    skillTitle.textContent = skillHeading;
+    skillSummary.textContent = character.skillSummary;
+    analysis.textContent = analysisPrefix + character.analysis;
     counter.textContent = `${index + 1} / ${characters.length}`;
     playForCurrent();
 
     thumbButtons.forEach((thumb, thumbIndex) => {
       const selected = thumbIndex === index;
       thumb.classList.toggle("is-active", selected);
-      thumb.setAttribute("aria-selected", String(selected));
+      thumb.setAttribute("aria-pressed", String(selected));
     });
   }
 
@@ -397,17 +427,110 @@ function renderRosterShowcase(document: Document, snapshot: AppSnapshot): HTMLEl
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  panel.append(stageWrap, detail, thumbs);
+  panel.append(main, thumbs);
   paint();
   return panel;
+}
+
+function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLElement {
+  const guide = snapshot.copy.controlsGuide;
+  const section = element(document, "section", "controls-guide");
+  section.setAttribute("aria-label", guide.title);
+  section.tabIndex = 0;
+
+  const header = element(document, "header", "controls-guide__header");
+  header.append(
+    element(document, "p", "controls-guide__label", guide.label),
+    element(document, "h3", "controls-guide__title", guide.title),
+    element(
+      document,
+      "p",
+      "controls-guide__tip",
+      snapshot.locale === "pt-BR" ? "Pressione uma tecla para testar" : "Press a key to test",
+    ),
+  );
+
+  const grid = element(document, "div", "controls-guide__grid");
+  const inputKeys = ["W", "A", "S", "D", "Q", "R", "SPACE", "E"];
+  const keyElements = new Map<string, HTMLElement[]>();
+  guide.bindings.forEach((binding, bindingIndex) => {
+    const item = element(
+      document,
+      "div",
+      `controls-guide__item${bindingIndex === 0 ? " controls-guide__item--movement" : ""}`,
+    );
+    const keys = element(document, "div", "controls-guide__keys");
+    const visibleKeys = bindingIndex === 0 ? binding.keys.slice(0, 4) : binding.keys;
+    keys.setAttribute("aria-label", `${visibleKeys.join(", ")} — ${binding.action}`);
+    visibleKeys.forEach((key, keyIndex) => {
+      const keyElement = element(document, "kbd", "controls-guide__key", key);
+      const inputKey = bindingIndex === 0 ? inputKeys[keyIndex] : inputKeys[bindingIndex + 3];
+      if (inputKey) {
+        keyElement.dataset.inputKey = inputKey;
+        keyElement.tabIndex = 0;
+        const matches = keyElements.get(inputKey) ?? [];
+        matches.push(keyElement);
+        keyElements.set(inputKey, matches);
+      }
+      keys.append(keyElement);
+    });
+    item.append(keys, element(document, "p", "controls-guide__action", binding.action));
+    grid.append(item);
+  });
+
+  const feedback = element(
+    document,
+    "output",
+    "controls-guide__feedback",
+    snapshot.locale === "pt-BR" ? "[ INPUT PRONTO ]" : "[ INPUT READY ]",
+  );
+  feedback.setAttribute("aria-live", "polite");
+
+  const setKeyState = (inputKey: string, active: boolean): void => {
+    const matches = keyElements.get(inputKey);
+    if (!matches) return;
+    matches.forEach((keyElement) => keyElement.classList.toggle("is-active", active));
+    section.classList.toggle("is-receiving-input", active);
+    feedback.textContent = active
+      ? `[ ${inputKey === "SPACE" ? (snapshot.locale === "pt-BR" ? "ESPAÇO" : "SPACE") : inputKey} // OK ]`
+      : (snapshot.locale === "pt-BR" ? "[ INPUT PRONTO ]" : "[ INPUT READY ]");
+  };
+  const normalizeKey = (event: KeyboardEvent): string =>
+    event.code === "Space" ? "SPACE" : event.key.toUpperCase();
+  const onKeyDown = (event: KeyboardEvent): void => setKeyState(normalizeKey(event), true);
+  const onKeyUp = (event: KeyboardEvent): void => setKeyState(normalizeKey(event), false);
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+
+  keyElements.forEach((elements, inputKey) => {
+    elements.forEach((keyElement) => {
+      keyElement.addEventListener("pointerdown", () => setKeyState(inputKey, true));
+      keyElement.addEventListener("pointerup", () => setKeyState(inputKey, false));
+      keyElement.addEventListener("pointerleave", () => setKeyState(inputKey, false));
+    });
+  });
+
+  const observer = new MutationObserver(() => {
+    if (!section.isConnected) {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  section.append(header, feedback, grid);
+  return section;
 }
 
 function renderExperienceGrid(
   document: Document,
   snapshot: AppSnapshot,
   dispatch: Dispatch,
+  onPreview?: (experience: ExperienceSnapshot, index: number) => void,
 ): HTMLElement {
   const grid = element(document, "div", "experience-grid");
+  const cards: HTMLElement[] = [];
   snapshot.experiences.forEach((experience, index) => {
     const article = element(
       document,
@@ -444,41 +567,189 @@ function renderExperienceGrid(
     );
     addArrow(document, action);
     article.append(header, copy, action);
+    const preview = (): void => {
+      cards.forEach((card, cardIndex) => card.classList.toggle("is-previewed", cardIndex === index));
+      onPreview?.(experience, index);
+    };
+    article.addEventListener("pointerenter", preview);
+    article.addEventListener("focusin", preview);
+    if (index === 0) article.classList.add("is-previewed");
     grid.append(article);
+    cards.push(article);
   });
   return grid;
+}
+
+type ModeBriefing = Readonly<{
+  code: string;
+  summary: string;
+  format: string;
+  pace: string;
+  ideal: string;
+  note: string;
+}>;
+
+function getModeBriefing(locale: AppSnapshot["locale"], experienceId: string): ModeBriefing {
+  const isPortuguese = locale === "pt-BR";
+  if (experienceId === "bot-training") {
+    return isPortuguese
+      ? {
+          code: "CANAL 02 // SIMULAÇÃO",
+          summary: "Arena isolada para testar movimentação, alcance das bombas e habilidade especial sem a pressão de uma sala pública.",
+          format: "Jogador vs bots",
+          pace: "Ajustável",
+          ideal: "Aprender e aquecer",
+          note: "Escolha segura para entender um personagem novo antes de entrar no PvP.",
+        }
+      : {
+          code: "CHANNEL 02 // SIMULATION",
+          summary: "An isolated arena for testing movement, bomb reach, and special abilities without the pressure of a public room.",
+          format: "Player vs bots",
+          pace: "Adjustable",
+          ideal: "Learn and warm up",
+          note: "The safe route for learning a new fighter before joining PvP.",
+        };
+  }
+  if (experienceId === "bot-vs-bot-lab") {
+    return isPortuguese
+      ? {
+          code: "CANAL 03 // OBSERVAÇÃO",
+          summary: "Bancada de testes para configurar competidores autônomos, acompanhar decisões e comparar o comportamento de cada modelo.",
+          format: "Bot vs bot",
+          pace: "Analítico",
+          ideal: "Observar e comparar",
+          note: "Aqui você não pilota um personagem: prepara o confronto e lê o resultado.",
+        }
+      : {
+          code: "CHANNEL 03 // OBSERVATION",
+          summary: "A test bench for configuring autonomous competitors, following decisions, and comparing model behavior.",
+          format: "Bot vs bot",
+          pace: "Analytical",
+          ideal: "Observe and compare",
+          note: "You do not control a fighter here: set up the clash and read the outcome.",
+        };
+  }
+  return isPortuguese
+    ? {
+        code: "CANAL 01 // AO VIVO",
+        summary: "Sala contínua de rodadas rápidas. Entre, escolha seu personagem e dispute a arena com jogadores e Completers.",
+        format: "PvP contínuo",
+        pace: "Competitivo",
+        ideal: "Entrar e jogar",
+        note: "É a experiência principal do Bomba PvP e o caminho mais rápido até uma partida.",
+      }
+    : {
+        code: "CHANNEL 01 // LIVE",
+        summary: "A continuous room of fast rounds. Join, choose your fighter, and contest the arena with players and Completers.",
+        format: "Continuous PvP",
+        pace: "Competitive",
+        ideal: "Jump in and play",
+        note: "This is the main Bomba PvP experience and the fastest route into a match.",
+      };
+}
+
+function renderModeBriefing(
+  document: Document,
+  snapshot: AppSnapshot,
+): { element: HTMLElement; show: (experience: ExperienceSnapshot, index: number) => void } {
+  const isPortuguese = snapshot.locale === "pt-BR";
+  const aside = element(document, "aside", "mode-briefing");
+  aside.setAttribute("aria-label", isPortuguese ? "Detalhes do modo" : "Mode details");
+
+  const code = element(document, "samp", "mode-briefing__code");
+  const indexLabel = element(document, "span", "mode-briefing__index");
+  const title = element(document, "h3", "mode-briefing__title");
+  const summary = element(document, "p", "mode-briefing__summary");
+  const telemetry = element(document, "dl", "mode-briefing__telemetry");
+  const formatValue = element(document, "dd", "mode-briefing__value");
+  const paceValue = element(document, "dd", "mode-briefing__value");
+  const idealValue = element(document, "dd", "mode-briefing__value");
+  [
+    [isPortuguese ? "Formato" : "Format", formatValue],
+    [isPortuguese ? "Ritmo" : "Pace", paceValue],
+    [isPortuguese ? "Indicado" : "Best for", idealValue],
+  ].forEach(([label, value]) => {
+    const group = element(document, "div", "mode-briefing__datum");
+    group.append(element(document, "dt", "mode-briefing__label", String(label)), value as HTMLElement);
+    telemetry.append(group);
+  });
+  const note = element(document, "p", "mode-briefing__note");
+  const header = element(document, "header", "mode-briefing__header");
+  header.append(code, indexLabel);
+  aside.append(
+    header,
+    element(document, "p", "mode-briefing__eyebrow", isPortuguese ? "Leitura operacional" : "Operational read"),
+    title,
+    summary,
+    telemetry,
+    note,
+  );
+
+  const show = (experience: ExperienceSnapshot, index: number): void => {
+    const briefing = getModeBriefing(snapshot.locale, experience.id);
+    aside.dataset.experience = experience.id;
+    code.textContent = briefing.code;
+    indexLabel.textContent = `${String(index + 1).padStart(2, "0")} / ${String(snapshot.experiences.length).padStart(2, "0")}`;
+    title.textContent = experience.name;
+    summary.textContent = briefing.summary;
+    formatValue.textContent = briefing.format;
+    paceValue.textContent = briefing.pace;
+    idealValue.textContent = briefing.ideal;
+    note.textContent = briefing.note;
+  };
+
+  return { element: aside, show };
 }
 
 function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dispatch): HTMLElement {
   const region = element(document, "section", "experience-region");
   region.setAttribute("aria-label", snapshot.copy.experiencesLabel);
 
-  // Modes first: play CTAs visible without scrolling. Roster sits below.
-  const intro = element(document, "header", "page-intro page-intro--launcher");
-  intro.append(
-    element(document, "p", "page-intro__kicker", snapshot.copy.launcherKicker),
-    element(document, "h2", "page-intro__title page-intro__title--brand", snapshot.copy.launcherTitle),
-    element(document, "p", "page-intro__description", snapshot.copy.launcherIntroduction),
-  );
+  const launcherHeading = element(document, "h2", "sr-only", snapshot.copy.launcherTitle);
 
   const modes = element(document, "div", "launcher-modes");
-  modes.append(
+  const modesHeader = element(document, "div", "launcher-modes__header");
+  modesHeader.append(
     element(document, "p", "launcher-modes__label", snapshot.copy.experiencesLabel),
-    renderExperienceGrid(document, snapshot, dispatch),
+    element(
+      document,
+      "samp",
+      "launcher-modes__count",
+      snapshot.locale === "pt-BR"
+        ? `0${snapshot.experiences.length} / MODOS`
+        : `0${snapshot.experiences.length} / MODES`,
+    ),
   );
+  const modeBriefing = renderModeBriefing(document, snapshot);
+  const experienceGrid = renderExperienceGrid(document, snapshot, dispatch, modeBriefing.show);
+  const firstExperience = snapshot.experiences[0];
+  if (firstExperience) modeBriefing.show(firstExperience, 0);
+  modes.append(modesHeader, experienceGrid, modeBriefing.element);
 
   const roster = element(document, "div", "launcher-roster");
-  roster.append(
+  const rosterHeader = element(document, "div", "launcher-roster__header");
+  rosterHeader.append(
     element(
       document,
       "p",
       "launcher-roster__label",
-      snapshot.locale === "pt-BR" ? "Elenco" : "Roster",
+      snapshot.locale === "pt-BR" ? "Unidade em foco" : "Unit in focus",
     ),
+    element(
+      document,
+      "samp",
+      "launcher-roster__count",
+      snapshot.locale === "pt-BR"
+        ? `${String(snapshot.characters.length).padStart(2, "0")} / ATIVOS`
+        : `${String(snapshot.characters.length).padStart(2, "0")} / ACTIVE`,
+    ),
+  );
+  roster.append(
+    rosterHeader,
     renderRosterShowcase(document, snapshot),
   );
 
-  region.append(intro, modes, roster);
+  region.append(launcherHeading, modes, roster);
   return region;
 }
 
@@ -533,9 +804,16 @@ function renderCharacterSelection(
     portrait.append(image);
 
     const copy = element(document, "span", "character-card__copy");
+    const cooldownSec = Math.round(character.skillCooldownMs / 100) / 10;
     copy.append(
       element(document, "span", "character-card__label", character.label),
       element(document, "strong", "character-card__name", character.name),
+      element(
+        document,
+        "span",
+        "character-card__skill",
+        `${character.skillName} · ${cooldownSec}s`,
+      ),
       element(document, "span", "character-card__description", character.description),
     );
     const state = element(
