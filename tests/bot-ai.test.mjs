@@ -204,6 +204,28 @@ describe("segurança de bombas do bot determinístico", () => {
     expect(getBotDecision(players[1], context).placeBomb).toBe(false);
   });
 
+  it("não planta quando chega ao centro antes da explosão mas o corpo não limpa a casa a tempo", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }),
+      2: player(2, { x: 5, y: 5 }),
+      3: player(3, { x: 5, y: 5 }, false),
+      4: player(4, { x: 5, y: 5 }, false),
+    };
+    const crossingBomb = {
+      id: 8,
+      ownerId: 2,
+      tile: { x: 1, y: 3 },
+      fuseMs: 600,
+      ownerCanPass: false,
+      flameRange: 1,
+    };
+
+    expect(canBotSafelyPlaceBomb(
+      players[1],
+      botContext(players, corridorArena(), [crossingBomb]),
+    )).toBe(false);
+  });
+
   it("não foge da bomba nova em direção à zona de outra bomba própria", () => {
     const players = {
       1: player(1, { x: 1, y: 1 }),

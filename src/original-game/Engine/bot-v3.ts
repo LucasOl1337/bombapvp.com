@@ -2,6 +2,7 @@ import { tileKey } from "../Arenas/arena";
 import { BASE_MOVE_MS, FLAME_DURATION_MS, MIN_MOVE_MS, SPEED_STEP_MS, TILE_SIZE } from "../PersonalConfig/config";
 import { RANNI_SKILL_CHANNEL_MS } from "../../../Champions/ranni/skill";
 import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
+import { bodyTouchedTileIndices } from "../Gameplay/player-body";
 import type {
   BombState,
   Direction,
@@ -10,6 +11,7 @@ import type {
   TileCoord,
 } from "../Gameplay/types";
 import type { BotContext, BotDecision } from "./bot-contracts";
+import { SUDDEN_DEATH_FALL_MS, SUDDEN_DEATH_TICK_MS } from "./danger-map";
 
 export const BOT_V3_CHARACTER_INDEX = 0;
 
@@ -30,6 +32,12 @@ type SearchNode = Readonly<{
   firstDirection: Direction | null;
   steps: number;
 }>;
+
+type ForecastBomb = {
+  tile: TileCoord;
+  flameRange: number;
+  fuseMs: number;
+};
 
 function distance(left: TileCoord, right: TileCoord): number {
   return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
@@ -93,16 +101,22 @@ function blastTiles(bomb: Pick<BombState, "tile" | "flameRange">, context: BotCo
   return result;
 }
 
-function buildThreatMap(
+function buildBombForecast(
   context: BotContext,
   extraBomb?: Pick<BombState, "tile" | "flameRange" | "fuseMs">,
-): Map<string, number> {
-  const bombs = context.bombs.map((bomb) => ({
-    tile: bomb.tile,
+): ForecastBomb[] {
+  const bombs: ForecastBomb[] = context.bombs.map((bomb) => ({
+    tile: { ...bomb.tile },
     flameRange: bomb.flameRange,
     fuseMs: bomb.fuseMs,
   }));
-  if (extraBomb) bombs.push(extraBomb);
+  if (extraBomb) {
+    bombs.push({
+      tile: { ...extraBomb.tile },
+      flameRange: extraBomb.flameRange,
+      fuseMs: extraBomb.fuseMs,
+    });
+  }
 
   // Propagate deterministic chain reactions before projecting arrival times.
   for (let pass = 0; pass < bombs.length; pass += 1) {
@@ -119,6 +133,14 @@ function buildThreatMap(
     }
     if (!changed) break;
   }
+  return bombs;
+}
+
+function buildThreatMap(
+  context: BotContext,
+  extraBomb?: Pick<BombState, "tile" | "flameRange" | "fuseMs">,
+): Map<string, number> {
+  const bombs = buildBombForecast(context, extraBomb);
 
   const threats = new Map<string, number>();
   const mark = (tile: TileCoord, etaMs: number): void => {
@@ -134,6 +156,68 @@ function buildThreatMap(
   }
   for (const effect of context.suddenDeathClosureEffects) mark(effect.tile, 0);
   return threats;
+}
+
+/**
+ * Tiles that would still be lethal at release, or become lethal before the
+ * player has a fair physical-reaction window after release. While Ranni is
+ * channeling, her projection may cross an earlier blast safely; only the
+ * release window matters for choosing the ghost's destination.
+ */
+function buildProjectedReleaseThreatMap(player: PlayerState, context: BotContext): Map<string, number> {
+  const releaseMs = Math.max(0, player.skill.channelRemainingMs);
+  const safetyEndMs = releaseMs + DANGER_REACTION_MS;
+  const threats = new Map<string, number>();
+  const mark = (tile: TileCoord): void => {
+    threats.set(tileKey(tile.x, tile.y), 0);
+  };
+
+  for (const flame of context.flames) {
+    if (flame.remainingMs > releaseMs) {
+      mark(flame.tile);
+    }
+  }
+  for (const bomb of buildBombForecast(context)) {
+    const flameEndMs = bomb.fuseMs + FLAME_DURATION_MS;
+    if (bomb.fuseMs <= safetyEndMs && flameEndMs > releaseMs) {
+      for (const tile of blastTiles(bomb, context)) mark(tile);
+    }
+  }
+  for (const effect of context.suddenDeathClosureEffects) {
+    const impactMs = effect.impacted ? 0 : Math.max(0, SUDDEN_DEATH_FALL_MS - effect.elapsedMs);
+    if (impactMs <= safetyEndMs) mark(effect.tile);
+  }
+  if (context.suddenDeathActive) {
+    for (let index = context.suddenDeathIndex; index < context.suddenDeathPath.length; index += 1) {
+      const impactMs = context.suddenDeathTickMs
+        + (index - context.suddenDeathIndex) * SUDDEN_DEATH_TICK_MS;
+      if (impactMs > safetyEndMs) break;
+      mark(context.suddenDeathPath[index]!);
+    }
+  }
+  return threats;
+}
+
+function bodyDanger(
+  player: PlayerState,
+  threats: ReadonlyMap<string, number>,
+  context: BotContext,
+): number | undefined {
+  const touched = bodyTouchedTileIndices(player.position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  let earliest: number | undefined;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = ((rawY % height) + height) % height;
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = ((rawX % width) + width) % width;
+      const etaMs = threats.get(tileKey(x, y));
+      if (etaMs !== undefined && (earliest === undefined || etaMs < earliest)) {
+        earliest = etaMs;
+      }
+    }
+  }
+  return earliest;
 }
 
 function search(
@@ -202,7 +286,6 @@ function escapeDirection(
 function projectedEscapeDirection(
   player: PlayerState,
   enemies: readonly PlayerState[],
-  threats: ReadonlyMap<string, number>,
   context: BotContext,
 ): Direction | null {
   const projectedPosition = player.skill.projectedPosition;
@@ -215,16 +298,49 @@ function projectedEscapeDirection(
     },
     position: { ...projectedPosition },
   };
-  const projectedTileKey = tileKey(projectedPlayer.tile.x, projectedPlayer.tile.y);
-  const projectedDanger = threats.get(projectedTileKey);
-  if (projectedDanger === undefined || projectedDanger > player.skill.channelRemainingMs + DANGER_REACTION_MS) {
-    return null;
-  }
+  const releaseThreats = buildProjectedReleaseThreatMap(player, context);
+  const projectedDanger = bodyDanger(projectedPlayer, releaseThreats, context);
+  if (projectedDanger === undefined) return null;
+  const projectedKey = tileKey(projectedPlayer.tile.x, projectedPlayer.tile.y);
+  releaseThreats.set(
+    projectedKey,
+    Math.min(releaseThreats.get(projectedKey) ?? Number.POSITIVE_INFINITY, projectedDanger),
+  );
 
-  const direction = escapeDirection(projectedPlayer, enemies, threats, context);
+  const direction = escapeDirection(projectedPlayer, enemies, releaseThreats, context);
   if (!direction) return null;
   const option = context.evaluateProjectedMovementOption(projectedPlayer, direction, PROJECTED_MOVEMENT_STEP_MS);
   return context.canMovementOptionAdvance(projectedPosition, option) ? direction : null;
+}
+
+function projectedBombEgressDirection(
+  player: PlayerState,
+  context: BotContext,
+): Direction | null {
+  const projectedPosition = player.skill.projectedPosition;
+  if (!projectedPosition || (player.skill.projectedBombEgressIds?.length ?? 0) === 0) {
+    return null;
+  }
+  const projectedPlayer: PlayerState = {
+    ...player,
+    tile: {
+      x: Math.floor(projectedPosition.x / TILE_SIZE),
+      y: Math.floor(projectedPosition.y / TILE_SIZE),
+    },
+    position: { ...projectedPosition },
+  };
+  const candidates = [player.skill.projectedLastMoveDirection, ...orderedDirections(player)]
+    .filter((direction, index, directions): direction is Direction => (
+      direction !== null && directions.indexOf(direction) === index
+    ));
+  return candidates.find((direction) => {
+    const option = context.evaluateProjectedMovementOption(
+      projectedPlayer,
+      direction,
+      PROJECTED_MOVEMENT_STEP_MS,
+    );
+    return context.canMovementOptionAdvance(projectedPosition, option);
+  }) ?? null;
 }
 
 function isProjectionTrappedOnBomb(player: PlayerState, context: BotContext): boolean {
@@ -268,7 +384,10 @@ function physicalBombEgressDirection(
 ): Direction | null {
   const hasBodyEgress = context.bombs.some((bomb) => (
     context.isPlayerOverlappingTile(player, bomb.tile)
-    && bomb.bodyEgressPlayerIds?.includes(player.id)
+    && (
+      (bomb.ownerId === player.id && bomb.ownerCanPass)
+      || bomb.bodyEgressPlayerIds?.includes(player.id)
+    )
   ));
   if (!hasBodyEgress) return null;
 
@@ -363,22 +482,25 @@ function canPlacePhaseBomb(player: PlayerState, target: PlayerState | null, cont
 }
 
 function hasRemoteBombThreat(player: PlayerState, context: BotContext): boolean {
-  const currentKey = tileKey(player.tile.x, player.tile.y);
   return context.bombs.some((bomb) => (
     bomb.ownerId !== player.id
     && context.players[bomb.ownerId].remoteLevel > 0
-    && blastTiles(bomb, context).some((tile) => tileKey(tile.x, tile.y) === currentKey)
+    && blastTiles(bomb, context).some((tile) => context.isPlayerOverlappingTile(player, tile))
   ));
 }
 
 function canRemoteStrike(player: PlayerState, target: PlayerState | null, context: BotContext): boolean {
   if (!target || player.remoteLevel <= 0 || target.spawnProtectionMs > 0 || target.flameGuardMs > 0) return false;
-  const playerKey = tileKey(player.tile.x, player.tile.y);
   const targetKey = tileKey(target.tile.x, target.tile.y);
   return context.bombs.some((bomb) => {
     if (bomb.ownerId !== player.id) return false;
-    const blast = new Set(blastTiles(bomb, context).map((tile) => tileKey(tile.x, tile.y)));
-    return blast.has(targetKey) && !blast.has(playerKey);
+    let hitsTarget = false;
+    let hitsSelf = false;
+    for (const tile of blastTiles(bomb, context)) {
+      hitsTarget ||= tileKey(tile.x, tile.y) === targetKey;
+      hitsSelf ||= context.isPlayerOverlappingTile(player, tile);
+    }
+    return hitsTarget && !hitsSelf;
   });
 }
 
@@ -390,12 +512,22 @@ function canRemoteStrike(player: PlayerState, target: PlayerState | null, contex
 export function getBotV3Decision(player: PlayerState, context: BotContext): BotDecision {
   const enemies = activeEnemies(player, context);
   const target = enemies[0] ?? null;
-  const threats = context.dangerMap ?? buildThreatMap(context);
-  const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
+  // The shared danger map is tile-based. Copy it before adding this player's
+  // body-overlap danger so one bot cannot alter another bot's route search.
+  const threats = new Map(context.dangerMap ?? buildThreatMap(context));
+  const currentDanger = bodyDanger(player, threats, context);
+  if (currentDanger !== undefined) {
+    const currentKey = tileKey(player.tile.x, player.tile.y);
+    threats.set(
+      currentKey,
+      Math.min(threats.get(currentKey) ?? Number.POSITIVE_INFINITY, currentDanger),
+    );
+  }
   const remoteThreat = hasRemoteBombThreat(player, context);
 
   if (player.skill.phase === "channeling") {
-    const direction = projectedEscapeDirection(player, enemies, threats, context);
+    const direction = projectedBombEgressDirection(player, context)
+      ?? projectedEscapeDirection(player, enemies, context);
     const plannedPhysicalReleaseDirection = escapeDirection(player, enemies, threats, context);
     const executablePhysicalReleaseDirection = physicalBombEgressDirection(
       player,

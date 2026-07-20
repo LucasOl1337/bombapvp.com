@@ -12,12 +12,12 @@ import type { PendulaPullEffect } from "./contracts";
 import {
   PENDULA_SKILL_COOLDOWN_MS,
   PENDULA_SKILL_ID,
-} from "./definition";
+} from "./identity";
 
 export {
   PENDULA_CHARACTER_ID,
   PENDULA_SKILL_COOLDOWN_MS,
-} from "./definition";
+} from "./identity";
 
 /** Short wind-up; once started the cast always completes (no cancel on release). */
 export const PENDULA_SKILL_CHANNEL_MS = 300;

@@ -143,7 +143,7 @@ describe("política competitiva do Bomb", () => {
     });
   });
 
-  it("usa a Ranni quando o adversário bloqueia o alinhamento e a curva de fuga", () => {
+  it("só usa a Ranni bloqueada quando a canalização cobre a chama e a margem do passo final", () => {
     const players = {
       1: player(1, { x: 3, y: 3 }, {
         position: {
@@ -178,7 +178,18 @@ describe("política competitiva do Bomb", () => {
       canMovementOptionAdvance: () => false,
     });
 
-    expect(getBombDecision(players[1], blockedContext)).toMatchObject({
+    expect(getBombDecision(players[1], blockedContext)).toEqual({
+      direction: null,
+      placeBomb: false,
+    });
+    const committedContext = context(players, testArena, [{
+      ...bombs[0],
+      fuseMs: 800,
+    }], {
+      evaluateMovementOption: (_candidate, direction) => ({ direction }),
+      canMovementOptionAdvance: () => false,
+    });
+    expect(getBombDecision(players[1], committedContext)).toMatchObject({
       direction: null,
       placeBomb: false,
       useSkill: true,
@@ -541,6 +552,95 @@ describe("política competitiva do Bomb", () => {
     });
   });
 
+  it("não inicia uma nova explosão durante o fechamento do sudden death", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }),
+      2: player(2, { x: 2, y: 3 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,1", "1,2", "2,2", "2,3", "2,4"]);
+
+    expect(getBombDecision(players[1], context(players, testArena, [], {
+      suddenDeathActive: true,
+    }))).toMatchObject({ placeBomb: false });
+  });
+
+  it("não planta uma segunda bomba sem um plano conjunto para as duas explosões", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, { activeBombs: 1, maxBombs: 2 }),
+      2: player(2, { x: 2, y: 3 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,1", "1,2", "2,2", "2,3", "2,4"]);
+    const bombs = [{
+      id: 12,
+      ownerId: 1,
+      tile: { x: 5, y: 5 },
+      fuseMs: 1_500,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs))).toMatchObject({
+      placeBomb: false,
+    });
+  });
+
+  it("aguarda a chama própria terminar antes de iniciar outro plano de bomba", () => {
+    const players = {
+      1: player(1, { x: 2, y: 2 }, { maxBombs: 2 }),
+      2: player(2, { x: 2, y: 3 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,1", "1,2", "2,2", "2,3", "2,4"]);
+
+    expect(getBombDecision(players[1], context(players, testArena, [], {
+      flames: [{ ownerId: 1, tile: { x: 5, y: 5 }, remainingMs: 300 }],
+    }))).toMatchObject({ placeBomb: false });
+  });
+
+  it("reage ao blast adjacente que já alcança o corpo mesmo com o centro fora da linha", () => {
+    const players = {
+      1: player(1, { x: 5, y: 0 }, {
+        position: { x: 220, y: 25.9 },
+        activeBombs: 1,
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "idle",
+          channelRemainingMs: 0,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 0,
+          projectedPosition: null,
+          projectedLastMoveDirection: null,
+          projectedBombEgressIds: [],
+        },
+      }),
+      2: player(2, { x: 5, y: 0 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["5,0", "5,1", "6,0", "6,1", "6,2"]);
+    const bombs = [{
+      id: 34,
+      ownerId: 1,
+      tile: { x: 6, y: 1 },
+      fuseMs: 500,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toMatchObject({
+      direction: null,
+      placeBomb: false,
+      useSkill: true,
+    });
+  });
+
   it("move a projeção da Ranni para fora do blast durante a canalização", () => {
     const players = {
       1: player(1, { x: 2, y: 2 }, {
@@ -730,6 +830,114 @@ describe("política competitiva do Bomb", () => {
       useSkill: true,
       skillAction: "release",
     });
+  });
+
+  it("não libera a Ranni no mesmo passo em que a pose física vai explodir", () => {
+    const players = {
+      1: player(1, { x: 5, y: 1 }, {
+        position: { x: 225.46, y: 60 },
+        activeBombs: 1,
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "channeling",
+          channelRemainingMs: 1_150,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 350,
+          projectedPosition: { x: 220, y: 20 },
+          projectedLastMoveDirection: "up",
+          projectedBombEgressIds: [],
+        },
+      }),
+      2: player(2, { x: 5, y: 0 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["5,0", "5,1", "6,1", "5,2"]);
+    const bombs = [{
+      id: 37,
+      ownerId: 1,
+      tile: { x: 6, y: 1 },
+      fuseMs: 17,
+      ownerCanPass: false,
+      flameRange: 3,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).not.toMatchObject({ skillAction: "release" });
+  });
+
+  it("mantém o refúgio corporal seguro até a própria bomba iminente explodir", () => {
+    const players = {
+      1: player(1, { x: 5, y: 0 }, {
+        position: { x: 220, y: 20 },
+        activeBombs: 1,
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "cooldown",
+          channelRemainingMs: 0,
+          cooldownRemainingMs: 7_800,
+          castElapsedMs: 0,
+          projectedPosition: null,
+          projectedLastMoveDirection: null,
+          projectedBombEgressIds: [],
+        },
+      }),
+      2: player(2, { x: 5, y: 0 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["4,0", "5,0", "5,1", "6,0", "6,1", "6,2"]);
+    const bombs = [{
+      id: 35,
+      ownerId: 1,
+      tile: { x: 6, y: 1 },
+      fuseMs: 200,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toEqual({
+      direction: null,
+      placeBomb: false,
+    });
+  });
+
+  it("mantém o refúgio próprio mesmo após a habilidade voltar ao estado idle", () => {
+    const players = {
+      1: player(1, { x: 1, y: 6 }, {
+        position: { x: 63.81, y: 260 },
+        activeBombs: 1,
+        skill: {
+          id: "ranni-ice-blink",
+          phase: "idle",
+          channelRemainingMs: 0,
+          cooldownRemainingMs: 0,
+          castElapsedMs: 0,
+          projectedPosition: null,
+          projectedLastMoveDirection: null,
+          projectedBombEgressIds: [],
+        },
+      }),
+      2: player(2, { x: 1, y: 5 }),
+      3: player(3, { x: 6, y: 6 }, { active: false, alive: false }),
+      4: player(4, { x: 6, y: 6 }, { active: false, alive: false }),
+    };
+    const testArena = arena(["1,5", "1,6", "1,7", "2,6", "2,7"]);
+    const bombs = [{
+      id: 36,
+      ownerId: 1,
+      tile: { x: 2, y: 7 },
+      fuseMs: 17,
+      ownerCanPass: false,
+      flameRange: 1,
+    }];
+
+    expect(getBombDecision(players[1], context(players, testArena, bombs, {
+      isPlayerOverlappingTile: overlapsContinuously,
+    }))).toEqual({ direction: null, placeBomb: false });
   });
 
   it("não libera a Ranni enquanto a projeção ainda usa egress de bomba", () => {

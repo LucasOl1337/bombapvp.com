@@ -59,6 +59,9 @@ function experienceForPath(path: string): ExperienceId | null {
   if (path.startsWith("/jogar/")) return "continuous-room";
   if (path.startsWith("/treino/")) return "bot-training";
   if (path === "/laboratorio") return "bot-vs-bot-lab";
+  if (path === "/GameMechanics" || path.startsWith("/GameMechanics/")) {
+    return "game-mechanics-prototype";
+  }
   return null;
 }
 
@@ -85,7 +88,7 @@ function launchContinuousSnapshot(
     catalog.experiences.find((experience) => experience.id === "continuous-room") ?? null;
   const selectedCharacter = character ?? catalog.characters[0] ?? null;
   const request = resolveLaunchRequest({
-    mode: "continuous",
+    mode: "online",
     character: selectedCharacter?.id ?? null,
   });
   if (!request.ok) {
@@ -119,6 +122,19 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
   const activeExperience =
     catalog.experiences.find((experience) => experience.id === experienceId) ?? null;
 
+  if (experienceId === "game-mechanics-prototype") {
+    return freezeSnapshot({
+      brand: "Bomba PvP",
+      locale,
+      screen: "game-launch",
+      currentPath: "/GameMechanics/",
+      ...catalog,
+      activeExperience,
+      selectedCharacter: null,
+      selectedBot: defaultBotForExperience(null),
+    });
+  }
+
   if (experienceId === "bot-vs-bot-lab") {
     return freezeSnapshot({
       brand: "Bomba PvP",
@@ -132,8 +148,7 @@ export function snapshotForPath(locale: Locale, path: string): AppSnapshot {
     });
   }
 
-  // Online PvP skips the secondary character-selection screen: deep links enter
-  // the continuous arena with the first roster unit (or stay on launcher if empty).
+  // Online PvP skips the secondary selection screen and enters real matchmaking.
   if (experienceId === "continuous-room") {
     return launchContinuousSnapshot(locale, catalog, catalog.characters[0] ?? null);
   }
@@ -174,7 +189,7 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
   }
 
   if (intent.type === "open-experience") {
-    // Online PvP enters the arena immediately with the character focused on the launcher.
+    // Online PvP enters matchmaking with the character focused on the launcher.
     if (intent.experienceId === "continuous-room") {
       return launchContinuousSnapshot(
         snapshot.locale,
@@ -272,7 +287,7 @@ export function reduceApp(snapshot: AppSnapshot, intent: AppIntent): AppSnapshot
       });
     }
     // Online PvP has no secondary selection screen — revise returns to the launcher roster.
-    if (experienceId === "continuous-room") {
+    if (experienceId === "continuous-room" || experienceId === "game-mechanics-prototype") {
       return snapshotForPath(snapshot.locale, "/");
     }
     return freezeSnapshot({

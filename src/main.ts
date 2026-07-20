@@ -1,4 +1,5 @@
 import "./styles.css";
+import "./launcher.css";
 import { createBombApp } from "./app/index.ts";
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -13,8 +14,8 @@ document.documentElement.lang = isEnglish ? "en" : "pt-BR";
 document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute(
   "content",
   isEnglish
-    ? "Bomba PvP — browser bomber arena. Online PvP, bot training, and bot lab."
-    : "Bomba PvP — arena de bombardeiros no navegador. Jogo online PvP, treino contra bots e laboratório.",
+    ? "Bomba PvP — browser bomber arena. Online 1v1 duels, bot training, and bot lab."
+    : "Bomba PvP — arena de bombardeiros no navegador. Duelo online 1v1, treino contra bots e laboratório.",
 );
 
 const app = createBombApp({
@@ -22,7 +23,7 @@ const app = createBombApp({
   root,
   initialPath: window.location.pathname,
   onPathChange(path) {
-    if (path.startsWith("/arena/")) {
+    if (path.startsWith("/arena/") || path.startsWith("/GameMechanics/")) {
       window.location.assign(path);
       return;
     }

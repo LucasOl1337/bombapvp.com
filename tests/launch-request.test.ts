@@ -6,6 +6,25 @@ import {
 } from "../src/matches/url-search-params.ts";
 
 describe("launch request", () => {
+  it("faz round-trip do PvP online sem bot ou fallback silencioso", () => {
+    const literal = "mode=online&character=03a976fb-7313-4064-a477-5bb9b0760034";
+    const result = launchRequestFromSearchParams(new URLSearchParams(literal));
+
+    expect(result).toEqual({
+      ok: true,
+      request: {
+        mode: "online",
+        character: "03a976fb-7313-4064-a477-5bb9b0760034",
+      },
+    });
+    if (!result.ok) throw new Error(result.error);
+    expect(launchRequestToSearchParams(result.request).toString()).toBe(literal);
+    expect(launchRequestFromSearchParams(new URLSearchParams("mode=online")))
+      .toEqual({ ok: false, error: "online_character_invalid" });
+    expect(launchRequestFromSearchParams(new URLSearchParams("mode=online&character=forged")))
+      .toEqual({ ok: false, error: "online_character_invalid" });
+  });
+
   it("serializa treino com personagem e bot na URL documentada", () => {
     const result = resolveLaunchRequest({
       mode: "training",

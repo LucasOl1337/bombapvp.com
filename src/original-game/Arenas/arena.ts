@@ -32,10 +32,6 @@ export interface ArenaValidationResult {
   issues: ArenaValidationIssue[];
 }
 
-export interface ActiveArenaResponse {
-  arena: ArenaDefinition;
-}
-
 export function createDefaultArenaDefinition(status: ArenaDefinitionStatus = "active"): ArenaDefinition {
   const width = GRID_WIDTH;
   const height = GRID_HEIGHT;
@@ -191,32 +187,6 @@ export function isWrapPortalTile(x: number, y: number, config?: Pick<ArenaRuntim
     return config.wrapPortals.some((tile) => tile.x === x && tile.y === y);
   }
   return createWrapPortalTiles(GRID_WIDTH, GRID_HEIGHT).some((tile) => tile.x === x && tile.y === y);
-}
-
-export async function fetchActiveArenaDefinition(): Promise<ArenaDefinition> {
-  if (typeof fetch === "undefined") {
-    return createDefaultArenaDefinition();
-  }
-  try {
-    const response = await fetch("/api/arena/active", {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    if (!response.ok) {
-      return createDefaultArenaDefinition();
-    }
-    const payload = await response.json() as ActiveArenaResponse;
-    if (!payload?.arena) {
-      return createDefaultArenaDefinition();
-    }
-    const validation = validateArenaDefinition(payload.arena);
-    if (!validation.ok) {
-      return createDefaultArenaDefinition();
-    }
-    return normalizeArenaDefinition(payload.arena);
-  } catch {
-    return createDefaultArenaDefinition();
-  }
 }
 
 function clampOddDimension(value: number, min: number, max: number): number {

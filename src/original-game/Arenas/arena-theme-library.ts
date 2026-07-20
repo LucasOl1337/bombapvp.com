@@ -1,22 +1,22 @@
-import type { GameAssetId } from "../../../game-assets/index.ts";
+import type { ArenaThemeAssetId } from "../../../game-assets/index.ts";
 
 export interface ArenaThemeTilePaths {
-  base: GameAssetId;
+  base: ArenaThemeAssetId;
   /** Optional second base tile for checkerboard (breaks single-tile motif repeat). */
-  baseAlt?: GameAssetId;
+  baseAlt?: ArenaThemeAssetId;
   /** Optional 3rd/4th base layouts for multi-way floor variation (mean-matched). */
-  baseAlt2?: GameAssetId;
-  baseAlt3?: GameAssetId;
-  lane: GameAssetId;
-  spawn: GameAssetId;
+  baseAlt2?: ArenaThemeAssetId;
+  baseAlt3?: ArenaThemeAssetId;
+  lane: ArenaThemeAssetId;
+  spawn: ArenaThemeAssetId;
   /** Optional wrap-portal floor (open dashed ring). Falls back to lane + stroke. */
-  portal?: GameAssetId;
-  wall: GameAssetId;
+  portal?: ArenaThemeAssetId;
+  wall: ArenaThemeAssetId;
   /** Optional second wall for checker (breaks identical masonry motif). */
-  wallAlt?: GameAssetId;
-  crate: GameAssetId;
+  wallAlt?: ArenaThemeAssetId;
+  crate: ArenaThemeAssetId;
   /** Optional second crate for checker (breaks identical prop stamp field). */
-  crateAlt?: GameAssetId;
+  crateAlt?: ArenaThemeAssetId;
 }
 
 export interface ArenaThemePalette {
@@ -54,11 +54,11 @@ export interface ArenaThemePalette {
 }
 
 export interface ArenaThemeMotif {
-  floorPattern: "dot" | "diamond" | "vein";
-  lanePattern: "cross" | "stripe" | "chevron";
+  floorPattern: "dot" | "diamond" | "vein" | "grid";
+  lanePattern: "cross" | "stripe" | "chevron" | "rail";
   spawnPattern: "ring" | "diamond" | "seal";
-  wallStyle: "slab" | "royal" | "frost" | "obsidian";
-  crateStyle: "classic" | "trimmed" | "expedition";
+  wallStyle: "slab" | "royal" | "frost" | "obsidian" | "monolith";
+  crateStyle: "classic" | "trimmed" | "expedition" | "banded";
 }
 
 export interface ArenaThemeDefinition {
@@ -74,10 +74,140 @@ export interface ArenaThemeDefinition {
   motif: ArenaThemeMotif;
 }
 
-export const DEFAULT_ARENA_THEME_ID = "tournament-clean";
+export const DEFAULT_ARENA_THEME_ID = "nova-prime";
 export const ARENA_THEME_QUERY_PARAM = "arenaTheme";
 
 export const ARENA_THEME_LIBRARY: readonly ArenaThemeDefinition[] = [
+  {
+    id: "nova-prime",
+    name: "Nova Prime",
+    summary:
+      "Premium minimal night arena: ultra-quiet graphite-indigo slabs, luminous cyan route rails, monolithic rim-lit walls, and a single warm category for breakables.",
+    layoutFocus: [
+      "Floor stays almost silent — value steps and hairline joints only — so every dynamic element reads instantly.",
+      "Lanes are thin luminous rails in the same indigo family, forming a continuous route network.",
+      "Cyan marks structure (spawn rings, portal rings, wall rim-light); warm ember is reserved for crates and danger.",
+    ],
+    visualFocus: [
+      "Beauty through restraint: flat values, fine geometry, contained glow, zero texture noise.",
+      "Fully procedural rendering stays crisp at any resolution (no downscaled pixel-art).",
+      "One warm category (crates/danger) against a cool board gives instant gameplay reads.",
+    ],
+    pixellabDescription:
+      "procedural theme — no sprite pack; rendered from palette + motif by the engine",
+    renderMode: "procedural",
+    palette: {
+      floorBase: "#10151f",
+      floorBaseAlt: "#0e131c",
+      floorLane: "#161d2b",
+      floorLaneAlt: "#141a27",
+      floorSpawn: "#131a28",
+      floorSpawnAlt: "#111725",
+      floorPortal: "#131b2a",
+      floorPortalAlt: "#111827",
+      floorEdgeLight: "rgba(140, 220, 255, 0.06)",
+      floorEdgeDark: "rgba(2, 4, 8, 0.5)",
+      floorBorder: "rgba(120, 180, 230, 0.05)",
+      floorCenterMark: "rgba(120, 200, 255, 0.045)",
+      spawnRing: "rgba(125, 240, 255, 0.8)",
+      portalRing: "rgba(140, 235, 255, 0.72)",
+      wallShadow: "rgba(0, 0, 0, 0.45)",
+      wallOuter: "#0a0e15",
+      wallInner: "#101623",
+      wallTop: "#1c2536",
+      wallAccent: "rgba(125, 220, 255, 0.3)",
+      wallBorder: "rgba(2, 4, 8, 0.8)",
+      crateShadow: "rgba(20, 10, 4, 0.4)",
+      crateOuter: "#3d2716",
+      crateInner: "#7a4a22",
+      crateBand: "#241608",
+      crateMark: "#ffc98a",
+      suddenDeathWash: "rgba(120, 24, 10, 0.3)",
+      suddenDeathStroke: "rgba(255, 110, 60, 0.5)",
+      arenaFrame: "rgba(103, 232, 249, 0.22)",
+      arenaGlow: "rgba(103, 232, 249, 0.045)",
+      arenaMistTop: "rgba(160, 230, 255, 0.03)",
+      arenaMistBottom: "rgba(2, 5, 10, 0.16)",
+    },
+    motif: {
+      floorPattern: "grid",
+      lanePattern: "rail",
+      spawnPattern: "ring",
+      wallStyle: "monolith",
+      crateStyle: "banded",
+    },
+  },
+  {
+    id: "neon-bastion",
+    name: "Neon Bastion",
+    summary: "Night citadel: quiet indigo-slate floor, basalt walls with cyan rim-light, and the only warm category reserved for breakable crates.",
+    layoutFocus: [
+      "Floor stays dark and quiet so flames, telegraphs, and pickups burst above it.",
+      "Lanes lift within the same indigo family instead of shifting hue.",
+      "Cyan rings mark spawn and portal structure; ember is reserved for destructibles and danger.",
+    ],
+    visualFocus: [
+      "Cool structure (cyan) vs hot breakables (ember) gives instant category reads.",
+      "Walls are edge-to-edge basalt monoliths with a soft cyan rim-light from above — no per-cell lattice.",
+      "Crate is the single warm terrain category, so destructibility pops at gameplay scale.",
+    ],
+    pixellabDescription:
+      "1). dark indigo-slate floor tile, large quiet slabs, hairline joints with faint cyan light thread, seamless 2). same-family lifted lane tile 3). spawn thin open cyan ring 4). wrap-portal double dashed cyan ring 5). basalt monolith wall, edge-to-edge, soft cyan rim-light on top edge only 6). full-bleed warm umber crate with dark bands and ember sigil glow",
+    renderMode: "sprite",
+    tilePaths: {
+      base: "arena.theme.neon-bastion.floor.base",
+      baseAlt: "arena.theme.neon-bastion.floor.base-alt",
+      baseAlt2: "arena.theme.neon-bastion.floor.base-alt2",
+      baseAlt3: "arena.theme.neon-bastion.floor.base-alt3",
+      lane: "arena.theme.neon-bastion.floor.lane",
+      spawn: "arena.theme.neon-bastion.floor.spawn",
+      portal: "arena.theme.neon-bastion.floor.portal",
+      wall: "arena.theme.neon-bastion.wall",
+      wallAlt: "arena.theme.neon-bastion.wall-alt",
+      crate: "arena.theme.neon-bastion.crate",
+      crateAlt: "arena.theme.neon-bastion.crate-alt",
+    },
+    palette: {
+      floorBase: "#151a26",
+      floorBaseAlt: "#131824",
+      floorLane: "#1d2434",
+      floorLaneAlt: "#1a2130",
+      floorSpawn: "#182034",
+      floorSpawnAlt: "#151c2c",
+      floorPortal: "#1b2334",
+      floorPortalAlt: "#171e2d",
+      floorEdgeLight: "rgba(94, 220, 255, 0.1)",
+      floorEdgeDark: "rgba(4, 7, 12, 0.42)",
+      floorBorder: "rgba(34, 199, 244, 0.07)",
+      floorCenterMark: "rgba(104, 221, 255, 0.05)",
+      spawnRing: "rgba(94, 220, 255, 0.85)",
+      portalRing: "rgba(120, 228, 255, 0.8)",
+      wallShadow: "rgba(2, 4, 8, 0.4)",
+      wallOuter: "#0d1119",
+      wallInner: "#131926",
+      wallTop: "#1b2334",
+      wallAccent: "rgba(104, 221, 255, 0.4)",
+      wallBorder: "rgba(3, 5, 9, 0.78)",
+      crateShadow: "rgba(20, 10, 4, 0.35)",
+      crateOuter: "#4a2c1a",
+      crateInner: "#8a4b24",
+      crateBand: "#2b1a10",
+      crateMark: "#ffb46a",
+      suddenDeathWash: "rgba(90, 20, 12, 0.26)",
+      suddenDeathStroke: "rgba(255, 111, 60, 0.46)",
+      arenaFrame: "rgba(34, 199, 244, 0.28)",
+      arenaGlow: "rgba(104, 221, 255, 0.1)",
+      arenaMistTop: "rgba(148, 226, 255, 0.035)",
+      arenaMistBottom: "rgba(3, 6, 11, 0.12)",
+    },
+    motif: {
+      floorPattern: "vein",
+      lanePattern: "stripe",
+      spawnPattern: "ring",
+      wallStyle: "obsidian",
+      crateStyle: "trimmed",
+    },
+  },
   {
     id: "tournament-clean",
     name: "Tournament Clean",

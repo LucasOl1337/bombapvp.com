@@ -11,12 +11,12 @@ import type { MirelleTideSwapEffect } from "./contracts";
 import {
   MIRELLE_SKILL_COOLDOWN_MS,
   MIRELLE_SKILL_ID,
-} from "./definition";
+} from "./identity";
 
 export {
   MIRELLE_CHARACTER_ID,
   MIRELLE_SKILL_COOLDOWN_MS,
-} from "./definition";
+} from "./identity";
 
 /** Channel while tide locks the target, then exchange. */
 export const MIRELLE_SKILL_CHANNEL_MS = 450;

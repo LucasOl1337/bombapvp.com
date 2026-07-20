@@ -133,7 +133,7 @@ function drawToxicAura(
   ctx.restore();
 }
 
-/** Draw one flame tile (sheet → static sprite → procedural fallback). */
+/** Draw one flame tile (additive warm bloom → sheet → static sprite → procedural fallback). */
 export function drawFlameTile(
   ctx: CanvasRenderingContext2D,
   flame: FlameState,
@@ -150,6 +150,19 @@ export function drawFlameTile(
 
   if (flame.style === "toxic") {
     drawToxicAura(ctx, flame, x, y, tileSize, alpha, options.animationClockMs);
+  } else {
+    // NOVA PRIME: additive bloom so blasts read as light, not stickers.
+    const centerX = x + tileSize * 0.5;
+    const centerY = y + tileSize * 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const bloom = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, tileSize * 0.72);
+    bloom.addColorStop(0, `rgba(255, 196, 96, ${0.3 * alpha})`);
+    bloom.addColorStop(0.55, `rgba(255, 110, 40, ${0.14 * alpha})`);
+    bloom.addColorStop(1, "rgba(255, 80, 30, 0)");
+    ctx.fillStyle = bloom;
+    ctx.fillRect(x - tileSize * 0.3, y - tileSize * 0.3, tileSize * 1.6, tileSize * 1.6);
+    ctx.restore();
   }
 
   if (!flame.style || flame.style === "normal") {

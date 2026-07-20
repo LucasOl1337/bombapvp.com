@@ -10,12 +10,12 @@ import type { ChampionSkillAdapter } from "../runtime-contracts";
 import {
   NIX_EMBER_SKILL_COOLDOWN_MS,
   NIX_EMBER_SKILL_ID,
-} from "./definition";
+} from "./identity";
 
 export {
   NIX_EMBER_CHARACTER_ID,
   NIX_EMBER_SKILL_COOLDOWN_MS,
-} from "./definition";
+} from "./identity";
 
 /** Ember Vault: short hop over a bomb/flame line and land ready to plant. */
 export const NIX_EMBER_VAULT_DISTANCE_PX = TILE_SIZE * 2.5;

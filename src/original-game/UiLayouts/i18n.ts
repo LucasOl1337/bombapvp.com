@@ -379,7 +379,9 @@ export const SITE_COPY: Record<SiteLanguage, SiteCopy> = {
       arenaThemeActive: "ativo",
       arenaThemeSummary: (themeId, fallback) => {
         const summaries: Record<string, string> = {
+          "nova-prime": "Arena noturna premium: piso quieto, trilhos ciano e crates como unico ponto quente.",
           "tournament-clean": "Pedra clara e limpa para ler rotas e explosoes rapido.",
+          "neon-bastion": "Cidadela noturna: piso frio e quieto, estrutura ciano e crates ember.",
           "arcane-citadel": "Fortaleza azul-cinza com runas discretas e rotas frias.",
           "verdant-ruins": "Ruinas com musgo e pedra quente para uma arena de aventura.",
           "skyfoundry-bastion": "Muralha metalica com rotas ambar e silhuetas pesadas.",

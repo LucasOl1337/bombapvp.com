@@ -99,6 +99,8 @@ export function playAdversarialMatch({
   const latestDecision = { 1: null, 2: null };
   const computeMs = { 1: [], 2: [] };
   const decisions = { 1: 0, 2: 0 };
+  const movementDecisions = { 1: 0, 2: 0 };
+  const attackDecisions = { 1: 0, 2: 0 };
   const idleMs = { 1: 0, 2: 0 };
   const stuckMs = { 1: 0, 2: 0 };
   const currentStuckMs = { 1: 0, 2: 0 };
@@ -121,6 +123,10 @@ export function playAdversarialMatch({
         latestDecision[playerId] = decision;
         computeMs[playerId].push(elapsedMs);
         decisions[playerId] += 1;
+        if (decision.direction) movementDecisions[playerId] += 1;
+        if (decision.placeBomb || decision.detonate || decision.useSkill) {
+          attackDecisions[playerId] += 1;
+        }
       },
     },
   );
@@ -157,6 +163,8 @@ export function playAdversarialMatch({
     return [identity, {
       playerId,
       decisions: decisions[playerId],
+      movementDecisions: movementDecisions[playerId],
+      attackDecisions: attackDecisions[playerId],
       idleMs: idleMs[playerId],
       stuckMs: stuckMs[playerId],
       longestStuckMs: longestStuckMs[playerId],

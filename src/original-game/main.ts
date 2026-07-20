@@ -15,10 +15,15 @@ import { createLabConsole } from "../lab/telemetry-panel";
 import type { PlayerId } from "./Gameplay/types";
 import { getCharacterDefinition } from "../../Champions";
 import { launchRequestFromSearchParams } from "../matches/url-search-params";
+import { startOnlineDuelGame } from "../online/client/game-app-online-session";
+import type { DuelNetworkMetrics } from "../online/client/authoritative-duel-client";
+import { SoundManager, SFX_MANIFEST } from "./Engine/sound-manager";
+import { createChampionVisualRuntime } from "../../Champions/visual-runtime";
 
 declare global {
   interface Window {
     get_lab_telemetry?: () => LabTelemetryReport;
+    get_online_metrics?: () => DuelNetworkMetrics;
   }
 }
 
@@ -38,8 +43,8 @@ async function bootOriginalGame(): Promise<void> {
   const hostname = window.location.hostname.replace(/^www\./, "");
 
   document.documentElement.lang = hostname === "bombpvp.com" ? "en" : "pt-BR";
-  if (launchRequest.mode === "lab") {
-    document.body.classList.add("lab-mode");
+  if (launchRequest.mode === "lab" || launchRequest.mode === "online") {
+    document.body.classList.add(launchRequest.mode === "lab" ? "lab-mode" : "online-mode");
     root.classList.add("experience-match__stage");
     root.dataset.fullscreen = "true";
   }
@@ -47,10 +52,29 @@ async function bootOriginalGame(): Promise<void> {
   root.replaceChildren();
   root.removeAttribute("aria-live");
 
-  const game = new GameApp(root, assets);
+  const game = new GameApp(root, assets, undefined, {
+    soundManager: new SoundManager(),
+    soundManifest: SFX_MANIFEST,
+    championVisuals: createChampionVisualRuntime(),
+  });
   game.setLanguage(hostname === "bombpvp.com" ? "en" : "pt");
   game.setOfflinePreferredCharacter(selectedCharacterIndex);
   game.start();
+
+  if (launchRequest.mode === "online") {
+    const session = startOnlineDuelGame({
+      game,
+      root,
+      characterId: launchRequest.character,
+      language: hostname === "bombpvp.com" ? "en" : "pt",
+    });
+    window.get_online_metrics = session.readMetrics;
+    window.addEventListener("pagehide", () => {
+      session.dispose();
+      delete window.get_online_metrics;
+    }, { once: true });
+    return;
+  }
 
   if (launchRequest.mode === "lab") {
     const competitors = createLabMatchCompetitors(launchRequest);

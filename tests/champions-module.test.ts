@@ -14,13 +14,15 @@ import {
 const NICO_CHARACTER_ID = CHAMPION_MEMBERSHIP.nico.characterId;
 const NIX_EMBER_CHARACTER_ID = CHAMPION_MEMBERSHIP["nix-ember"].characterId;
 const PENDULA_CHARACTER_ID = CHAMPION_MEMBERSHIP.pendula.characterId;
+const LEE_SIN_CHARACTER_ID = CHAMPION_MEMBERSHIP["lee-sin"].characterId;
+const THRESH_CHARACTER_ID = CHAMPION_MEMBERSHIP["thresh"].characterId;
 
 describe("Champions module", () => {
   it("keeps each canonical champion definition, portrait and sprite bundle together", () => {
     const definitions = listCharacterDefinitions();
     const entries = listChampionAssetEntries();
-    expect(definitions).toHaveLength(7);
-    expect(entries).toHaveLength(7);
+    expect(definitions).toHaveLength(9);
+    expect(entries).toHaveLength(9);
     const assetsByDefinition = definitions.map((definition) => ({
       name: definition.name,
       assets: getChampionAssets(definition.id),
@@ -49,6 +51,16 @@ describe("Champions module", () => {
     });
     expect(summary[6]!.fileCount).toBeGreaterThanOrEqual(80);
     expect(summary[6]!.fileCount).toBeLessThanOrEqual(280);
+    expect(summary[7]).toMatchObject({
+      name: "Lee Sin",
+      size: { width: 160, height: 160 },
+    });
+    expect(summary[7]!.fileCount).toBe(179);
+    expect(summary[8]).toMatchObject({
+      name: "Thresh",
+      size: { width: 160, height: 160 },
+    });
+    expect(summary[8]!.fileCount).toBe(124);
     for (const { assets } of entries) {
       expect(assets.portraitUrl).toContain("/Champions/");
       expect(Object.values(assets.staticSprites).every(Boolean)).toBe(true);
@@ -72,6 +84,19 @@ describe("Champions module", () => {
     expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.idle.down.length).toBe(6);
     expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.right.length).toBe(12);
     expect(getChampionAssets(PENDULA_CHARACTER_ID).animations.walk.up.length).toBe(12);
+    expect(getChampionAssets(LEE_SIN_CHARACTER_ID).animations.walk.down.length).toBe(8);
+    expect(getChampionAssets(LEE_SIN_CHARACTER_ID).animations.cast.down.length).toBe(7);
+    expect(getChampionAssets(LEE_SIN_CHARACTER_ID).animations.run.right.length).toBe(6);
+    expect(getChampionAssets(LEE_SIN_CHARACTER_ID).animations.walk.left.length).toBe(8);
+    expect(getChampionAssets(LEE_SIN_CHARACTER_ID).animations.walk.up.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.idle.down.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.walk.down.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.walk.right.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.walk.up.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.walk.left.length).toBe(8);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.cast.down.length).toBe(6);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.attack.down.length).toBe(4);
+    expect(getChampionAssets(THRESH_CHARACTER_ID).animations.death.down.length).toBe(4);
   });
 
   it("projects every canonical membership into light and heavy registries", () => {

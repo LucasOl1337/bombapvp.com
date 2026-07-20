@@ -1,5 +1,21 @@
 # Backlog: arena visual + HUD de partida
 
+## Supervisor status — 2026-07-20 (ciclo NOVA PRIME)
+
+| Goal | Status |
+| --- | --- |
+| N1 Tema procedural `nova-prime` como default | **done** — `Engine/visual/arena-design.ts` + `arena-theme-library.ts` |
+| N2 Chão grid ultra-quieto / parede monolith / crate banded | **done** — renderers procedurais em `game-app.ts` |
+| N3 Backdrop deep-space + moldura hairline | **done** — `buildBackdropCache` reescrito |
+| N4 Bomba (sombra+halo+arco de fuse), chama (bloom aditivo), power-up (chip de vidro), anel de identidade por jogador | **done** |
+| N5 HUD de vidro (painéis procedurais, sem 9-slice PNG), pips em losango, chip ULT warm | **done** |
+| N6 Overlays (resultado/pause/cue/seleção) + página `/arena` (CSS glass/ciano) | **done** |
+| N6b Overlays de perigo/preview arredondados + build de produção | **done / PASS** |
+| N7 Gates: typecheck + `npm run test:full` | **PASS** (695 testes) |
+| N8 Screenshots live (início, ação, cast, resultado, rollback `?arenaTheme=neon-bastion`) | **PASS** |
+
+Rollback instantâneo: `?arenaTheme=neon-bastion` (ou qualquer tema legado) continua funcional; nenhum asset PNG removido. Sprites de campeões intocados.
+
 ## Supervisor status — 2026-07-19
 
 | Goal | Status |

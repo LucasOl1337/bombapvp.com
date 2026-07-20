@@ -19,11 +19,11 @@ import {
 } from "../PersonalConfig/config";
 import { monotonicNow } from "../../shared/monotonic-time";
 import {
-  spriteForDirection,
   type CharacterRosterEntry,
   type DirectionalSprites,
   type GameAssets,
 } from "./assets";
+import { spriteForDirection } from "./directional-sprites";
 import {
   DEFAULT_ARENA_THEME_ID,
   getArenaThemeById,
@@ -88,22 +88,19 @@ import {
   projectedBodyOverlapsTile,
   isMonotonicBodyBombEgress as pureIsMonotonicBodyBombEgress,
 } from "../Gameplay/player-body";
-import { flameHurtboxOverlapsTile, tilesFromKeys } from "../Gameplay/flame-contact";
+import { findPlayersHitByFlames, flameHurtboxOverlapsTile, tilesFromKeys } from "../Gameplay/flame-contact";
 import { drawFlameTile } from "./flame-render";
+import { NOVA, drawGlassPanel, roundedRectPath, setLetterSpacing, tileHash01 } from "./visual/arena-design";
 import {
-  computeRivalSlotWidth,
-  drawHudPanel as paintHudPanel,
   ellipsisText,
-  formatHudScoreLine,
   HUD_LAYOUT,
-  partitionHudPlayers,
 } from "./hud-format";
+import { createMatchHudPresentation, type MatchHudPresentation } from "./hud-presentation";
 import type {
   LobbyMode,
   MatchStartConfig,
   OnlineDeathCause,
   OnlineEndlessStats,
-  OnlineGameFrame,
   OnlineGameSnapshot,
   OnlineInputState,
   OnlineSessionBridge,
@@ -111,9 +108,10 @@ import type {
 import {
   AUDIO_MUTED_STORAGE_KEY,
   AUDIO_VOLUME_STORAGE_KEY,
-  SoundManager,
-  SFX_MANIFEST,
-} from "./sound-manager";
+  createNoopSoundPort,
+  type SoundManifest,
+  type SoundPort,
+} from "./sound-contract";
 import type {
   BotContext,
   BotDecision,
@@ -155,6 +153,7 @@ import {
 } from "../ultimate/skill-system";
 import type { OnlineRenderSample, PendingOnlineInput } from "../NetCode/online-sync";
 import {
+  ONLINE_INPUT_INTERVAL_MS,
   ONLINE_SNAPSHOT_INTERVAL_MS,
   appendPendingOnlineInput,
   captureOnlineLocalInput as online_captureLocalInput,
@@ -167,7 +166,8 @@ import {
   updateVisualPlayerPositions as online_updateVisualPlayerPositions,
 } from "../NetCode/online-sync";
 import { SITE_COPY, type SiteLanguage } from "../UiLayouts/i18n";
-import { createChampionVisualRuntime } from "../../../Champions/visual-runtime";
+import { createHeadlessChampionVisualRuntime } from "../../../Champions/headless-visual-runtime";
+import type { ChampionVisualRuntime } from "../../../Champions/visual-contracts";
 import { championSkillAllowsPlayerOverlap, getChampionProjectedMovementIgnoredBombIds, notifyChampionBombPlaced, notifyChampionBombRemoved, projectChampionSkillTarget } from "../../../Champions/runtime";
 import {
   isNicoBeamEffect,
@@ -221,7 +221,6 @@ const MAX_LOCAL_BOT_FILL = 3;
 const BOT_BOMB_COOLDOWN_MS = 900;
 /** Fullscreen shares the two-row layout height (was 34 — too cramped for 4p). */
 const FULLSCREEN_HUD_HEIGHT = HUD_LAYOUT.height;
-const FULLSCREEN_HUD_CENTER_WIDTH = HUD_LAYOUT.centerMaxWidth;
 const WALK_FRAME_MS = 100;
 const SKILL_FRAME_MS = 100;
 const DEATH_FRAME_MS = 90;
@@ -261,17 +260,11 @@ const CANVAS_VIEWPORT_PADDING = 32;
 const POWER_UP_PICKUP_NOTICE_MS = 2200;
 const PLAYER_SPRITE_HEIGHT_SCALE = 1.45;
 const PLAYER_SPRITE_MAX_WIDTH_SCALE = 1.2;
-/** Match launcher front: night + ember (not legacy mint HUD). */
-const CANVAS_UI_PANEL_BG = "rgba(10, 10, 15, 0.88)";
-const CANVAS_UI_PANEL_BG_STRONG = "rgba(8, 8, 12, 0.94)";
-const CANVAS_UI_BORDER = "rgba(255, 255, 255, 0.10)";
-const CANVAS_UI_BORDER_STRONG = "rgba(255, 90, 31, 0.55)";
+/** Match launcher front: night + cyan (not legacy mint HUD). */
 const CANVAS_UI_TEXT = "#f5f4ef";
-const CANVAS_UI_MUTED = "#a5a5ae";
-const CANVAS_UI_MUTED_SOFT = "rgba(165, 165, 174, 0.7)";
-const CANVAS_UI_GOLD = "#ff5a1f";
-const CANVAS_UI_GOLD_BRIGHT = "#ff8a5c";
-const CANVAS_UI_GOLD_SOFT = "rgba(255, 90, 31, 0.16)";
+const CANVAS_UI_MUTED = "#9aa3b2";
+const CANVAS_UI_MUTED_SOFT = "rgba(154, 163, 178, 0.7)";
+const CANVAS_UI_GOLD_BRIGHT = "#68ddff";
 const CANVAS_UI_SUCCESS = "#82d8a8";
 const CANVAS_UI_DANGER = "#ff7d7d";
 const CANVAS_UI_SHADOW = "rgba(0, 0, 0, 0.88)";
@@ -587,6 +580,12 @@ export interface LocalSessionReturnBrief {
   finishedAtMs: number;
 }
 
+export interface GameAppRuntimeServices {
+  readonly soundManager?: SoundPort;
+  readonly soundManifest?: SoundManifest;
+  readonly championVisuals?: ChampionVisualRuntime;
+}
+
 const LOCAL_SESSION_RETURN_BRIEF_STORAGE_KEY = "bomba-local-session-return-brief";
 const LOCAL_SESSION_RETURN_BRIEF_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -605,6 +604,8 @@ export class GameApp {
   private showWorldPlayerLabels = false;
   private hideNativeHud = false;
   private onlineInputs: Record<PlayerId, OnlineInputState> = createPlayerRecord(() => createNeutralOnlineInput());
+  private onlineOutgoingInputs: Record<PlayerId, OnlineInputState> = createPlayerRecord(() => createNeutralOnlineInput());
+  private onlineInputCooldownMs = 0;
   private onlineSnapshotCooldownMs = 0;
   private visualPlayerPositions: Record<PlayerId, PixelCoord> = createPlayerRecord(() => ({ x: 0, y: 0 }));
   private onlineRenderSamples: OnlineRenderSample[] = [];
@@ -677,7 +678,7 @@ export class GameApp {
   private crateBreakAnimations: CrateBreakAnimation[] = [];
   private bombKickImpactFeedback: BombKickImpactFeedback[] = [];
   private chainReactionFeedback: ExplosionChainReactionFeedback[] = [];
-  private readonly championVisuals = createChampionVisualRuntime();
+  private readonly championVisuals: ChampionVisualRuntime;
   private readonly prefersReducedMotion = typeof window !== "undefined"
     && typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -700,7 +701,8 @@ export class GameApp {
   private readonly characterSpriteCache = new Map<string, DirectionalSprites>();
   private readonly characterSpriteLoads = new Map<string, Promise<DirectionalSprites>>();
   private readonly spriteTrimCache = new SpriteTrimCache();
-  private readonly soundManager = new SoundManager();
+  private readonly soundManager: SoundPort;
+  private readonly soundManifest: SoundManifest | null;
   private language: SiteLanguage = "pt";
 
   // ── Performance: offscreen caches ──
@@ -714,12 +716,20 @@ export class GameApp {
   private labSafetyDangerMap: Map<string, number> | null = null;
   private arenaStaticMistGradient: CanvasGradient | null = null;
 
-  constructor(root: HTMLElement, assets: GameAssets, arenaDefinition: ArenaDefinition = createDefaultArenaDefinition()) {
+  constructor(
+    root: HTMLElement,
+    assets: GameAssets,
+    arenaDefinition: ArenaDefinition = createDefaultArenaDefinition(),
+    services: GameAppRuntimeServices = {},
+  ) {
     this.root = root;
     this.assets = assets;
     this.baseArenaDefinition = arenaDefinition;
     this.arena = createArena(this.baseArenaDefinition);
     this.headless = typeof document === "undefined" || typeof window === "undefined";
+    this.soundManager = services.soundManager ?? createNoopSoundPort();
+    this.soundManifest = services.soundManifest ?? null;
+    this.championVisuals = services.championVisuals ?? createHeadlessChampionVisualRuntime();
 
     if (this.headless) {
       const fakeCanvas = createHeadlessCanvas();
@@ -916,6 +926,8 @@ export class GameApp {
     this.matchResultCooldownMs = 0;
     this.onlineLocalPlayerId = 1;
     this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineOutgoingInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineInputCooldownMs = 0;
     this.onlineNextInputSeq = 0;
     this.onlinePendingInputs = [];
     this.onlineObservedRoundNumber = null;
@@ -937,6 +949,8 @@ export class GameApp {
     this.onlineNextInputSeq = 0;
     this.onlinePendingInputs = [];
     this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineOutgoingInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineInputCooldownMs = 0;
     this.onlineAudioPrimed = false;
     this.onlineRenderSamples = [];
     this.selectedCharacterIndex = { ...config.characterSelections };
@@ -1089,11 +1103,17 @@ export class GameApp {
     this.onlineAudioPrimed = true;
   }
 
-  public applyOnlineFrame(frame: OnlineGameFrame): void {
+  public applyOnlineFrame(frame: OnlineGameSnapshot): void {
     const previousMode = this.mode;
     const previousRoundNumber = this.roundNumber;
     const previousRoundOutcome = this.roundOutcome;
     const previousSuddenDeathActive = this.suddenDeathActive;
+    const nextBreakableTiles = new Set(frame.breakableTiles);
+    const breakableTerrainChanged = nextBreakableTiles.size !== this.arena.breakable.size
+      || [...nextBreakableTiles].some((key) => !this.arena.breakable.has(key));
+    const nextSuddenDeathClosedTiles = new Set(frame.suddenDeathClosedTiles ?? []);
+    const solidTerrainChanged = nextSuddenDeathClosedTiles.size !== this.suddenDeathClosedTiles.size
+      || [...nextSuddenDeathClosedTiles].some((key) => !this.suddenDeathClosedTiles.has(key));
     this.onlineRoomMode = frame.roomMode ?? "classic";
     this.playOnlineAudioTransition({
       bombs: frame.bombs,
@@ -1104,7 +1124,12 @@ export class GameApp {
       matchWinner: frame.matchWinner,
       previousSuddenDeathActive,
       suddenDeathActive: frame.suddenDeathActive,
+      breakableTiles: frame.breakableTiles,
+      powerUps: frame.powerUps,
     });
+    if (this.onlineSession?.role === "guest" && this.onlineAudioPrimed) {
+      this.spawnCrateBreakAnimationsFromDiff(frame.breakableTiles);
+    }
     this.mode = frame.mode;
     this.players = createPlayerRecord((playerId) => this.clonePlayerState(frame.players[playerId]));
     this.bombs = frame.bombs.map((bomb) => ({
@@ -1142,13 +1167,25 @@ export class GameApp {
     this.suddenDeathActive = frame.suddenDeathActive;
     this.suddenDeathTickMs = frame.suddenDeathTickMs;
     this.suddenDeathIndex = frame.suddenDeathIndex;
-    this.suddenDeathClosedTiles = new Set(frame.suddenDeathClosedTiles ?? []);
+    this.suddenDeathClosedTiles = nextSuddenDeathClosedTiles;
     this.suddenDeathClosureEffects = (frame.suddenDeathClosingTiles ?? []).map((effect) => ({
       tile: { ...effect.tile },
       elapsedMs: effect.elapsedMs,
       impacted: effect.impacted,
     }));
     this.arena.solid = new Set([...this.arena.config.tiles.solid, ...this.suddenDeathClosedTiles]);
+    this.arena.breakable = nextBreakableTiles;
+    this.arena.powerUps = frame.powerUps.map((powerUp) => ({
+      type: powerUp.type,
+      tile: { ...powerUp.tile },
+      revealed: powerUp.revealed,
+      collected: powerUp.collected,
+    }));
+    if (breakableTerrainChanged || solidTerrainChanged) {
+      this.invalidateArenaCache();
+    }
+    this.showDangerOverlay = frame.showDangerOverlay;
+    this.showBombPreview = frame.showBombPreview;
     this.selectedCharacterIndex = { ...frame.selectedCharacterIndex };
     this.pendingCharacterIndex = { ...frame.selectedCharacterIndex };
     this.activePlayerIds = normalizeActivePlayerIds(frame.activePlayerIds);
@@ -1179,6 +1216,8 @@ export class GameApp {
   public clearOnlinePeer(): void {
     this.resetToLobbyState();
     this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineOutgoingInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineInputCooldownMs = 0;
     this.onlineNextInputSeq = 0;
     this.onlinePendingInputs = [];
     this.onlineObservedRoundNumber = null;
@@ -1399,7 +1438,7 @@ export class GameApp {
       }
     }
     this.soundManager.setMuted(this.readStorageItem(storage, AUDIO_MUTED_STORAGE_KEY) === "true");
-    void this.soundManager.loadSounds(SFX_MANIFEST);
+    if (this.soundManifest) void this.soundManager.loadSounds(this.soundManifest);
     this.root.appendChild(this.canvas);
     this.syncCanvasDisplaySize();
     this.mode = "menu";
@@ -1650,16 +1689,32 @@ export class GameApp {
       this.input.consumePress(SKILL_KEY),
       this.input.isDown(SKILL_KEY),
     );
+    online_captureLocalInput(
+      this.onlineOutgoingInputs[this.onlineLocalPlayerId],
+      input.direction,
+      input.bombPressed,
+      input.detonatePressed,
+      input.skillPressed,
+      Boolean(input.skillHeld),
+    );
   }
 
-  private forwardGuestInput(): void {
+  private forwardGuestInput(deltaMs: number): void {
     if (this.onlineSession?.role !== "guest") {
       return;
     }
-    const nextInput = cloneOnlineInputState(this.onlineInputs[this.onlineLocalPlayerId]);
+    this.onlineInputCooldownMs = Math.max(0, this.onlineInputCooldownMs - deltaMs);
+    if (this.onlineInputCooldownMs > 0) return;
+    const outgoing = this.onlineOutgoingInputs[this.onlineLocalPlayerId];
+    const nextInput = cloneOnlineInputState(outgoing);
     const inputSeq = this.onlineNextInputSeq + 1;
+    const accepted = this.onlineSession.sendGuestInput(nextInput, inputSeq);
+    if (accepted === false) return;
     this.onlineNextInputSeq = inputSeq;
-    this.onlineSession.sendGuestInput(nextInput, inputSeq);
+    outgoing.bombPressed = false;
+    outgoing.detonatePressed = false;
+    outgoing.skillPressed = false;
+    this.onlineInputCooldownMs = ONLINE_INPUT_INTERVAL_MS;
     appendPendingOnlineInput(this.onlinePendingInputs, { seq: inputSeq, input: nextInput });
   }
 
@@ -1771,7 +1826,7 @@ export class GameApp {
         if (!this.headless) {
           this.captureOnlineLocalInput();
         }
-        this.forwardGuestInput();
+        this.forwardGuestInput(deltaMs);
         this.updateGuestLocalPrediction(deltaMs);
       } else if (this.mode === "match-result") {
         this.updateMatchResult(deltaMs);
@@ -1831,6 +1886,8 @@ export class GameApp {
     this.onlineLocalPlayerId = 1;
     this.externalInputPlayers = createBooleanPlayerRecord(false);
     this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineOutgoingInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineInputCooldownMs = 0;
     this.onlineNextInputSeq = 0;
     this.onlinePendingInputs = [];
     this.onlineObservedRoundNumber = null;
@@ -2020,6 +2077,8 @@ export class GameApp {
     this.onlinePendingInputs = [];
     this.onlineRenderSamples = [];
     this.onlineInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineOutgoingInputs = createPlayerRecord(() => createNeutralOnlineInput());
+    this.onlineInputCooldownMs = 0;
     this.syncVisualPlayerPositions();
   }
 
@@ -2154,7 +2213,7 @@ export class GameApp {
   }
 
   private updateMatch(deltaMs: number): void {
-    if (!this.roundOutcome && this.input.consumePress("Escape")) {
+    if (!this.onlineSession && !this.roundOutcome && this.input.consumePress("Escape")) {
       this.paused = !this.paused;
       this.autoPausedForHiddenTab = false;
     }
@@ -2206,6 +2265,7 @@ export class GameApp {
     }));
     this.updatePlayers(deltaMs);
     this.updateBombs(deltaMs, positionsBeforeMovement);
+    this.resolvePlayerDeathsInActiveFlames();
     this.updateFlames(deltaMs);
     this.collectPowerUps();
     this.evaluateRoundState();
@@ -2585,10 +2645,6 @@ export class GameApp {
 
   private getPlayerSkillId(playerId: PlayerId): CharacterSkillId | null {
     return getCharacterSkillId(this.getActiveCharacterEntry(playerId).id);
-  }
-
-  private getCharacterLabel(playerId: PlayerId, maxLength = 18): string {
-    return this.shortenCharacterName(this.getActiveCharacterEntry(playerId).name, maxLength);
   }
 
   private getPlayerSlotLabel(playerId: PlayerId): string {
@@ -3979,6 +4035,17 @@ export class GameApp {
     this.flames = this.flames.filter((flame) => flame.remainingMs > 0);
   }
 
+  private resolvePlayerDeathsInActiveFlames(): void {
+    const hits = findPlayersHitByFlames(
+      this.activePlayerIds.map((id) => this.players[id]),
+      this.flames,
+      this.getBodyGeometryOptions(),
+    );
+    for (const { player, flame } of hits) {
+      this.tryAbsorbInstantHit(player, flame.ownerId as PlayerId | null);
+    }
+  }
+
   private resolvePlayerDeathsAtTileKeys(
     keys: Iterable<string>,
     attackerId: PlayerId | null = null,
@@ -4289,88 +4356,64 @@ export class GameApp {
     const arenaHeight = metrics.arenaPixelHeight;
     const arenaX = metrics.arenaX;
     const arenaY = metrics.arenaY;
-    const arenaRight = arenaX + arenaWidth;
     const arenaBottom = arenaY + arenaHeight;
     const frameX = arenaX - 10;
     const frameY = arenaY - 10;
     const frameWidth = arenaWidth + 20;
     const frameHeight = arenaHeight + 20;
 
+    // NOVA PRIME backdrop: deep-space gradient, contained ambient glow behind
+    // the arena, hairline frame, gentle vignette. No decorative clutter.
     const gradient = c.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, "#0a0a12");
-    gradient.addColorStop(0.38, "#07070e");
-    gradient.addColorStop(1, "#050508");
+    gradient.addColorStop(0, "#0b101c");
+    gradient.addColorStop(0.42, "#070a12");
+    gradient.addColorStop(1, "#03050a");
     c.fillStyle = gradient;
     c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    const mist = c.createRadialGradient(CANVAS_WIDTH - 92, 84, 18, CANVAS_WIDTH - 92, 84, 214);
-    mist.addColorStop(0, "rgba(0, 229, 160, 0.08)");
-    mist.addColorStop(0.4, "rgba(0, 168, 112, 0.05)");
-    mist.addColorStop(1, "rgba(5, 5, 12, 0)");
-    c.fillStyle = mist;
+    // Ambient cyan bloom centered behind the arena (structure light).
+    const arenaCenterX = arenaX + arenaWidth / 2;
+    const arenaCenterY = arenaY + arenaHeight / 2;
+    const ambient = c.createRadialGradient(
+      arenaCenterX,
+      arenaCenterY,
+      Math.min(arenaWidth, arenaHeight) * 0.24,
+      arenaCenterX,
+      arenaCenterY,
+      Math.max(arenaWidth, arenaHeight) * 0.78,
+    );
+    ambient.addColorStop(0, "rgba(103, 232, 249, 0.075)");
+    ambient.addColorStop(0.55, "rgba(60, 140, 200, 0.035)");
+    ambient.addColorStop(1, "rgba(3, 5, 10, 0)");
+    c.fillStyle = ambient;
     c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Faint top light so the stage never reads flat black.
+    const topLight = c.createRadialGradient(CANVAS_WIDTH / 2, -140, 40, CANVAS_WIDTH / 2, -140, 520);
+    topLight.addColorStop(0, "rgba(150, 200, 255, 0.06)");
+    topLight.addColorStop(1, "rgba(150, 200, 255, 0)");
+    c.fillStyle = topLight;
+    c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Floor falloff below the arena.
     const floorGlow = c.createLinearGradient(0, arenaBottom - 24, 0, CANVAS_HEIGHT);
-    floorGlow.addColorStop(0, "rgba(0, 20, 16, 0)");
-    floorGlow.addColorStop(1, "rgba(2, 2, 8, 0.92)");
+    floorGlow.addColorStop(0, "rgba(4, 10, 18, 0)");
+    floorGlow.addColorStop(1, "rgba(1, 2, 6, 0.9)");
     c.fillStyle = floorGlow;
     c.fillRect(0, arenaBottom - 24, CANVAS_WIDTH, CANVAS_HEIGHT - arenaBottom + 24);
 
-    c.fillStyle = "rgba(6, 6, 14, 0.76)";
-    c.beginPath();
-    c.moveTo(0, arenaY - 10);
-    c.lineTo(arenaX - 2, arenaY + 44);
-    c.lineTo(arenaX - 10, arenaBottom + 42);
-    c.lineTo(0, CANVAS_HEIGHT);
-    c.closePath();
-    c.fill();
-
-    c.beginPath();
-    c.moveTo(CANVAS_WIDTH, arenaY - 2);
-    c.lineTo(arenaRight + 2, arenaY + 58);
-    c.lineTo(arenaRight + 12, arenaBottom + 40);
-    c.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT);
-    c.closePath();
-    c.fill();
-
-    c.fillStyle = "rgba(4, 4, 10, 0.5)";
-    c.fillRect(frameX + 4, frameY + 14, frameWidth - 8, frameHeight - 4);
-
-    c.fillStyle = "rgba(0, 229, 160, 0.08)";
-    c.beginPath();
-    c.moveTo(frameX, frameY + 4);
-    c.lineTo(frameX + frameWidth, frameY + 4);
-    c.lineTo(frameX + frameWidth - 6, frameY + 18);
-    c.lineTo(frameX + 6, frameY + 18);
-    c.closePath();
-    c.fill();
-
-    c.strokeStyle = "rgba(0, 229, 160, 0.16)";
+    // Arena frame: soft outer bloom + crisp hairline + top sheen.
+    c.strokeStyle = "rgba(103, 232, 249, 0.05)";
+    c.lineWidth = 6;
+    c.strokeRect(frameX - 2, frameY - 2, frameWidth + 4, frameHeight + 4);
+    c.strokeStyle = "rgba(103, 232, 249, 0.16)";
     c.lineWidth = 1;
     c.strokeRect(frameX + 0.5, frameY + 0.5, frameWidth - 1, frameHeight - 1);
-
-    c.fillStyle = "rgba(168, 255, 100, 0.04)";
-    c.beginPath();
-    c.ellipse(CANVAS_WIDTH - 84, arenaBottom + 16, 104, 76, -0.35, 0, Math.PI * 2);
-    c.fill();
-
-    c.fillStyle = "rgba(4, 4, 10, 0.34)";
-    c.beginPath();
-    c.moveTo(24, arenaY + 54);
-    c.lineTo(56, arenaY + 120);
-    c.lineTo(42, arenaBottom - 30);
-    c.lineTo(14, arenaBottom - 40);
-    c.closePath();
-    c.fill();
-
-    c.strokeStyle = "rgba(0, 229, 160, 0.04)";
-    c.lineWidth = 2;
-    for (let i = 0; i < 6; i += 1) {
-      c.beginPath();
-      c.moveTo(12 + i * 8, arenaY + 84 + i * 18);
-      c.lineTo(34 + i * 8, arenaY + 56 + i * 16);
-      c.stroke();
-    }
+    const frameSheen = c.createLinearGradient(0, frameY, 0, frameY + 10);
+    frameSheen.addColorStop(0, "rgba(190, 235, 255, 0.10)");
+    frameSheen.addColorStop(1, "rgba(190, 235, 255, 0)");
+    c.fillStyle = frameSheen;
+    c.fillRect(frameX + 1, frameY + 1, frameWidth - 2, 9);
 
     const vignette = c.createRadialGradient(
       CANVAS_WIDTH / 2,
@@ -4378,10 +4421,10 @@ export class GameApp {
       120,
       CANVAS_WIDTH / 2,
       CANVAS_HEIGHT / 2,
-      360,
+      380,
     );
     vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-    vignette.addColorStop(1, "rgba(0, 0, 0, 0.34)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.38)");
     c.fillStyle = vignette;
     c.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -4402,20 +4445,19 @@ export class GameApp {
     this.renderArena();
     this.renderHud();
 
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG;
-    this.ctx.fillRect(12, HUD_HEIGHT + 10, 456, 48);
-    this.ctx.strokeStyle = CANVAS_UI_BORDER_STRONG;
-    this.ctx.strokeRect(12.5, HUD_HEIGHT + 10.5, 455, 47);
+    drawGlassPanel(this.ctx, 12, HUD_HEIGHT + 10, 456, 48, 12, { strong: true });
     this.ctx.textAlign = "left";
-    this.ctx.font = "700 9px Inter";
-    this.ctx.fillStyle = CANVAS_UI_TEXT;
-    this.ctx.fillText("MENU LOCAL  |  E/P READY  |  G/K CHARACTER", 22, HUD_HEIGHT + 27);
-    this.ctx.font = "600 8px Inter";
-    this.ctx.fillStyle = CANVAS_UI_MUTED;
+    setLetterSpacing(this.ctx, "0.1em");
+    this.ctx.font = `700 9px ${NOVA.fontDisplay}`;
+    this.ctx.fillStyle = NOVA.accent;
+    this.ctx.fillText("MENU LOCAL  |  E/P READY  |  G/K CHARACTER", 24, HUD_HEIGHT + 28);
+    setLetterSpacing(this.ctx, "0px");
+    this.ctx.font = `600 8px ${NOVA.fontBody}`;
+    this.ctx.fillStyle = NOVA.inkMuted;
     this.ctx.fillText(
       `B toggle bot rapido  |  N cicla bots: ${this.localBotFill}  |  ativos: ${this.activePlayerIds.length}`,
-      22,
-      HUD_HEIGHT + 43,
+      24,
+      HUD_HEIGHT + 44,
     );
 
     if (this.isAnyCharacterMenuOpen()) {
@@ -4424,7 +4466,7 @@ export class GameApp {
   }
 
   private renderCharacterSelectionOverlay(): void {
-    this.ctx.fillStyle = "rgba(8, 6, 5, 0.78)";
+    this.ctx.fillStyle = NOVA.scrim;
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     this.drawCharacterSelectionPanel(1, 28, 112);
     this.drawCharacterSelectionPanel(2, 252, 112);
@@ -4437,85 +4479,51 @@ export class GameApp {
     const entry = this.getPreviewCharacterEntry(playerId);
     const currentIndex = this.pendingCharacterIndex[playerId];
 
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-    this.ctx.fillRect(x, y, panelWidth, panelHeight);
-    this.ctx.strokeStyle = CANVAS_UI_BORDER_STRONG;
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeRect(x + 0.5, y + 0.5, panelWidth - 1, panelHeight - 1);
+    drawGlassPanel(this.ctx, x, y, panelWidth, panelHeight, 14, { strong: true, edge: NOVA.accentSoft });
 
     this.ctx.textAlign = "left";
-    this.ctx.fillStyle = CANVAS_UI_GOLD_BRIGHT;
-    this.ctx.font = "700 13px Inter";
-    this.ctx.fillText(`P${playerId} CHARACTER`, x + 10, y + 20);
-    this.ctx.fillStyle = CANVAS_UI_TEXT;
-    this.ctx.font = "600 11px Inter";
-    this.ctx.fillText(this.shortenCharacterName(entry.name, 24), x + 10, y + 40);
-    this.ctx.fillText(`${currentIndex + 1}/${this.characterRoster.length}`, x + 10, y + 56);
+    this.ctx.fillStyle = NOVA.accent;
+    setLetterSpacing(this.ctx, "0.12em");
+    this.ctx.font = `700 11px ${NOVA.fontDisplay}`;
+    this.ctx.fillText(`P${playerId} CHARACTER`, x + 12, y + 22);
+    setLetterSpacing(this.ctx, "0px");
+    this.ctx.fillStyle = NOVA.ink;
+    this.ctx.font = `600 12px ${NOVA.fontBody}`;
+    this.ctx.fillText(this.shortenCharacterName(entry.name, 24), x + 12, y + 42);
+    this.ctx.fillStyle = NOVA.inkMuted;
+    this.ctx.font = `600 10px ${NOVA.fontBody}`;
+    this.ctx.fillText(`${currentIndex + 1}/${this.characterRoster.length}`, x + 12, y + 58);
 
     for (let row = 0; row < 5; row += 1) {
       const offset = row - 2;
       const index = (currentIndex + offset + this.characterRoster.length) % this.characterRoster.length;
       const item = this.characterRoster[index];
-      const rowY = y + 76 + row * 26;
+      const rowY = y + 78 + row * 26;
       const selected = offset === 0;
-      this.ctx.fillStyle = selected ? CANVAS_UI_GOLD_SOFT : "rgba(255, 255, 255, 0.03)";
-      this.ctx.fillRect(x + 8, rowY - 14, panelWidth - 16, 22);
-      this.ctx.fillStyle = selected ? CANVAS_UI_TEXT : CANVAS_UI_MUTED;
-      this.ctx.font = selected ? "700 11px Inter" : "500 10px Inter";
-      this.ctx.fillText(this.shortenCharacterName(item.name, 26), x + 12, rowY);
+      if (selected) {
+        roundedRectPath(this.ctx, x + 8, rowY - 14, panelWidth - 16, 22, 7);
+        this.ctx.fillStyle = NOVA.accentGhost;
+        this.ctx.fill();
+        this.ctx.strokeStyle = NOVA.accentSoft;
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+      }
+      this.ctx.fillStyle = selected ? NOVA.ink : NOVA.inkFaint;
+      this.ctx.font = selected ? `700 11px ${NOVA.fontBody}` : `500 10px ${NOVA.fontBody}`;
+      this.ctx.fillText(this.shortenCharacterName(item.name, 26), x + 14, rowY);
     }
 
-    this.ctx.fillStyle = CANVAS_UI_MUTED;
-    this.ctx.font = "500 10px Inter";
+    this.ctx.fillStyle = NOVA.inkMuted;
+    this.ctx.font = `500 10px ${NOVA.fontBody}`;
     this.ctx.fillText(
       playerId === 1 ? "W/S browse  E lock  G close" : "UP/DN browse  P lock  K close",
-      x + 10,
+      x + 12,
       y + 222,
     );
     if (isOpen) {
-      this.ctx.fillStyle = CANVAS_UI_TEXT;
-      this.ctx.fillText("Selection is live after lock.", x + 10, y + 238);
+      this.ctx.fillStyle = NOVA.ink;
+      this.ctx.fillText("Selection is live after lock.", x + 12, y + 238);
     }
-  }
-
-  /**
-   * 9-slice panel draw so chrome keeps crisp corners when stretched to HUD slots.
-   */
-  private drawNineSlicePanel(
-    image: HTMLImageElement,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    slice = 28,
-  ): void {
-    const iw = image.naturalWidth;
-    const ih = image.naturalHeight;
-    if (iw < 8 || ih < 8 || width < 4 || height < 4) {
-      this.ctx.drawImage(image, x, y, width, height);
-      return;
-    }
-    const s = Math.max(8, Math.min(slice, Math.floor(iw / 3), Math.floor(ih / 3)));
-    const dw = Math.max(1, width - s * 2);
-    const dh = Math.max(1, height - s * 2);
-    const mw = Math.max(1, iw - s * 2);
-    const mh = Math.max(1, ih - s * 2);
-    const prevSmooth = this.ctx.imageSmoothingEnabled;
-    this.ctx.imageSmoothingEnabled = true;
-    this.ctx.imageSmoothingQuality = "high";
-    // corners
-    this.ctx.drawImage(image, 0, 0, s, s, x, y, s, s);
-    this.ctx.drawImage(image, iw - s, 0, s, s, x + width - s, y, s, s);
-    this.ctx.drawImage(image, 0, ih - s, s, s, x, y + height - s, s, s);
-    this.ctx.drawImage(image, iw - s, ih - s, s, s, x + width - s, y + height - s, s, s);
-    // edges
-    this.ctx.drawImage(image, s, 0, mw, s, x + s, y, dw, s);
-    this.ctx.drawImage(image, s, ih - s, mw, s, x + s, y + height - s, dw, s);
-    this.ctx.drawImage(image, 0, s, s, mh, x, y + s, s, dh);
-    this.ctx.drawImage(image, iw - s, s, s, mh, x + width - s, y + s, s, dh);
-    // center
-    this.ctx.drawImage(image, s, s, mw, mh, x + s, y + s, dw, dh);
-    this.ctx.imageSmoothingEnabled = prevSmooth;
   }
 
   private drawHudPanel(
@@ -4526,29 +4534,19 @@ export class GameApp {
     accent: string,
     variant: "local" | "rival" | "center" = "rival",
   ): void {
-    const chrome = this.assets.hud;
-    const frame = variant === "local"
-      ? chrome?.panelLocal
-      : variant === "center"
-        ? chrome?.panelCenter
-        : chrome?.panelRival;
-    if (frame && frame.complete && frame.naturalWidth > 0) {
-      // Keep slice small so thin rival slots (~40px) still show edge chrome, not only corners.
-      const slice = variant === "local" ? 28 : variant === "center" ? 22 : 14;
-      this.drawNineSlicePanel(frame, x, y, width, height, slice);
-      // Player identity rail (ember/player color) — crisp product accent.
-      if (accent) {
-        this.ctx.fillStyle = accent;
-        this.ctx.globalAlpha = 0.95;
-        this.ctx.fillRect(x + 3, y + 2, Math.max(0, width - 6), 3);
-        this.ctx.globalAlpha = 1;
-      }
-      return;
-    }
-    paintHudPanel(this.ctx, x, y, width, height, accent, {
-      panelBg: CANVAS_UI_PANEL_BG,
-      border: CANVAS_UI_BORDER,
+    // NOVA PRIME glass chrome — procedural floating pill, no 9-slice PNG.
+    drawGlassPanel(this.ctx, x, y, width, height, variant === "local" ? 12 : 10, {
+      strong: variant !== "rival",
     });
+    if (accent) {
+      // Identity rail on the left edge (player color) — quiet but unmistakable.
+      this.ctx.save();
+      this.ctx.globalAlpha = variant === "center" ? 0.55 : 0.85;
+      this.ctx.fillStyle = accent;
+      roundedRectPath(this.ctx, x + 2.5, y + 5, 2.5, height - 10, 1.5);
+      this.ctx.fill();
+      this.ctx.restore();
+    }
   }
 
   /**
@@ -4563,234 +4561,226 @@ export class GameApp {
 
   private renderMatchHud(): void {
     const hudHeight = this.getHudRenderHeight();
-    const compact = this.isFullscreenMatchLayoutActive();
-    const localId = this.getMatchLocalPlayerId();
-    const { leftRivals, rightRivals } = partitionHudPlayers(this.activePlayerIds, localId);
+    const presentation = this.createMatchHudPresentation();
 
-    // Solid night bar (launcher DNA) — not a washed gray gradient.
-    this.ctx.fillStyle = compact ? "rgba(10, 10, 15, 0.92)" : "rgba(10, 10, 15, 0.97)";
+    // NOVA PRIME glass band: deep indigo falloff + single quiet hairline.
+    const backdrop = this.ctx.createLinearGradient(0, 0, 0, hudHeight);
+    backdrop.addColorStop(0, "rgba(7, 11, 19, 0.97)");
+    backdrop.addColorStop(0.7, "rgba(6, 9, 16, 0.94)");
+    backdrop.addColorStop(1, "rgba(6, 9, 16, 0.82)");
+    this.ctx.fillStyle = backdrop;
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, hudHeight);
-    this.ctx.fillStyle = "rgba(255, 90, 31, 0.85)";
-    this.ctx.fillRect(0, hudHeight - 2, CANVAS_WIDTH, 2);
-    this.ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+    const edge = this.ctx.createLinearGradient(0, 0, CANVAS_WIDTH, 0);
+    edge.addColorStop(0, "rgba(103, 232, 249, 0.04)");
+    edge.addColorStop(0.5, "rgba(103, 232, 249, 0.35)");
+    edge.addColorStop(1, "rgba(103, 232, 249, 0.04)");
+    this.ctx.fillStyle = edge;
+    this.ctx.fillRect(0, hudHeight - 1, CANVAS_WIDTH, 1);
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, 1);
 
-    const pad = HUD_LAYOUT.paddingX;
-    const gap = HUD_LAYOUT.gap;
-    const centerWidth = Math.min(FULLSCREEN_HUD_CENTER_WIDTH, HUD_LAYOUT.centerWidth + 20);
-    const centerX = Math.round((CANVAS_WIDTH - centerWidth) / 2);
-    const topY = HUD_LAYOUT.topRowY;
-    const topH = HUD_LAYOUT.topRowHeight;
-
     // --- Top: left rivals | center meta | right rivals ---
-    this.renderMatchCenterMeta(centerX, topY, centerWidth, topH);
-
-    const leftGutter = Math.max(0, centerX - pad - gap);
-    const leftSlotW = computeRivalSlotWidth(leftGutter, Math.max(1, leftRivals.length));
-    leftRivals.forEach((playerId, index) => {
-      const x = pad + index * (leftSlotW + gap);
-      this.renderRivalHudSlot(playerId, x, topY, leftSlotW, topH);
-    });
-
-    const rightStartX = centerX + centerWidth + gap;
-    const rightGutter = Math.max(0, CANVAS_WIDTH - pad - rightStartX);
-    const rightSlotW = computeRivalSlotWidth(rightGutter, Math.max(1, rightRivals.length));
-    rightRivals.forEach((playerId, index) => {
-      const x = rightStartX + index * (rightSlotW + gap);
-      this.renderRivalHudSlot(playerId, x, topY, rightSlotW, topH);
-    });
+    this.renderMatchCenterMeta(presentation.center);
+    presentation.rivals.forEach((rival) => this.renderRivalHudSlot(rival));
 
     // --- Bottom: dedicated local player panel ---
-    const localWidth = CANVAS_WIDTH - pad * 2;
-    this.renderLocalPlayerHud(
-      localId,
-      pad,
-      HUD_LAYOUT.localPanelY,
-      localWidth,
-      HUD_LAYOUT.localPanelHeight,
-    );
+    this.renderLocalPlayerHud(presentation.local);
   }
 
-  private renderMatchCenterMeta(x: number, y: number, width: number, height: number): void {
-    this.drawHudPanel(x, y, width, height, CANVAS_UI_BORDER_STRONG, "center");
+  private createMatchHudPresentation(): MatchHudPresentation {
+    const localId = this.getMatchLocalPlayerId();
+    return createMatchHudPresentation({
+      canvasWidth: CANVAS_WIDTH,
+      activePlayerIds: this.activePlayerIds,
+      localPlayerId: localId,
+      mode: this.onlineRoomMode === "endless" ? "endless" : "standard",
+      language: this.language,
+      roundNumber: this.roundNumber,
+      targetWins: TARGET_WINS,
+      roundTimeMs: this.roundTimeMs,
+      suddenDeath: this.roundOutcome ? null : this.getSuddenDeathHudState(),
+      players: {
+        1: this.createHudPlayerSnapshot(1),
+        2: this.createHudPlayerSnapshot(2),
+        3: this.createHudPlayerSnapshot(3),
+        4: this.createHudPlayerSnapshot(4),
+      },
+    });
+  }
+
+  private createHudPlayerSnapshot(playerId: PlayerId) {
+    const player = this.players[playerId];
+    const recentPickup = playerId === this.getMatchLocalPlayerId()
+      ? this.getLatestPowerUpPickupNotice(playerId)
+      : null;
+    const nameBudget = (CANVAS_WIDTH - HUD_LAYOUT.paddingX * 2) < 520
+      ? HUD_LAYOUT.localNameMax - 4
+      : HUD_LAYOUT.localNameMax;
+    return {
+      id: playerId,
+      slotLabel: this.getPlayerSlotLabel(playerId),
+      displayName: this.getActiveCharacterEntry(playerId).name,
+      alive: player.alive,
+      wins: this.onlineRoomMode === "endless" ? this.endlessRoundWins[playerId] : this.score[playerId],
+      kills: this.endlessKills[playerId],
+      status: this.getPlayerHudStatus(playerId),
+      skill: {
+        hasUltimate: Boolean(player.skill.id),
+        phase: player.skill.phase,
+        cooldownRemainingMs: player.skill.cooldownRemainingMs,
+        cooldownTotalMs: this.getCharacterSkillCooldownMs(playerId) || player.skill.cooldownRemainingMs,
+        castElapsedMs: player.skill.castElapsedMs,
+        channelRemainingMs: player.skill.channelRemainingMs,
+      },
+      recentPickupLabel: recentPickup ? this.formatPowerUpPickupNotice(recentPickup, nameBudget) : null,
+      recentPickupTone: recentPickup
+        ? (recentPickup.chainGuard ? "highlight" : "power")
+        : null,
+    } as const;
+  }
+
+  private renderMatchCenterMeta({ x, y, width, height, modeLabel, timerText, timerY, suddenDeath }: MatchHudPresentation["center"]): void {
+    this.drawHudPanel(x, y, width, height, NOVA.accentSoft, "center");
     const cx = x + width / 2;
-    const modeLabel = this.onlineRoomMode === "endless"
-      ? `R${this.roundNumber} · ENDLESS`
-      : `R${this.roundNumber} · FT${TARGET_WINS}`;
-    const suddenDeathHud = this.roundOutcome ? null : this.getSuddenDeathHudState();
 
     this.ctx.textAlign = "center";
-    this.ctx.font = "700 10px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(modeLabel, cx, y + 12, CANVAS_UI_MUTED, CANVAS_UI_SHADOW);
-    this.ctx.font = "800 22px Space Grotesk, Inter, sans-serif";
+    setLetterSpacing(this.ctx, "0.14em");
+    this.ctx.font = `700 8px ${NOVA.fontDisplay}`;
+    this.drawHudText(modeLabel, cx, y + 9, NOVA.accent, CANVAS_UI_SHADOW);
+    setLetterSpacing(this.ctx, "0px");
+    this.ctx.font = `700 20px ${NOVA.fontDisplay}`;
     this.drawHudText(
-      Math.ceil(this.roundTimeMs / 1000).toString().padStart(2, "0"),
+      timerText,
       cx,
-      y + (suddenDeathHud ? 28 : 30),
-      CANVAS_UI_TEXT,
+      timerY + 3,
+      NOVA.ink,
       CANVAS_UI_SHADOW,
     );
 
-    if (suddenDeathHud) {
+    if (suddenDeath) {
       // Meter only under timer — avoid stacking SD text on the timer digits.
       this.drawSuddenDeathMeter(
         x + 12,
         y + height - 6,
         width - 24,
-        suddenDeathHud.progress,
-        suddenDeathHud.active,
+        suddenDeath.progress,
+        suddenDeath.active,
       );
     }
   }
 
   /** Compact rival/opponent slot: name ellipsis, K/W, ult/alive state — no BFS string soup. */
-  private renderRivalHudSlot(
-    playerId: PlayerId,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
+  private renderRivalHudSlot(slot: MatchHudPresentation["rivals"][number]): void {
+    const { playerId, x, y, width, height, slotLabel, name, scoreText, ultimateLabel, status } = slot;
     const palette = PLAYER_COLORS[playerId];
-    const slotW = Math.max(HUD_LAYOUT.rivalSlotMinWidth, width);
-    const status = this.getPlayerHudStatus(playerId);
-    const scoreText = formatHudScoreLine(
-      this.onlineRoomMode === "endless" ? "endless" : "standard",
-      {
-        kills: this.endlessKills[playerId],
-        wins: this.onlineRoomMode === "endless"
-          ? this.endlessRoundWins[playerId]
-          : this.score[playerId],
-      },
-    );
-    const slotLabel = this.getPlayerSlotLabel(playerId);
-    // Reserve right edge for score (~36px) so name never collides with K/W.
-    const nameBudget = slotW < 130 ? HUD_LAYOUT.rivalNameMax - 2 : HUD_LAYOUT.rivalNameMax;
-    const name = this.getCharacterLabel(playerId, nameBudget);
-    const ultLabel = this.getRivalUltLabel(playerId, status);
 
-    this.drawHudPanel(x, y, slotW, height, palette.glow, "rival");
+    this.drawHudPanel(x, y, width, height, palette.glow, "rival");
+
+    // A quiet divider protects the score column and makes 4-player slots scan
+    // as identity / result rather than one compressed line of text.
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.07)";
+    this.ctx.fillRect(x + width - 42, y + 8, 1, 14);
 
     // Row 1: P#  Name… ................. K/W
     this.ctx.textAlign = "left";
-    this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
+    this.ctx.font = `800 11px ${NOVA.fontDisplay}`;
     this.drawHudText(slotLabel, x + 10, y + 16, palette.primary, CANVAS_UI_SHADOW);
-    this.ctx.font = "700 12px Inter, sans-serif";
-    this.drawHudText(name, x + 36, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
+    const slotLabelWidth = this.ctx.measureText(slotLabel).width;
+    this.ctx.font = "650 11px Inter, sans-serif";
+    this.drawHudText(name, x + 16 + slotLabelWidth, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
     this.ctx.textAlign = "right";
-    this.ctx.font = "800 12px Inter, sans-serif";
-    this.drawHudText(scoreText, x + slotW - 10, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
-
-    // Row 2: ult / alive (isolated from name)
-    this.ctx.textAlign = "left";
     this.ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(ultLabel, x + 10, y + height - 10, this.getHudStatusColor(status), CANVAS_UI_SHADOW);
-  }
+    this.drawHudText(scoreText, x + width - 10, y + 16, CANVAS_UI_TEXT, CANVAS_UI_SHADOW);
 
-  private getRivalUltLabel(playerId: PlayerId, status: HudPlayerStatus): string {
-    const player = this.players[playerId];
-    if (!player.alive) {
-      return "DOWN";
-    }
-    if (status.tone === "danger" && status.critical) {
-      return status.label;
-    }
-    if (!player.skill.id) {
-      return player.alive ? "LIVE" : "DOWN";
-    }
-    const phase = player.skill.phase;
-    if (phase === "channeling" || phase === "releasing") {
-      return "CAST";
-    }
-    if (phase === "cooldown" && player.skill.cooldownRemainingMs > 0) {
-      return `ULT ${(player.skill.cooldownRemainingMs / 1000).toFixed(1)}`;
-    }
-    if (phase === "idle") {
-      return this.language === "pt" ? "ULT OK" : "ULT RDY";
-    }
-    return "LIVE";
+    // Row 2: ult / alive — glow dot + status label (isolated from name)
+    const statusColor = this.getHudStatusColor(status);
+    this.ctx.textAlign = "left";
+    this.ctx.save();
+    this.ctx.fillStyle = statusColor;
+    this.ctx.shadowColor = statusColor;
+    this.ctx.shadowBlur = 5;
+    this.ctx.beginPath();
+    this.ctx.arc(x + 11.5, y + height - 10.5, 2.2, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+    this.ctx.font = `800 9px ${NOVA.fontDisplay}`;
+    this.drawHudText(ultimateLabel, x + 18, y + height - 9, statusColor, CANVAS_UI_SHADOW);
   }
 
   /**
    * Local player panel: YOU + name, alive status, icon+number power slots, skill chip.
    * Does not rely on a single jammed "B 2 · F 3 · S 1" string for primary stats.
    */
-  private renderLocalPlayerHud(
-    playerId: PlayerId,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void {
-    const player = this.players[playerId];
+  private renderLocalPlayerHud(local: MatchHudPresentation["local"]): void {
+    const {
+      playerId, x, y, width, height, youLabel, nameText, status, ultimateChip,
+      identityWidth, contentInsetX, powerRail, ultimateWidth, rightInset,
+    } = local;
     const palette = PLAYER_COLORS[playerId];
-    const status = this.getPlayerHudStatus(playerId);
     const recentPickup = this.getLatestPowerUpPickupNotice(playerId);
-    const nameBudget = width < 520 ? HUD_LAYOUT.localNameMax - 4 : HUD_LAYOUT.localNameMax;
-    const nameText = recentPickup
-      ? this.formatPowerUpPickupNotice(recentPickup, nameBudget)
-      : this.getCharacterLabel(playerId, nameBudget);
-    const nameColor = recentPickup
-      ? (recentPickup.chainGuard ? CANVAS_UI_GOLD_BRIGHT : getPowerUpDefinition(recentPickup.type).tint)
-      : CANVAS_UI_TEXT;
-    const youLabel = this.language === "pt" ? "VOCÊ" : "YOU";
+    const nameColor = local.nameTone === "highlight"
+      ? CANVAS_UI_GOLD_BRIGHT
+      : local.nameTone === "power" && recentPickup
+        ? getPowerUpDefinition(recentPickup.type).tint
+        : CANVAS_UI_TEXT;
     // Absolute B/F/S counts as icon+number slots (not jammed "B 2 · F 3 · S 1").
     const skillSlots = this.getLocalHudPowerSlots(playerId);
-    const hasUltimate = Boolean(player.skill.id);
+    const hasUltimate = ultimateChip.visible;
 
     this.drawHudPanel(x, y, width, height, palette.glow, "local");
 
-    // Left identity band: YOU + name on top, status + score on bottom
-    const identityWidth = 220;
+    // Left identity band: local identity gets the strongest hierarchy.
     this.ctx.textAlign = "left";
-    this.ctx.font = "800 15px Space Grotesk, Inter, sans-serif";
-    this.drawHudText(youLabel, x + 14, y + 20, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
-    this.ctx.font = "700 14px Inter, sans-serif";
-    this.drawHudText(nameText, x + 68, y + 20, nameColor, CANVAS_UI_SHADOW);
+    this.ctx.font = "700 17px Space Grotesk, Inter, sans-serif";
+    this.drawHudText(youLabel, x + contentInsetX, y + 21, CANVAS_UI_GOLD_BRIGHT, CANVAS_UI_SHADOW);
+    const nameX = x + contentInsetX + (youLabel === "VOCÊ" ? 58 : 46);
+    this.ctx.font = "700 13px Inter, sans-serif";
+    this.drawHudText(nameText, nameX, y + 20, nameColor, CANVAS_UI_SHADOW);
 
     this.ctx.font = "800 12px Space Grotesk, Inter, sans-serif";
     this.drawHudText(
       status.label,
-      x + 14,
+      x + contentInsetX,
       y + height - 12,
       this.getHudStatusColor(status),
       CANVAS_UI_SHADOW,
     );
 
     if (this.onlineRoomMode === "endless") {
-      this.drawEndlessHudStats(x + 118, y + height - 11, playerId, palette);
+      this.drawEndlessHudStats(x + 126, y + height - 11, playerId, palette);
     } else {
-      this.drawRoundPips(x + 118, y + height - 18, this.score[playerId], palette);
+      this.drawRoundPips(x + 126, y + height - 18, this.score[playerId], palette);
     }
 
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    this.ctx.fillRect(x + identityWidth, y + 11, 1, height - 22);
+
     // Center/right: power slots (icon + level) — primary stat presentation
-    const rightPad = 10;
-    const ultChipWidth = hasUltimate ? 64 : 0;
-    const ultGap = hasUltimate ? 8 : 0;
-    const slotsLeft = x + identityWidth + 10;
-    const slotsRight = x + width - rightPad - ultChipWidth - ultGap;
-    const slotsWidth = Math.max(100, slotsRight - slotsLeft);
-    const slotGap = 8;
     const slotCount = Math.max(1, skillSlots.length);
-    const slotW = Math.max(48, Math.min(72, Math.floor((slotsWidth - slotGap * (slotCount - 1)) / slotCount)));
-    const slotH = 30;
+    const slotW = Math.max(
+      powerRail.minSlotWidth,
+      Math.min(powerRail.maxSlotWidth, Math.floor((powerRail.width - powerRail.gap * (slotCount - 1)) / slotCount)),
+    );
+    const slotH = powerRail.slotHeight;
     const slotY = y + Math.round((height - slotH) / 2);
+    const slotGroupWidth = slotW * skillSlots.length + powerRail.gap * Math.max(0, skillSlots.length - 1);
+    const slotsLeft = powerRail.x + Math.max(0, Math.floor((powerRail.width - slotGroupWidth) / 2));
     for (let index = 0; index < skillSlots.length; index += 1) {
       const slot = skillSlots[index];
       if (!slot) continue;
-      const slotX = slotsLeft + index * (slotW + slotGap);
+      const slotX = slotsLeft + index * (slotW + powerRail.gap);
       this.drawHudSkillSlot(slotX, slotY, slotW, slotH, slot);
     }
 
     if (hasUltimate) {
       // Skill chip: cooldown / ready — name is implied by champion; status on chip
       this.drawHudUltimateChip(
-        x + width - rightPad - ultChipWidth,
+        x + width - rightInset - ultimateWidth,
         slotY - 1,
-        ultChipWidth,
+        ultimateWidth,
         slotH + 2,
-        playerId,
+        ultimateChip,
       );
     }
   }
@@ -4801,78 +4791,51 @@ export class GameApp {
     y: number,
     width: number,
     height: number,
-    playerId: PlayerId,
+    chip: MatchHudPresentation["local"]["ultimateChip"],
   ): void {
-    const player = this.players[playerId];
-    if (!player?.skill.id) {
+    if (!chip.visible) {
       return;
     }
-    const phase = player.skill.phase;
-    const ready = phase === "idle";
-    const casting = phase === "channeling" || phase === "releasing";
-    const onCooldown = phase === "cooldown" && player.skill.cooldownRemainingMs > 0;
 
-    let fill = "rgba(180, 167, 147, 0.22)";
-    let border = CANVAS_UI_BORDER;
-    let label = this.language === "pt" ? "ULT" : "ULT";
-    let progress = 0;
+    let border: string = NOVA.glassEdge;
+    const progress = chip.progress;
 
-    if (ready) {
-      fill = "rgba(80, 200, 120, 0.28)";
-      border = CANVAS_UI_SUCCESS;
-      label = this.language === "pt" ? "OK" : "RDY";
-      progress = 1;
-    } else if (casting) {
-      fill = "rgba(120, 200, 255, 0.35)";
+    if (chip.ready) {
+      border = NOVA.warm;
+    } else if (chip.casting) {
       border = "rgba(120, 220, 255, 0.95)";
-      const total = Math.max(1, player.skill.castElapsedMs + player.skill.channelRemainingMs);
-      progress = Math.max(0, Math.min(1, player.skill.castElapsedMs / total));
-      label = this.language === "pt" ? "CAST" : "CAST";
-    } else if (onCooldown) {
-      fill = "rgba(40, 36, 32, 0.85)";
-      border = CANVAS_UI_MUTED;
-      // Prefer definition cooldown when available so the bar is accurate.
-      const totalCd = Math.max(
-        player.skill.cooldownRemainingMs,
-        this.getCharacterSkillCooldownMs(playerId) || player.skill.cooldownRemainingMs,
-      );
-      progress = 1 - Math.max(0, Math.min(1, player.skill.cooldownRemainingMs / totalCd));
-      label = `${(player.skill.cooldownRemainingMs / 1000).toFixed(1)}`;
+    } else if (chip.onCooldown) {
+      border = NOVA.glassEdgeSoft;
     }
 
-    const ultChrome = this.assets.hud?.chipUlt;
-    if (ultChrome && ultChrome.complete && ultChrome.naturalWidth > 0) {
-      this.ctx.drawImage(ultChrome, x, y, width, height);
-      if (progress > 0 && progress < 1) {
-        this.ctx.fillStyle = fill;
-        this.ctx.globalAlpha = 0.35;
-        this.ctx.fillRect(x + 2, y + 2, Math.max(1, (width - 4) * progress), height - 4);
-        this.ctx.globalAlpha = 1;
-      }
-    } else {
-      this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-      this.ctx.fillRect(x, y, width, height);
-      if (progress > 0) {
-        this.ctx.fillStyle = fill;
-        this.ctx.fillRect(x, y, Math.max(1, width * progress), height);
-      }
-      this.ctx.strokeStyle = border;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
+    // NOVA PRIME glass pill — procedural chrome, ready state glows warm.
+    this.ctx.save();
+    if (chip.ready) {
+      this.ctx.shadowColor = NOVA.warm;
+      this.ctx.shadowBlur = 8;
+    }
+    drawGlassPanel(this.ctx, x, y, width, height, 9, { strong: true, edge: border });
+    this.ctx.restore();
+
+    // Progress underline (precise, quiet).
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    roundedRectPath(this.ctx, x + 6, y + height - 5, Math.max(1, width - 12), 2, 1);
+    this.ctx.fill();
+    if (progress > 0) {
+      this.ctx.fillStyle = chip.ready ? NOVA.warm : chip.casting ? "#78dcff" : NOVA.accent;
+      roundedRectPath(this.ctx, x + 6, y + height - 5, Math.max(1, (width - 12) * progress), 2, 1);
+      this.ctx.fill();
     }
 
     // Never concatenate keybind + status ("SPC OK") — unreadable soup.
     // Chip is status only; keybind is implied for the local player.
     this.ctx.textAlign = "center";
     this.ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
-    const text = ready
-      ? (this.language === "pt" ? "ULT" : "ULT")
-      : label;
     this.drawHudText(
-      text,
+      chip.text,
       x + width / 2,
-      y + Math.max(8, height - 3),
-      ready || casting ? CANVAS_UI_TEXT : CANVAS_UI_MUTED,
+      y + Math.round(height / 2) + 4,
+      chip.ready || chip.casting ? CANVAS_UI_TEXT : CANVAS_UI_MUTED,
       CANVAS_UI_SHADOW,
     );
   }
@@ -4891,23 +4854,22 @@ export class GameApp {
     wins: number,
     palette: { primary: string; secondary: string; glow: string },
   ): void {
+    // NOVA PRIME: thin diamond pips in the player's color.
     for (let index = 0; index < TARGET_WINS; index += 1) {
       const centerX = x + 5 + index * 12;
+      const centerY = y + 4;
       const filled = index < wins;
       this.ctx.beginPath();
-      this.ctx.arc(centerX, y + 4, 4.5, 0, Math.PI * 2);
-      this.ctx.fillStyle = filled ? CANVAS_UI_GOLD_BRIGHT : "rgba(255, 255, 255, 0.08)";
+      this.ctx.moveTo(centerX, centerY - 4);
+      this.ctx.lineTo(centerX + 4, centerY);
+      this.ctx.lineTo(centerX, centerY + 4);
+      this.ctx.lineTo(centerX - 4, centerY);
+      this.ctx.closePath();
+      this.ctx.fillStyle = filled ? palette.primary : "rgba(255, 255, 255, 0.07)";
       this.ctx.fill();
       this.ctx.lineWidth = 1;
-      this.ctx.strokeStyle = filled ? palette.primary : CANVAS_UI_BORDER;
+      this.ctx.strokeStyle = filled ? palette.primary : NOVA.glassEdge;
       this.ctx.stroke();
-      if (!filled) {
-        continue;
-      }
-      this.ctx.beginPath();
-      this.ctx.arc(centerX, y + 4, 1.75, 0, Math.PI * 2);
-      this.ctx.fillStyle = "#fff7df";
-      this.ctx.fill();
     }
   }
 
@@ -5131,7 +5093,7 @@ export class GameApp {
     return { label: "LIVE", tone: "success", critical: false, dangerEtaMs: null };
   }
 
-  private getHudStatusColor(status: HudPlayerStatus): string {
+  private getHudStatusColor(status: Pick<HudPlayerStatus, "tone">): string {
     if (status.tone === "danger") {
       return CANVAS_UI_DANGER;
     }
@@ -5167,23 +5129,26 @@ export class GameApp {
 
   private drawHudSkillSlot(x: number, y: number, width: number, height: number, slot: HudSkillSlot): void {
     const definition = getPowerUpDefinition(slot.type);
-    const tint = slot.acquired ? definition.tint : "rgba(180, 167, 147, 0.4)";
-    this.ctx.fillStyle = slot.acquired ? "rgba(28, 28, 36, 0.95)" : "rgba(18, 18, 24, 0.78)";
-    this.roundRectPath(x, y, width, height, 6);
+    const tint = slot.acquired ? definition.tint : "rgba(140, 160, 190, 0.35)";
+    const slotGradient = this.ctx.createLinearGradient(x, y, x, y + height);
+    slotGradient.addColorStop(0, slot.acquired ? "rgba(16, 22, 34, 0.92)" : "rgba(11, 15, 24, 0.72)");
+    slotGradient.addColorStop(1, slot.acquired ? "rgba(10, 14, 23, 0.94)" : "rgba(8, 11, 18, 0.74)");
+    this.ctx.fillStyle = slotGradient;
+    this.roundRectPath(x, y, width, height, 7);
     this.ctx.fill();
     if (slot.recentlyCollected) {
       const pulse = 0.12 + slot.pickupProgress * 0.24;
       this.ctx.globalAlpha = pulse;
       this.ctx.fillStyle = definition.tint;
-      this.roundRectPath(x, y, width, height, 6);
+      this.roundRectPath(x, y, width, height, 7);
       this.ctx.fill();
       this.ctx.globalAlpha = 1;
     }
     this.ctx.strokeStyle = slot.recentlyCollected
       ? definition.tint
-      : (slot.acquired ? "rgba(255, 90, 31, 0.45)" : CANVAS_UI_BORDER);
+      : (slot.acquired ? "rgba(103, 232, 249, 0.35)" : NOVA.glassEdgeSoft);
     this.ctx.lineWidth = slot.recentlyCollected ? 1.5 : 1;
-    this.roundRectPath(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), 6);
+    this.roundRectPath(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1), 7);
     this.ctx.stroke();
     this.ctx.lineWidth = 1;
 
@@ -5210,6 +5175,9 @@ export class GameApp {
         CANVAS_UI_SHADOW,
       );
     }
+
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.07)";
+    this.ctx.fillRect(x + width - 25, y + 6, 1, height - 12);
 
     // Value only — key labels in chips caused the "SPC OK" overlay mess.
     this.ctx.textAlign = "right";
@@ -5401,6 +5369,10 @@ export class GameApp {
     checker: number,
   ): void {
     const theme = this.getArenaThemeDefinition();
+    if (theme.motif.floorPattern === "grid") {
+      this.drawNovaFloorTile(x, y, variant);
+      return;
+    }
     const palette = theme.palette;
     let outer = checker === 0 ? palette.floorBase : palette.floorBaseAlt;
     let inner = checker === 0 ? palette.floorBaseAlt : palette.floorBase;
@@ -5507,6 +5479,119 @@ export class GameApp {
     this.ctx.restore();
   }
 
+  /**
+   * NOVA PRIME floor: ultra-quiet slabs — flat value, hairline joints, tiny
+   * corner ticks on base tiles, luminous inset rails on lanes, thin open
+   * rings for spawn and double dashed rings for wrap portals.
+   */
+  private drawNovaFloorTile(
+    x: number,
+    y: number,
+    variant: "base" | "lane" | "spawn" | "portal",
+  ): void {
+    const palette = this.getArenaPalette();
+    const tileX = Math.round(x / TILE_SIZE);
+    const tileY = Math.round(y / TILE_SIZE);
+    const hash = tileHash01(tileX, tileY);
+
+    let fill = palette.floorBase;
+    if (variant === "lane") {
+      fill = palette.floorLane;
+    } else if (variant === "spawn") {
+      fill = palette.floorSpawn;
+    } else if (variant === "portal") {
+      fill = palette.floorPortal;
+    }
+    this.ctx.fillStyle = fill;
+    this.ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+    // Deterministic micro value-step (no noise): ±2% luminance veil.
+    this.ctx.fillStyle = hash > 0.5
+      ? `rgba(255, 255, 255, ${(hash - 0.5) * 0.045})`
+      : `rgba(0, 0, 0, ${(0.5 - hash) * 0.05})`;
+    this.ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+    // Quiet bevel: 1px top light / bottom shade, hairline joint.
+    this.ctx.fillStyle = palette.floorEdgeLight;
+    this.ctx.fillRect(x, y, TILE_SIZE, 1);
+    this.ctx.fillStyle = palette.floorEdgeDark;
+    this.ctx.fillRect(x, y + TILE_SIZE - 1, TILE_SIZE, 1);
+    this.ctx.strokeStyle = palette.floorBorder;
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(x + 0.5, y + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+
+    if (variant === "base") {
+      // Technical grid: 3px corner ticks, very low alpha.
+      this.ctx.strokeStyle = palette.floorCenterMark;
+      const o = 4;
+      const t = 3;
+      const corners: Array<[number, number, number, number]> = [
+        [x + o, y + o, 1, 1],
+        [x + TILE_SIZE - o, y + o, -1, 1],
+        [x + o, y + TILE_SIZE - o, 1, -1],
+        [x + TILE_SIZE - o, y + TILE_SIZE - o, -1, -1],
+      ];
+      this.ctx.beginPath();
+      for (const [cx, cy, sx, sy] of corners) {
+        this.ctx.moveTo(cx, cy + sy * t);
+        this.ctx.lineTo(cx, cy);
+        this.ctx.lineTo(cx + sx * t, cy);
+      }
+      this.ctx.stroke();
+      return;
+    }
+
+    if (variant === "lane") {
+      // Luminous inset rail: lifted fill + hairline frame + center pip.
+      this.ctx.fillStyle = NOVA.accentGhost;
+      this.ctx.globalAlpha = 0.5;
+      this.ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      this.ctx.globalAlpha = 1;
+      this.ctx.strokeStyle = "rgba(103, 232, 249, 0.11)";
+      this.ctx.strokeRect(x + 5.5, y + 5.5, TILE_SIZE - 11, TILE_SIZE - 11);
+      this.ctx.fillStyle = "rgba(103, 232, 249, 0.22)";
+      this.ctx.fillRect(x + TILE_SIZE / 2 - 1, y + TILE_SIZE / 2 - 1, 2, 2);
+      return;
+    }
+
+    const centerX = x + TILE_SIZE / 2;
+    const centerY = y + TILE_SIZE / 2;
+    this.ctx.save();
+    if (variant === "spawn") {
+      // Thin open ring + center dot — landmark without noise.
+      this.ctx.strokeStyle = palette.spawnRing;
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 0.16;
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.globalAlpha = 1;
+      this.ctx.fillStyle = palette.spawnRing;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 1.5, 0, Math.PI * 2);
+      this.ctx.fill();
+    } else {
+      // Wrap portal: double dashed ring (distinct from spawn at a glance).
+      this.ctx.strokeStyle = palette.portalRing;
+      this.ctx.lineWidth = 1.5;
+      this.ctx.setLineDash([4, 3]);
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 11, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.setLineDash([2, 3]);
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, 6, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+    }
+    this.ctx.restore();
+  }
+
   private getDangerOverlayTiles(): Array<{ x: number; y: number; etaMs: number }> {
     const dangerMap = this.cachedDangerMap ?? this.getDangerMap();
     const tiles: Array<{ x: number; y: number; etaMs: number }> = [];
@@ -5553,9 +5638,11 @@ export class GameApp {
       const screenX = tile.x * TILE_SIZE;
       const screenY = tile.y * TILE_SIZE;
       this.ctx.fillStyle = fill;
-      this.ctx.fillRect(screenX + 5, screenY + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+      roundedRectPath(this.ctx, screenX + 5, screenY + 5, TILE_SIZE - 10, TILE_SIZE - 10, 5);
+      this.ctx.fill();
       this.ctx.strokeStyle = stroke;
-      this.ctx.strokeRect(screenX + 5.5, screenY + 5.5, TILE_SIZE - 11, TILE_SIZE - 11);
+      roundedRectPath(this.ctx, screenX + 5.5, screenY + 5.5, TILE_SIZE - 11, TILE_SIZE - 11, 5);
+      this.ctx.stroke();
 
       const urgency = 1 - Math.min(1, tile.etaMs / DANGER_OVERLAY_MAX_ETA_MS);
       const pulsePeriodMs = DANGER_OVERLAY_PULSE_SLOW_MS
@@ -5641,13 +5728,15 @@ export class GameApp {
         : isTerminalCrate
           ? "rgba(255, 176, 48, 0.38)"
           : "rgba(245, 96, 26, 0.22)";
-      this.ctx.fillRect(screenX + 6, screenY + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+      roundedRectPath(this.ctx, screenX + 6, screenY + 6, TILE_SIZE - 12, TILE_SIZE - 12, 5);
+      this.ctx.fill();
       this.ctx.strokeStyle = isOrigin
         ? "rgba(255, 243, 212, 0.82)"
         : isTerminalCrate
           ? "rgba(255, 238, 168, 0.9)"
           : "rgba(236, 214, 168, 0.56)";
-      this.ctx.strokeRect(screenX + 6.5, screenY + 6.5, TILE_SIZE - 13, TILE_SIZE - 13);
+      roundedRectPath(this.ctx, screenX + 6.5, screenY + 6.5, TILE_SIZE - 13, TILE_SIZE - 13, 5);
+      this.ctx.stroke();
     }
   }
 
@@ -5682,6 +5771,10 @@ export class GameApp {
     }
     const theme = this.getArenaThemeDefinition();
     const palette = theme.palette;
+    if (theme.motif.wallStyle === "monolith") {
+      this.drawMonolithWall(x, y, palette);
+      return;
+    }
     this.ctx.fillStyle = palette.wallShadow;
     this.ctx.fillRect(x + 2, y + TILE_SIZE - 5, TILE_SIZE - 4, 4);
     this.ctx.fillStyle = palette.wallOuter;
@@ -5710,6 +5803,45 @@ export class GameApp {
     }
     this.ctx.strokeStyle = palette.wallBorder;
     this.ctx.strokeRect(x + 2.5, y + 3.5, TILE_SIZE - 5, TILE_SIZE - 7);
+  }
+
+  /**
+   * NOVA PRIME wall: edge-to-edge monolith with vertical falloff, cyan
+   * rim-light on the top edge and a soft contact shadow — depth without
+   * texture noise.
+   */
+  private drawMonolithWall(x: number, y: number, palette: ArenaThemePalette): void {
+    // Contact shadow on the floor below (south).
+    this.ctx.fillStyle = palette.wallShadow;
+    this.ctx.fillRect(x + 3, y + TILE_SIZE - 3, TILE_SIZE - 6, 3);
+
+    // Body: full-tile rounded slab with vertical falloff.
+    const body = this.ctx.createLinearGradient(0, y, 0, y + TILE_SIZE);
+    body.addColorStop(0, palette.wallTop);
+    body.addColorStop(0.28, palette.wallInner);
+    body.addColorStop(1, palette.wallOuter);
+    roundedRectPath(this.ctx, x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 3, 3);
+    this.ctx.fillStyle = body;
+    this.ctx.fill();
+
+    // Cyan rim-light along the top edge.
+    this.ctx.fillStyle = palette.wallAccent;
+    roundedRectPath(this.ctx, x + 3, y + 2, TILE_SIZE - 6, 2, 1);
+    this.ctx.fill();
+
+    // Quiet inner face (subtle depth, no texture).
+    const face = this.ctx.createLinearGradient(0, y + 8, 0, y + TILE_SIZE - 6);
+    face.addColorStop(0, "rgba(255, 255, 255, 0.03)");
+    face.addColorStop(1, "rgba(0, 0, 0, 0.14)");
+    roundedRectPath(this.ctx, x + 4, y + 8, TILE_SIZE - 8, TILE_SIZE - 14, 2);
+    this.ctx.fillStyle = face;
+    this.ctx.fill();
+
+    // Hairline silhouette.
+    roundedRectPath(this.ctx, x + 1.5, y + 1.5, TILE_SIZE - 3, TILE_SIZE - 4, 3);
+    this.ctx.strokeStyle = palette.wallBorder;
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
   }
 
   private drawSuddenDeathClosedSlot(x: number, y: number, tileX = 0, tileY = 0): void {
@@ -5773,6 +5905,10 @@ export class GameApp {
     }
     const theme = this.getArenaThemeDefinition();
     const palette = theme.palette;
+    if (theme.motif.crateStyle === "banded") {
+      this.drawBandedCrate(x, y, palette);
+      return;
+    }
     this.ctx.fillStyle = palette.crateShadow;
     this.ctx.fillRect(x + 3, y + TILE_SIZE - 5, TILE_SIZE - 6, 4);
     this.ctx.fillStyle = palette.crateOuter;
@@ -5804,6 +5940,59 @@ export class GameApp {
       this.ctx.fillRect(x + 9, y + 10, TILE_SIZE - 18, 2);
       this.ctx.fillRect(x + 10, y + 22, TILE_SIZE - 20, 2);
     }
+  }
+
+  /**
+   * NOVA PRIME crate: the single warm category on the board — rounded umber
+   * body, iron band, ember sigil with contained glow, contact shadow.
+   */
+  private drawBandedCrate(x: number, y: number, palette: ArenaThemePalette): void {
+    // Contact shadow.
+    this.ctx.fillStyle = palette.crateShadow;
+    this.ctx.beginPath();
+    this.ctx.ellipse(x + TILE_SIZE / 2, y + TILE_SIZE - 3, TILE_SIZE * 0.36, 2.5, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Body: warm vertical gradient.
+    const body = this.ctx.createLinearGradient(0, y + 4, 0, y + TILE_SIZE - 4);
+    body.addColorStop(0, palette.crateInner);
+    body.addColorStop(1, palette.crateOuter);
+    roundedRectPath(this.ctx, x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8, 4);
+    this.ctx.fillStyle = body;
+    this.ctx.fill();
+
+    // Horizontal iron band + highlight.
+    this.ctx.fillStyle = palette.crateBand;
+    this.ctx.fillRect(x + 4, y + TILE_SIZE / 2 - 3, TILE_SIZE - 8, 6);
+    this.ctx.fillStyle = "rgba(255, 220, 170, 0.12)";
+    this.ctx.fillRect(x + 4, y + TILE_SIZE / 2 - 3, TILE_SIZE - 8, 1);
+
+    // Top rim light.
+    this.ctx.fillStyle = "rgba(255, 230, 190, 0.2)";
+    roundedRectPath(this.ctx, x + 6, y + 5, TILE_SIZE - 12, 2, 1);
+    this.ctx.fill();
+
+    // Ember sigil (small diamond) with contained glow.
+    const centerX = x + TILE_SIZE / 2;
+    const centerY = y + TILE_SIZE / 2;
+    this.ctx.save();
+    this.ctx.shadowColor = palette.crateMark;
+    this.ctx.shadowBlur = 4;
+    this.ctx.fillStyle = palette.crateMark;
+    this.ctx.beginPath();
+    this.ctx.moveTo(centerX, centerY - 3.5);
+    this.ctx.lineTo(centerX + 3.5, centerY);
+    this.ctx.lineTo(centerX, centerY + 3.5);
+    this.ctx.lineTo(centerX - 3.5, centerY);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.restore();
+
+    // Hairline border.
+    roundedRectPath(this.ctx, x + 4.5, y + 4.5, TILE_SIZE - 9, TILE_SIZE - 9, 4);
+    this.ctx.strokeStyle = "rgba(12, 6, 2, 0.65)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
   }
 
   private drawCrateBreakAnimation(effect: CrateBreakAnimation): void {
@@ -5889,29 +6078,49 @@ export class GameApp {
       this.ctx.translate(-(x + TILE_SIZE * 0.5), -(y + TILE_SIZE * 0.5));
     }
     const sprite = this.assets.powerUps[powerUp.type];
+    // NOVA PRIME: floating glass chip — tint glow, dark disc, tint hairline.
+    const bob = this.prefersReducedMotion
+      ? 0
+      : Math.sin(this.animationClockMs / 520 + powerUp.tile.x * 1.3 + powerUp.tile.y * 0.7) * 1.4;
+    const chipX = x + TILE_SIZE / 2;
+    const chipY = y + TILE_SIZE / 2 + bob;
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = "lighter";
+    this.ctx.globalAlpha = 0.22;
+    this.ctx.fillStyle = definition.tint;
+    this.ctx.beginPath();
+    this.ctx.arc(chipX, chipY, 15, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+    this.ctx.save();
+    this.ctx.fillStyle = "rgba(7, 11, 18, 0.88)";
+    this.ctx.beginPath();
+    this.ctx.arc(chipX, chipY, 12, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.globalAlpha = 0.85;
+    this.ctx.strokeStyle = definition.tint;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.stroke();
+    this.ctx.globalAlpha = 0.35;
+    this.ctx.beginPath();
+    this.ctx.arc(chipX - 3, chipY - 3.5, 5, Math.PI * 0.9, Math.PI * 1.6);
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
+    this.ctx.globalAlpha = 1;
     if (sprite) {
-      this.ctx.save();
-      this.ctx.fillStyle = "rgba(8, 10, 14, 0.66)";
-      this.ctx.beginPath();
-      this.ctx.arc(x + 16, y + 16, 13, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.strokeStyle = "rgba(255, 244, 214, 0.82)";
-      this.ctx.lineWidth = 1.5;
-      this.ctx.stroke();
-      this.ctx.drawImage(sprite, x + 2, y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+      this.ctx.drawImage(sprite, chipX - 8, chipY - 8, 16, 16);
       this.ctx.restore();
       this.ctx.restore();
       return;
     }
-
-    this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-    this.ctx.fillRect(x + 8, y + 8, 16, 16);
     this.ctx.fillStyle = definition.tint;
-    this.ctx.fillRect(x + 10, y + 10, 12, 12);
-    this.ctx.fillStyle = "#120d06";
-    this.ctx.font = "700 10px Inter";
+    this.ctx.font = `700 9px ${NOVA.fontDisplay}`;
     this.ctx.textAlign = "center";
-    this.ctx.fillText(definition.shortLabel, x + 16, y + 19);
+    this.ctx.textBaseline = "middle";
+    this.ctx.fillText(definition.shortLabel, chipX, chipY + 0.5);
+    this.ctx.textBaseline = "alphabetic";
+    this.ctx.restore();
     this.ctx.restore();
   }
 
@@ -5969,6 +6178,30 @@ export class GameApp {
       this.ctx.fill();
       this.ctx.restore();
     }
+    // NOVA PRIME: contact shadow + contained warm halo + fuse progress arc.
+    const bombCenterX = x + TILE_SIZE / 2;
+    const bombCenterY = y + TILE_SIZE / 2;
+    this.ctx.save();
+    this.ctx.fillStyle = "rgba(2, 4, 8, 0.5)";
+    this.ctx.beginPath();
+    this.ctx.ellipse(bombCenterX, y + TILE_SIZE - 5, 10, 3, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.globalCompositeOperation = "lighter";
+    const halo = this.ctx.createRadialGradient(bombCenterX, bombCenterY, 2, bombCenterX, bombCenterY, 17);
+    halo.addColorStop(0, `rgba(255, 150, 60, ${0.1 + pulse * 0.1})`);
+    halo.addColorStop(1, "rgba(255, 120, 40, 0)");
+    this.ctx.fillStyle = halo;
+    this.ctx.fillRect(x - 4, y - 4, TILE_SIZE + 8, TILE_SIZE + 8);
+    this.ctx.restore();
+    // Fuse arc: thin ring that closes as the fuse burns (quiet at start, hot at the end).
+    this.ctx.save();
+    this.ctx.strokeStyle = `rgba(255, 170, 80, ${0.26 + smoothUrgency * 0.5})`;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.lineCap = "round";
+    this.ctx.beginPath();
+    this.ctx.arc(bombCenterX, bombCenterY, 14.5, -Math.PI / 2, -Math.PI / 2 + fuseProgress * Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.restore();
     if (this.assets.props.bomb) {
       this.ctx.save();
       this.ctx.globalAlpha = Math.max(0.7, pulse);
@@ -6241,9 +6474,20 @@ export class GameApp {
 
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
-    this.ctx.fillStyle = "rgba(10, 8, 7, 0.32)";
+    this.ctx.fillStyle = "rgba(2, 4, 9, 0.42)";
     this.ctx.beginPath();
-    this.ctx.ellipse(x + TILE_SIZE * 0.5, y + TILE_SIZE - 2, TILE_SIZE * 0.4, TILE_SIZE * 0.18, 0, 0, Math.PI * 2);
+    this.ctx.ellipse(x + TILE_SIZE * 0.5, y + TILE_SIZE - 2, TILE_SIZE * 0.38, TILE_SIZE * 0.15, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    // NOVA PRIME: identity ring in the player's color (instant read in 4P).
+    const identityColor = PLAYER_COLORS[player.id]?.primary ?? NOVA.accent;
+    this.ctx.globalAlpha = alpha * 0.75;
+    this.ctx.strokeStyle = identityColor;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.beginPath();
+    this.ctx.ellipse(x + TILE_SIZE * 0.5, y + TILE_SIZE - 3, TILE_SIZE * 0.32, TILE_SIZE * 0.12, 0, 0, Math.PI * 2);
+    this.ctx.stroke();
+    this.ctx.globalAlpha = alpha * 0.16;
+    this.ctx.fillStyle = identityColor;
     this.ctx.fill();
     this.ctx.restore();
 
@@ -6333,13 +6577,34 @@ export class GameApp {
     if (this.roundOutcome?.winner !== player.id) {
       return;
     }
-    this.ctx.fillStyle = CANVAS_UI_GOLD;
-    this.ctx.fillRect(x + 4, y - 3, TILE_SIZE - 8, 3);
-    this.ctx.fillRect(x + 1, y, 3, TILE_SIZE - 8);
-    this.ctx.fillRect(x + TILE_SIZE - 4, y, 3, TILE_SIZE - 8);
-    this.ctx.fillStyle = CANVAS_UI_GOLD_BRIGHT;
-    this.ctx.fillRect(x + 7, y - 6, TILE_SIZE - 14, 3);
-    this.ctx.fillRect(x + 4, y + TILE_SIZE - 8, TILE_SIZE - 8, 3);
+    // NOVA PRIME: warm victory corner-brackets with contained glow.
+    const arm = 9;
+    const o = 1.5;
+    this.ctx.save();
+    this.ctx.strokeStyle = NOVA.warm;
+    this.ctx.shadowColor = NOVA.warm;
+    this.ctx.shadowBlur = 6;
+    this.ctx.lineWidth = 2;
+    this.ctx.lineCap = "round";
+    this.ctx.beginPath();
+    // top-left
+    this.ctx.moveTo(x + o, y + o + arm);
+    this.ctx.lineTo(x + o, y + o);
+    this.ctx.lineTo(x + o + arm, y + o);
+    // top-right
+    this.ctx.moveTo(x + TILE_SIZE - o - arm, y + o);
+    this.ctx.lineTo(x + TILE_SIZE - o, y + o);
+    this.ctx.lineTo(x + TILE_SIZE - o, y + o + arm);
+    // bottom-left
+    this.ctx.moveTo(x + o, y + TILE_SIZE - o - arm);
+    this.ctx.lineTo(x + o, y + TILE_SIZE - o);
+    this.ctx.lineTo(x + o + arm, y + TILE_SIZE - o);
+    // bottom-right
+    this.ctx.moveTo(x + TILE_SIZE - o - arm, y + TILE_SIZE - o);
+    this.ctx.lineTo(x + TILE_SIZE - o, y + TILE_SIZE - o);
+    this.ctx.lineTo(x + TILE_SIZE - o, y + TILE_SIZE - o - arm);
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   private getActiveSkillAnimationFrames(
@@ -6522,7 +6787,7 @@ export class GameApp {
     this.ctx.save();
     this.ctx.fillStyle = active
       ? `rgba(255, 95, 87, ${0.1 + pulse * 0.12})`
-      : `rgba(0, 229, 160, ${0.05 + clampedProgress * 0.08})`;
+      : `rgba(34, 199, 244, ${0.05 + clampedProgress * 0.08})`;
     this.ctx.fillRect(x - 1, y - 1, meterWidth + 2, meterHeight + 2);
 
     const baseGradient = this.ctx.createLinearGradient(x, y, x, y + meterHeight);
@@ -6537,7 +6802,7 @@ export class GameApp {
     this.ctx.fillRect(x, y, meterWidth, meterHeight);
 
     this.ctx.globalAlpha = active ? 0.28 + pulse * 0.2 : 0.18 + clampedProgress * 0.12;
-    this.ctx.fillStyle = active ? "rgba(255, 210, 204, 0.34)" : "rgba(174, 255, 233, 0.26)";
+    this.ctx.fillStyle = active ? "rgba(255, 210, 204, 0.34)" : "rgba(174, 236, 255, 0.26)";
     for (let offset = 2; offset < meterWidth - 2; offset += 6) {
       this.ctx.fillRect(x + offset, y + 1, 2, meterHeight - 2);
     }
@@ -6549,9 +6814,9 @@ export class GameApp {
       fillGradient.addColorStop(0.58, "rgba(255, 95, 87, 0.98)");
       fillGradient.addColorStop(1, "rgba(189, 31, 55, 0.98)");
     } else {
-      fillGradient.addColorStop(0, "rgba(95, 255, 200, 0.96)");
-      fillGradient.addColorStop(0.6, "rgba(0, 229, 160, 0.96)");
-      fillGradient.addColorStop(1, "rgba(0, 161, 122, 0.96)");
+      fillGradient.addColorStop(0, "rgba(154, 232, 255, 0.96)");
+      fillGradient.addColorStop(0.6, "rgba(34, 199, 244, 0.96)");
+      fillGradient.addColorStop(1, "rgba(14, 145, 190, 0.96)");
     }
     this.ctx.fillStyle = fillGradient;
     this.ctx.fillRect(x + 1, y + 1, fillWidth, meterHeight - 2);
@@ -6561,7 +6826,7 @@ export class GameApp {
       this.ctx.fillRect(x + fillWidth - 1, y + 1, 1, meterHeight - 2);
     }
 
-    this.ctx.strokeStyle = active ? `rgba(255, 95, 87, ${0.6 + pulse * 0.2})` : "rgba(0, 229, 160, 0.58)";
+    this.ctx.strokeStyle = active ? `rgba(255, 95, 87, ${0.6 + pulse * 0.2})` : "rgba(34, 199, 244, 0.58)";
     this.ctx.strokeRect(x + 0.5, y + 0.5, meterWidth - 1, meterHeight - 1);
     this.ctx.restore();
   }
@@ -6662,39 +6927,38 @@ export class GameApp {
     this.ctx.save();
     // Soft dim only for outcome, not pause — deaths remain legible.
     if (!isPause) {
-      this.ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+      this.ctx.fillStyle = "rgba(2, 4, 9, 0.42)";
       this.ctx.fillRect(0, hudH, CANVAS_WIDTH, CANVAS_HEIGHT - hudH);
     }
 
-    const pauseChrome = isPause ? this.assets.hud?.chipUlt : this.assets.hud?.panelCenter;
-    if (pauseChrome && pauseChrome.complete && pauseChrome.naturalWidth > 0) {
-      this.ctx.drawImage(pauseChrome, panelX, panelY, panelW, panelH);
-    } else {
-      this.ctx.fillStyle = CANVAS_UI_PANEL_BG_STRONG;
-      this.roundRectPath(panelX, panelY, panelW, panelH, 8);
-      this.ctx.fill();
-      this.ctx.strokeStyle = isPause ? CANVAS_UI_BORDER_STRONG : (showVictory ? CANVAS_UI_SUCCESS : showStalemate ? CANVAS_UI_DANGER : CANVAS_UI_BORDER_STRONG);
-      this.ctx.lineWidth = 1.5;
-      this.ctx.stroke();
-      this.ctx.fillStyle = CANVAS_UI_GOLD;
-      this.ctx.globalAlpha = 0.85;
-      this.ctx.fillRect(panelX + 10, panelY + 1, panelW - 20, 2);
-      this.ctx.globalAlpha = 1;
+    // NOVA PRIME: floating glass card with tone-coded edge.
+    const edgeColor = showVictory ? NOVA.warm : showStalemate ? NOVA.dangerSoft : NOVA.accentSoft;
+    this.ctx.save();
+    if (showVictory) {
+      this.ctx.shadowColor = NOVA.warm;
+      this.ctx.shadowBlur = 18;
     }
+    drawGlassPanel(this.ctx, panelX, panelY, panelW, panelH, 14, { strong: true, edge: edgeColor });
+    this.ctx.restore();
+    this.ctx.fillStyle = edgeColor;
+    this.ctx.globalAlpha = 0.8;
+    roundedRectPath(this.ctx, panelX + 14, panelY + 1.5, panelW - 28, 2, 1);
+    this.ctx.fill();
+    this.ctx.globalAlpha = 1;
 
     const textX = panelX + panelW / 2;
     this.ctx.textAlign = "center";
-    this.ctx.fillStyle = CANVAS_UI_TEXT;
-    this.ctx.font = isPause ? "700 16px Space Grotesk, Inter, sans-serif" : "700 18px Space Grotesk, Inter, sans-serif";
+    this.ctx.fillStyle = NOVA.ink;
+    this.ctx.font = isPause ? `700 16px ${NOVA.fontDisplay}` : `700 18px ${NOVA.fontDisplay}`;
     this.ctx.fillText(title, textX, panelY + (isPause ? 24 : 28));
 
-    this.ctx.fillStyle = CANVAS_UI_MUTED;
-    this.ctx.font = "600 11px Inter, sans-serif";
+    this.ctx.fillStyle = NOVA.inkMuted;
+    this.ctx.font = `600 11px ${NOVA.fontBody}`;
     this.ctx.fillText(subtitle, textX, panelY + (isPause ? 42 : 48));
 
     if (footer && !isPause) {
-      this.ctx.fillStyle = CANVAS_UI_GOLD_BRIGHT;
-      this.ctx.font = "600 10px Inter, sans-serif";
+      this.ctx.fillStyle = NOVA.accent;
+      this.ctx.font = `600 10px ${NOVA.fontBody}`;
       this.ctx.fillText(footer, textX, panelY + 68);
     }
 

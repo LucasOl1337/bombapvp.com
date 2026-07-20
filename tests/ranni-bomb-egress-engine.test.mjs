@@ -130,6 +130,41 @@ describe("egress de bomba plantada sobre a projeção da Ranni", () => {
     verifyEgressForPlayer(2);
   });
 
+  it("conclui a projeção depois de sair de uma bomba rival criada sobre o ghost", () => {
+    const app = game(2);
+    const bodyAtStart = { ...app.exportOnlineSnapshot().players[2].position };
+    startChannel(app, 2, "up");
+    for (let step = 0; step < 4; step += 1) app.advanceServerSimulation(STEP_MS);
+    app.replaceServerPlayerInput(2, input());
+    plant(app, 1);
+
+    const planted = app.exportOnlineSnapshot();
+    const bombId = planted.bombs[0].id;
+    expect(planted.players[2].skill.projectedBombEgressIds).toEqual([bombId]);
+
+    app.replaceServerPlayerInput(2, input("down"));
+    for (let step = 0; step < 20; step += 1) app.advanceServerSimulation(STEP_MS);
+    const escaped = app.exportOnlineSnapshot();
+    expect(escaped.players[2].skill.projectedBombEgressIds).toEqual([]);
+
+    app.replaceServerPlayerInput(2, input("right"));
+    for (let step = 0; step < 10; step += 1) app.advanceServerSimulation(STEP_MS);
+    const projectionAtFinish = {
+      ...app.exportOnlineSnapshot().players[2].skill.projectedPosition,
+    };
+
+    app.replaceServerPlayerInput(2, input(null, { skillPressed: true }));
+    app.advanceServerSimulation(STEP_MS);
+    const finished = app.exportOnlineSnapshot();
+
+    expect(finished.players[2].skill.phase).toBe("cooldown");
+    expect(finished.players[2].position).toEqual(projectionAtFinish);
+    expect(Math.hypot(
+      finished.players[2].position.x - bodyAtStart.x,
+      finished.players[2].position.y - bodyAtStart.y,
+    )).toBeGreaterThan(1);
+  });
+
   it("permite somente reduzir a sobreposição após uma bomba nascer sobre o ghost", () => {
     const app = game(2);
     startChannel(app, 2);

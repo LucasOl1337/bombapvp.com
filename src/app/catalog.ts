@@ -11,7 +11,11 @@ import {
 
 export type Locale = CharacterLocale;
 
-export type ExperienceId = "continuous-room" | "bot-training" | "bot-vs-bot-lab";
+export type ExperienceId =
+  | "continuous-room"
+  | "bot-training"
+  | "bot-vs-bot-lab"
+  | "game-mechanics-prototype";
 
 export type CharacterId = CatalogCharacterId;
 
@@ -68,10 +72,10 @@ export type ProductCopy = Readonly<{
 const PT_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
-    name: "Jogo online PvP",
-    description: "Entre direto na arena com o personagem em foco e dispute rodadas com Completers.",
+    name: "Duelo online 1v1",
+    description: "Entre na fila global e dispute um duelo 1v1 contra outro jogador real.",
     actionLabel: "Jogar agora",
-    journeyLabel: "Entrada imediata",
+    journeyLabel: "Matchmaking global",
   }),
   Object.freeze({
     id: "bot-training",
@@ -87,15 +91,22 @@ const PT_EXPERIENCES: readonly Experience[] = Object.freeze([
     actionLabel: "Conhecer o laboratório",
     journeyLabel: "Experiência de observação",
   }),
+  Object.freeze({
+    id: "game-mechanics-prototype",
+    name: "GameMechanics · Protótipo",
+    description: "Teste a reconstrução isolada das regras antes de qualquer migração.",
+    actionLabel: "Testar protótipo",
+    journeyLabel: "Reconstrução paralela",
+  }),
 ]);
 
 const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
   Object.freeze({
     id: "continuous-room",
-    name: "Online PvP",
-    description: "Jump straight into the arena with the fighter in focus and contest rounds with Completers.",
+    name: "Online 1v1 duel",
+    description: "Join global matchmaking for a 1v1 duel against another real player.",
     actionLabel: "Play now",
-    journeyLabel: "Instant entry",
+    journeyLabel: "Global matchmaking",
   }),
   Object.freeze({
     id: "bot-training",
@@ -111,6 +122,13 @@ const EN_EXPERIENCES: readonly Experience[] = Object.freeze([
     actionLabel: "Explore the lab",
     journeyLabel: "Spectator experience",
   }),
+  Object.freeze({
+    id: "game-mechanics-prototype",
+    name: "GameMechanics · Prototype",
+    description: "Test the isolated rules rebuild before any mode is migrated.",
+    actionLabel: "Test prototype",
+    journeyLabel: "Parallel rebuild",
+  }),
 ]);
 
 const PT_CONTROLS_GUIDE: ControlsGuideCopy = Object.freeze({
@@ -122,7 +140,6 @@ const PT_CONTROLS_GUIDE: ControlsGuideCopy = Object.freeze({
     Object.freeze({ keys: Object.freeze(["Q"]), action: "Soltar bomba" }),
     Object.freeze({ keys: Object.freeze(["R"]), action: "Detonar bomba remota" }),
     Object.freeze({ keys: Object.freeze(["Espaço"]), action: "Habilidade especial" }),
-    Object.freeze({ keys: Object.freeze(["E"]), action: "Pronto no lobby" }),
   ]),
 });
 
@@ -135,7 +152,6 @@ const EN_CONTROLS_GUIDE: ControlsGuideCopy = Object.freeze({
     Object.freeze({ keys: Object.freeze(["Q"]), action: "Drop bomb" }),
     Object.freeze({ keys: Object.freeze(["R"]), action: "Detonate remote bomb" }),
     Object.freeze({ keys: Object.freeze(["Space"]), action: "Special ability" }),
-    Object.freeze({ keys: Object.freeze(["E"]), action: "Ready in lobby" }),
   ]),
 });
 
@@ -217,5 +233,6 @@ export function catalogFor(locale: Locale): Readonly<{
 export function routeForExperience(experienceId: ExperienceId): string {
   if (experienceId === "continuous-room") return "/jogar/personagem";
   if (experienceId === "bot-training") return "/treino/personagem";
+  if (experienceId === "game-mechanics-prototype") return "/GameMechanics/";
   return "/laboratorio";
 }

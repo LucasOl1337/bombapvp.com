@@ -20,6 +20,16 @@ export const HUD_LAYOUT = {
   rivalSlotMaxWidth: 200,
   paddingX: 8,
   gap: 8,
+  /** Local panel rhythm: identity | centered upgrades | ultimate. */
+  localInsetX: 14,
+  localIdentityWidth: 236,
+  localRightInset: 12,
+  localUltimateWidth: 66,
+  localSectionGap: 10,
+  skillSlotGap: 8,
+  skillSlotMinWidth: 50,
+  skillSlotMaxWidth: 72,
+  skillSlotHeight: 30,
   /** Name budgets (code units) for stable ellipsis. */
   rivalNameMax: 14,
   localNameMax: 20,
@@ -113,21 +123,4 @@ export function computeRivalSlotWidth(
   const usable = Math.max(0, availableWidth - gap * Math.max(0, slotCount - 1));
   const raw = Math.floor(usable / slotCount);
   return Math.max(minWidth, Math.min(maxWidth, raw));
-}
-
-export function drawHudPanel(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  accent: string,
-  colors: Readonly<{ panelBg: string; border: string }>,
-): void {
-  ctx.fillStyle = colors.panelBg;
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x, y, 3, height);
-  ctx.strokeStyle = colors.border;
-  ctx.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1));
 }

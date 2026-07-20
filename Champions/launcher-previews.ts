@@ -17,11 +17,44 @@ export type LauncherClip = Readonly<{
   frames: readonly string[];
 }>;
 
+/**
+ * Optical presentation contract for the launcher portrait stage.
+ *
+ * Champion animation sheets intentionally use different canvas sizes and
+ * transparent margins. Keeping this metadata beside the preview projection
+ * prevents the home page from compensating for those differences with
+ * character-specific CSS selectors.
+ */
+export type LauncherPresentation = Readonly<{
+  scale: number;
+  offsetXPercent: number;
+  offsetYPercent: number;
+}>;
+
 export type LauncherPreview = Readonly<{
   characterId: CharacterId;
   /** Ordered showreel clips (only non-empty animations). */
   clips: readonly LauncherClip[];
+  presentation: LauncherPresentation;
 }>;
+
+const DEFAULT_PRESENTATION: LauncherPresentation = Object.freeze({
+  scale: 1,
+  offsetXPercent: 0,
+  offsetYPercent: 0,
+});
+
+/** Optically equalized from each champion's south-facing alpha bounds. */
+const PRESENTATION_BY_SLUG: Partial<Record<ChampionSlug, LauncherPresentation>> = {
+  ranni: Object.freeze({ scale: 1.42, offsetXPercent: 0, offsetYPercent: 3 }),
+  "killer-bee": Object.freeze({ scale: 1.38, offsetXPercent: 0, offsetYPercent: 4 }),
+  "crocodilo-arcano": Object.freeze({ scale: 1.3, offsetXPercent: 0, offsetYPercent: 2 }),
+  nico: Object.freeze({ scale: 1.47, offsetXPercent: 0, offsetYPercent: 4 }),
+  "nix-ember": Object.freeze({ scale: 0.82, offsetXPercent: 0, offsetYPercent: 1 }),
+  pendula: Object.freeze({ scale: 0.74, offsetXPercent: 0, offsetYPercent: -1 }),
+  mirelle: Object.freeze({ scale: 0.85, offsetXPercent: 0, offsetYPercent: 1 }),
+  "lee-sin": Object.freeze({ scale: 0.86, offsetXPercent: 0, offsetYPercent: -1 }),
+};
 
 // Vite requires static glob strings (no runtime template interpolation).
 const IDLE_MODULES = import.meta.glob("./*/assets/animations/idle-south-*.png", {
@@ -115,7 +148,11 @@ const PREVIEWS_BY_ID = new Map<CharacterId, LauncherPreview>(
     }
     return [
       characterId,
-      Object.freeze({ characterId, clips: Object.freeze(clips) }) as LauncherPreview,
+      Object.freeze({
+        characterId,
+        clips: Object.freeze(clips),
+        presentation: PRESENTATION_BY_SLUG[slug] ?? DEFAULT_PRESENTATION,
+      }) as LauncherPreview,
     ] as const;
   }),
 );

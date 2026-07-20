@@ -26,6 +26,17 @@ import tournamentCleanFloorSpawnUrl from "./arenas/themes/tournament-clean/floor
 import tournamentCleanFloorPortalUrl from "./arenas/themes/tournament-clean/floor-portal.png?url";
 import tournamentCleanWallUrl from "./arenas/themes/tournament-clean/wall.png?url";
 import tournamentCleanWallAltUrl from "./arenas/themes/tournament-clean/wall-alt.png?url";
+import neonBastionCrateUrl from "./arenas/themes/neon-bastion/crate.png?url";
+import neonBastionCrateAltUrl from "./arenas/themes/neon-bastion/crate-alt.png?url";
+import neonBastionFloorBaseUrl from "./arenas/themes/neon-bastion/floor-base.png?url";
+import neonBastionFloorBaseAltUrl from "./arenas/themes/neon-bastion/floor-base-alt.png?url";
+import neonBastionFloorBaseAlt2Url from "./arenas/themes/neon-bastion/floor-base-alt2.png?url";
+import neonBastionFloorBaseAlt3Url from "./arenas/themes/neon-bastion/floor-base-alt3.png?url";
+import neonBastionFloorLaneUrl from "./arenas/themes/neon-bastion/floor-lane.png?url";
+import neonBastionFloorSpawnUrl from "./arenas/themes/neon-bastion/floor-spawn.png?url";
+import neonBastionFloorPortalUrl from "./arenas/themes/neon-bastion/floor-portal.png?url";
+import neonBastionWallUrl from "./arenas/themes/neon-bastion/wall.png?url";
+import neonBastionWallAltUrl from "./arenas/themes/neon-bastion/wall-alt.png?url";
 import emberKilnCrateUrl from "./arenas/themes/ember-kiln/crate.png?url";
 import emberKilnFloorBaseUrl from "./arenas/themes/ember-kiln/floor-base.png?url";
 import emberKilnFloorLaneUrl from "./arenas/themes/ember-kiln/floor-lane.png?url";
@@ -132,6 +143,17 @@ const GAME_ASSET_CATALOG = Object.freeze({
   "arena.theme.tournament-clean.wall-alt": tournamentCleanWallAltUrl,
   "arena.theme.tournament-clean.crate": tournamentCleanCrateUrl,
   "arena.theme.tournament-clean.crate-alt": tournamentCleanCrateAltUrl,
+  "arena.theme.neon-bastion.floor.base": neonBastionFloorBaseUrl,
+  "arena.theme.neon-bastion.floor.base-alt": neonBastionFloorBaseAltUrl,
+  "arena.theme.neon-bastion.floor.base-alt2": neonBastionFloorBaseAlt2Url,
+  "arena.theme.neon-bastion.floor.base-alt3": neonBastionFloorBaseAlt3Url,
+  "arena.theme.neon-bastion.floor.lane": neonBastionFloorLaneUrl,
+  "arena.theme.neon-bastion.floor.spawn": neonBastionFloorSpawnUrl,
+  "arena.theme.neon-bastion.floor.portal": neonBastionFloorPortalUrl,
+  "arena.theme.neon-bastion.wall": neonBastionWallUrl,
+  "arena.theme.neon-bastion.wall-alt": neonBastionWallAltUrl,
+  "arena.theme.neon-bastion.crate": neonBastionCrateUrl,
+  "arena.theme.neon-bastion.crate-alt": neonBastionCrateAltUrl,
   "arena.theme.verdant-ruins.floor.base": verdantRuinsFloorBaseUrl,
   "arena.theme.verdant-ruins.floor.lane": verdantRuinsFloorLaneUrl,
   "arena.theme.verdant-ruins.floor.spawn": verdantRuinsFloorSpawnUrl,
@@ -215,6 +237,7 @@ const GAME_ASSET_CATALOG = Object.freeze({
 } as const);
 
 export type GameAssetId = keyof typeof GAME_ASSET_CATALOG;
+export type ArenaThemeAssetId = Extract<GameAssetId, `arena.theme.${string}`>;
 
 export function resolveGameAsset(assetId: GameAssetId): string {
   return GAME_ASSET_CATALOG[assetId];

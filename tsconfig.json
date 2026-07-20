@@ -15,5 +15,5 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["src/app", "src/main.ts", "tests"]
+  "include": ["src/app", "src/main.ts", "GameMechanics", "tests"]
 }

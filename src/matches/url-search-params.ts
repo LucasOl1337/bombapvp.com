@@ -6,6 +6,7 @@ import {
 } from "./launch-request";
 
 function launchModeFromSearchParams(params: URLSearchParams): LaunchRequest["mode"] {
+  if (params.get("mode") === "online") return "online";
   if (params.get("mode") === "continuous") return "continuous";
   if (params.get("mode") === "lab") return "lab";
   return "training";
@@ -35,6 +36,13 @@ export function launchRequestFromSearchParams(
       labels: Array.from({ length: competitorCount }, (_, index) => (
         params.get(`label${index + 1}`) ?? ""
       )),
+    });
+  }
+
+  if (mode === "online") {
+    return resolveLaunchRequest({
+      mode: "online",
+      character: params.get("character"),
     });
   }
 

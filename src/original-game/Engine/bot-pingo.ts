@@ -1,5 +1,6 @@
 import {
   BASE_MOVE_MS,
+  FLAME_DURATION_MS,
   MIN_MOVE_MS,
   SPEED_STEP_MS,
   TILE_SIZE,
@@ -11,12 +12,20 @@ import type {
   TileCoord,
 } from "../Gameplay/types";
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
+import { bodyTouchedTileIndices } from "../Gameplay/player-body";
 import type { BotContext, BotDecision } from "./bot-contracts";
 import { SUDDEN_DEATH_FALL_MS, SUDDEN_DEATH_TICK_MS } from "./danger-map";
 import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
+import { RANNI_SKILL_CHANNEL_MS } from "../../../Champions/ranni/skill";
 
 const ESCAPE_BUFFER_MS = 220;
-const RANNI_EMERGENCY_PHASE_WINDOW_MS = 1_300;
+// Equality is unsafe because channel expiry precedes the final flame-contact
+// pass in the authoritative step. Preserve a deterministic safety cushion.
+const RANNI_PHASE_END_SAFETY_MS = 100;
+const RANNI_EMERGENCY_PHASE_WINDOW_MS = RANNI_SKILL_CHANNEL_MS
+  - FLAME_DURATION_MS
+  - RANNI_PHASE_END_SAFETY_MS;
+const RANNI_RELEASE_SWEEP_GUARD_MS = 50;
 const TURN_CENTER_TOLERANCE_PX = 2;
 
 const steps: ReadonlyArray<Readonly<{ direction: Direction; dx: number; dy: number }>> = [
@@ -92,6 +101,10 @@ function blastTiles(bomb: BombState, context: BotContext): TileCoord[] {
 
 function buildThreatArrival(player: PlayerState, context: BotContext): Map<string, number> {
   const arrival = new Map<string, number>();
+  const registerThreat = (tile: TileCoord, arrivalMs: number): void => {
+    const tileId = key(tile);
+    arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, arrivalMs));
+  };
   const effectiveFuse = new Map(context.bombs.map((bomb) => {
     const owner = context.players[bomb.ownerId];
     return [
@@ -119,29 +132,49 @@ function buildThreatArrival(player: PlayerState, context: BotContext): Map<strin
     }
   }
   for (const flame of context.flames) {
-    arrival.set(key(flame.tile), 0);
+    registerThreat(flame.tile, 0);
   }
   for (const bomb of context.bombs) {
     const fuseMs = effectiveFuse.get(bomb.id) ?? bomb.fuseMs;
     for (const tile of blastTiles(bomb, context)) {
-      const tileId = key(tile);
-      arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, fuseMs));
+      registerThreat(tile, fuseMs);
     }
   }
   for (const effect of context.suddenDeathClosureEffects) {
     if (!effect.impacted) {
-      const tileId = key(effect.tile);
       const closureMs = Math.max(0, SUDDEN_DEATH_FALL_MS - effect.elapsedMs);
-      arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, closureMs));
+      registerThreat(effect.tile, closureMs);
     }
   }
   if (context.suddenDeathActive) {
     for (let index = context.suddenDeathIndex; index < context.suddenDeathPath.length; index += 1) {
-      const tileId = key(context.suddenDeathPath[index]);
+      const tile = context.suddenDeathPath[index];
       const closureMs = context.suddenDeathTickMs
         + (index - context.suddenDeathIndex) * SUDDEN_DEATH_TICK_MS;
-      arrival.set(tileId, Math.min(arrival.get(tileId) ?? Number.POSITIVE_INFINITY, closureMs));
+      registerThreat(tile, closureMs);
     }
+  }
+
+  // Search nodes are tile-centered, but the live player can straddle up to
+  // four tiles. Mirror the physical body rule only onto the current node so
+  // the existing path search remains cheap and deterministic.
+  const touched = bodyTouchedTileIndices(player.position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  let bodyArrival: number | undefined;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = ((rawY % height) + height) % height;
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = ((rawX % width) + width) % width;
+      const touchedArrival = arrival.get(`${x},${y}`);
+      if (touchedArrival !== undefined && (bodyArrival === undefined || touchedArrival < bodyArrival)) {
+        bodyArrival = touchedArrival;
+      }
+    }
+  }
+  if (bodyArrival !== undefined) {
+    const playerTileId = key(player.tile);
+    arrival.set(playerTileId, Math.min(arrival.get(playerTileId) ?? Number.POSITIVE_INFINITY, bodyArrival));
   }
   return arrival;
 }
@@ -223,7 +256,8 @@ function ownBombEscapeDirection(player: PlayerState, context: BotContext): Direc
 }
 
 function bombEscapeDirection(player: PlayerState, context: BotContext): Direction | null {
-  if (context.roomBombPlacementThrottleMs > 0
+  if (context.suddenDeathActive
+    || context.roomBombPlacementThrottleMs > 0
     || player.activeBombs >= player.maxBombs
     || (player.skill.id === RANNI_SKILL_ID && player.skill.phase !== "idle")
     || context.bombs.some((bomb) => key(bomb.tile) === key(player.tile))
@@ -552,12 +586,22 @@ function isPositionCentered(position: Readonly<{ x: number; y: number }>): boole
     && Math.abs(position.y - centerY) <= TURN_CENTER_TOLERANCE_PX;
 }
 
-function shouldReleaseEmergencyPhase(player: PlayerState, context: BotContext): boolean {
+function shouldReleaseEmergencyPhase(
+  player: PlayerState,
+  context: BotContext,
+  threatArrival: ReadonlyMap<string, number>,
+): boolean {
+  const physicalThreat = threatArrival.get(key(player.tile));
   return player.skill.id === RANNI_SKILL_ID
     && player.skill.phase === "channeling"
+    && player.skill.castElapsedMs > 0
     && player.skill.projectedPosition !== null
     && (player.skill.projectedBombEgressIds?.length ?? 0) === 0
     && isPositionCentered(player.skill.projectedPosition)
+    // Releasing and exploding in the same authoritative step sweeps the old
+    // physical pose too. Earlier release remains valid because the new pose is
+    // authoritative before that later explosion.
+    && (physicalThreat === undefined || physicalThreat > RANNI_RELEASE_SWEEP_GUARD_MS)
     && isPositionOutsideAllBlasts(player, player.skill.projectedPosition, context);
 }
 
@@ -652,7 +696,7 @@ export function getBotPingoDecision(player: PlayerState, context: BotContext): B
     context,
     threatArrival,
   );
-  const releaseSkill = shouldReleaseEmergencyPhase(player, context);
+  const releaseSkill = shouldReleaseEmergencyPhase(player, context, threatArrival);
   const useSkill = releaseSkill || shouldStartEmergencyPhase(player, threatArrival, escaping);
   const holdPostPhaseRefuge = shouldHoldPostPhaseRefuge(player, context, threatArrival);
   const detonate = !useSkill && !holdPostPhaseRefuge && shouldDetonateRemote(player, context);
@@ -664,7 +708,9 @@ export function getBotPingoDecision(player: PlayerState, context: BotContext): B
     ? releaseSkill ? null : channelEscapeDirection(player, context)
     : holdPostPhaseRefuge
       ? null
-      : escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival);
+      : detonate
+        ? null
+        : escaping ?? attackEscape ?? strategicDirection(player, context, threatArrival);
   return {
     direction,
     placeBomb,

@@ -160,7 +160,8 @@ export interface OnlineGameFrame {
 export interface OnlineSessionBridge {
   role: OnlineRole | null;
   roomCode: string | null;
-  sendGuestInput(input: OnlineInputState, inputSeq: number): void;
+  /** Return false when the transport did not accept the command. */
+  sendGuestInput(input: OnlineInputState, inputSeq: number): boolean | void;
   sendHostSnapshot(snapshot: OnlineGameSnapshot): void;
   sendMatchResultChoice(choice: "rematch" | "lobby"): void;
 }

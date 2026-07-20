@@ -47,9 +47,10 @@ describe("Bomba PvP app", () => {
       currentPath: "/",
     });
     expect(app.getSnapshot().experiences.map(({ name }) => name)).toEqual([
-      "Jogo online PvP",
+      "Duelo online 1v1",
       "Treino contra bots",
       "Laboratório Bot vs Bot",
+      "GameMechanics · Protótipo",
     ]);
     expect(within(portugueseRoot).getByRole("heading", { name: "Bomba PvP", level: 1 })).toBeTruthy();
     expect(within(portugueseRoot).getByRole("heading", { name: "Bomba PvP", level: 2 })).toBeTruthy();
@@ -72,14 +73,38 @@ describe("Bomba PvP app", () => {
     expect(app.getSnapshot().locale).toBe("en");
     expect(within(englishRoot).getByRole("heading", { name: "Bomba PvP", level: 2 })).toBeTruthy();
     expect(app.getSnapshot().experiences.map(({ name }) => name)).toEqual([
-      "Online PvP",
+      "Online 1v1 duel",
       "Bot training",
       "Bot vs Bot Lab",
+      "GameMechanics · Prototype",
     ]);
     expect(englishRoot.querySelector(".experience-region")).not.toBeNull();
   });
 
-  it("envia a Sala contínua ao motor original direto do launcher com o personagem em foco", () => {
+  it("abre o quarto modo em um runtime isolado sem alterar o contrato da arena original", () => {
+    const root = createRoot();
+    const visitedPaths: string[] = [];
+    app = createBombApp({
+      hostname: "bombapvp.com",
+      root,
+      onPathChange: (path) => visitedPaths.push(path),
+    });
+    const view = within(root);
+
+    fireEvent.click(view.getByRole("button", { name: "Testar protótipo" }));
+
+    expect(app.getSnapshot()).toMatchObject({
+      screen: "game-launch",
+      currentPath: "/GameMechanics/",
+      activeExperience: { id: "game-mechanics-prototype" },
+      selectedCharacter: null,
+    });
+    expect(view.getByRole("heading", { name: "Abrindo GameMechanics" })).toBeTruthy();
+    expect(view.getByText("Carregando o primeiro protótipo da reconstrução paralela.")).toBeTruthy();
+    expect(visitedPaths).toEqual(["/GameMechanics/"]);
+  });
+
+  it("envia o PvP ao matchmaking real direto do launcher com o personagem em foco", () => {
     const root = createRoot();
     const visitedPaths: string[] = [];
     app = createBombApp({
@@ -94,14 +119,14 @@ describe("Bomba PvP app", () => {
     fireEvent.click(view.getByRole("button", { name: "Jogar agora" }));
     expect(app.getSnapshot()).toMatchObject({
       screen: "game-launch",
-      currentPath: `/arena/?mode=continuous&character=${RANNI_CHARACTER_ID}`,
-      activeExperience: { id: "continuous-room", name: "Jogo online PvP" },
+      currentPath: `/arena/?mode=online&character=${RANNI_CHARACTER_ID}`,
+      activeExperience: { id: "continuous-room", name: "Duelo online 1v1" },
       selectedCharacter: { name: "Ranni" },
     });
     expect(view.getByRole("region", { name: "Abrindo arena" })).toBeTruthy();
-    expect(view.getByText("Ranni · Jogo online PvP · vs Bomb + Pingo")).toBeTruthy();
+    expect(view.getByText("Ranni · Duelo online 1v1 · vs jogador online")).toBeTruthy();
     expect(visitedPaths).toEqual([
-      `/arena/?mode=continuous&character=${RANNI_CHARACTER_ID}`,
+      `/arena/?mode=online&character=${RANNI_CHARACTER_ID}`,
     ]);
   });
 
@@ -118,7 +143,7 @@ describe("Bomba PvP app", () => {
     expect(focusedName).toBeTruthy();
     expect(focusedName).not.toBe("Ranni");
     expect(app.getSnapshot().screen).toBe("game-launch");
-    expect(app.getSnapshot().currentPath).toMatch(/^\/arena\/\?mode=continuous&character=/);
+    expect(app.getSnapshot().currentPath).toMatch(/^\/arena\/\?mode=online&character=/);
     expect(app.getSnapshot().currentPath).not.toContain("bot=");
   });
 

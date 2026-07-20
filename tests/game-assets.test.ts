@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { resolveGameAsset } from "../game-assets/index.ts";
 import { CITADEL_BREACH_MARKETING } from "../game-assets/marketing.ts";
 import { CITADEL_BREACH_VISUALS } from "../game-assets/citadel-breach.ts";
-import { getArenaThemeById } from "../src/original-game/Arenas/arena-theme-library.ts";
+import { DEFAULT_ARENA_THEME_ID, getArenaThemeById } from "../src/original-game/Arenas/arena-theme-library.ts";
 
 describe("game assets", () => {
   it("keeps launcher marketing free of the full catalog import", () => {
@@ -59,6 +59,38 @@ describe("game assets", () => {
     });
   });
 
+  it("ships nova-prime as the default procedural premium arena theme", () => {
+    expect(DEFAULT_ARENA_THEME_ID).toBe("nova-prime");
+    const theme = getArenaThemeById(DEFAULT_ARENA_THEME_ID);
+    expect(theme?.renderMode).toBe("procedural");
+    expect(theme?.tilePaths).toBeUndefined();
+    expect(theme?.motif).toEqual({
+      floorPattern: "grid",
+      lanePattern: "rail",
+      spawnPattern: "ring",
+      wallStyle: "monolith",
+      crateStyle: "banded",
+    });
+  });
+
+  it("keeps neon-bastion available as a legacy sprite theme", () => {
+    const theme = getArenaThemeById("neon-bastion");
+    expect(theme?.renderMode).toBe("sprite");
+    expect(theme?.tilePaths).toMatchObject({
+      base: "arena.theme.neon-bastion.floor.base",
+      baseAlt: "arena.theme.neon-bastion.floor.base-alt",
+      baseAlt2: "arena.theme.neon-bastion.floor.base-alt2",
+      baseAlt3: "arena.theme.neon-bastion.floor.base-alt3",
+      lane: "arena.theme.neon-bastion.floor.lane",
+      spawn: "arena.theme.neon-bastion.floor.spawn",
+      portal: "arena.theme.neon-bastion.floor.portal",
+      wall: "arena.theme.neon-bastion.wall",
+      wallAlt: "arena.theme.neon-bastion.wall-alt",
+      crate: "arena.theme.neon-bastion.crate",
+      crateAlt: "arena.theme.neon-bastion.crate-alt",
+    });
+  });
+
   it.each([
     ["gameplay.bomb.sprite", "bomb.png"],
     ["gameplay.bomb.sprite.ruins", "bomb-ruins.png"],
@@ -86,6 +118,17 @@ describe("game assets", () => {
     ["arena.theme.tournament-clean.wall-alt", "arenas/themes/tournament-clean/wall-alt.png"],
     ["arena.theme.tournament-clean.crate", "arenas/themes/tournament-clean/crate.png"],
     ["arena.theme.tournament-clean.crate-alt", "arenas/themes/tournament-clean/crate-alt.png"],
+    ["arena.theme.neon-bastion.floor.base", "arenas/themes/neon-bastion/floor-base.png"],
+    ["arena.theme.neon-bastion.floor.base-alt", "arenas/themes/neon-bastion/floor-base-alt.png"],
+    ["arena.theme.neon-bastion.floor.base-alt2", "arenas/themes/neon-bastion/floor-base-alt2.png"],
+    ["arena.theme.neon-bastion.floor.base-alt3", "arenas/themes/neon-bastion/floor-base-alt3.png"],
+    ["arena.theme.neon-bastion.floor.lane", "arenas/themes/neon-bastion/floor-lane.png"],
+    ["arena.theme.neon-bastion.floor.spawn", "arenas/themes/neon-bastion/floor-spawn.png"],
+    ["arena.theme.neon-bastion.floor.portal", "arenas/themes/neon-bastion/floor-portal.png"],
+    ["arena.theme.neon-bastion.wall", "arenas/themes/neon-bastion/wall.png"],
+    ["arena.theme.neon-bastion.wall-alt", "arenas/themes/neon-bastion/wall-alt.png"],
+    ["arena.theme.neon-bastion.crate", "arenas/themes/neon-bastion/crate.png"],
+    ["arena.theme.neon-bastion.crate-alt", "arenas/themes/neon-bastion/crate-alt.png"],
     ["arena.theme.verdant-ruins.floor.base", "arenas/themes/verdant-ruins/floor-base.png"],
     ["arena.theme.verdant-ruins.floor.lane", "arenas/themes/verdant-ruins/floor-lane.png"],
     ["arena.theme.verdant-ruins.floor.spawn", "arenas/themes/verdant-ruins/floor-spawn.png"],

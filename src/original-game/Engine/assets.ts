@@ -2,11 +2,13 @@ import type { Direction, PlayerId, PowerUpType } from "../Gameplay/types";
 import { assetUrl } from "./asset-url";
 import type { ArenaThemeDefinition } from "../Arenas/arena-theme-library";
 import { getArenaThemeById, resolveArenaTheme } from "../Arenas/arena-theme-library";
+import { resolveArenaThemeSpriteSources } from "../Arenas/arena-theme-assets";
 import { listCharacterDefinitions } from "../../../Champions";
 import type { ChampionAssets } from "../../../Champions/assets";
 import { getChampionAssets } from "../../../Champions/assets-catalog";
 import { listPowerUpDefinitions } from "../Gameplay/powerups";
-import { resolveGameAsset } from "../../../game-assets";
+import { getRuntimeAssetSources, resolveGameAsset } from "../../../game-assets";
+export { spriteForDirection } from "./directional-sprites";
 
 export interface DirectionalSprites {
   up: HTMLImageElement | null;
@@ -118,7 +120,7 @@ async function loadImage(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-async function loadFirstAvailableImage(paths: string[]): Promise<HTMLImageElement | null> {
+async function loadFirstAvailableImage(paths: readonly string[]): Promise<HTMLImageElement | null> {
   for (const path of paths) {
     const image = await loadImage(path);
     if (image) {
@@ -295,63 +297,42 @@ function createCharacterSpriteLoader(
 export async function loadGameAssets(arenaThemeId?: string | null): Promise<GameAssets> {
   const resolvedTheme = arenaThemeId ? getArenaThemeById(arenaThemeId) : null;
   const arenaTheme = resolvedTheme ?? resolveArenaTheme(typeof window !== "undefined" ? window.location.search : "");
-  const arenaTilePaths = arenaTheme.renderMode === "sprite" ? arenaTheme.tilePaths ?? null : null;
+  const arenaSources = resolveArenaThemeSpriteSources(arenaTheme);
+  const runtimeSources = getRuntimeAssetSources();
   const powerUpDefinitions = listPowerUpDefinitions();
   const [baseAssets, powerUpEntries] = await Promise.all([
     Promise.all([
       loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player1"), ["hires", ""]),
       loadDirectionalSprites(assetUrl("/Assets/Characters/Animations/default-players/player2")),
       loadCharacterRoster(),
-      arenaTilePaths
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.base), resolveGameAsset("arena.shared.floor.base")])
-        : Promise.resolve(null),
-      arenaTilePaths?.baseAlt
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt)])
-        : Promise.resolve(null),
-      arenaTilePaths?.baseAlt2
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt2)])
-        : Promise.resolve(null),
-      arenaTilePaths?.baseAlt3
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.baseAlt3)])
-        : Promise.resolve(null),
-      arenaTilePaths
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.lane), resolveGameAsset("arena.shared.floor.lane")])
-        : Promise.resolve(null),
-      arenaTilePaths
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.spawn), resolveGameAsset("arena.shared.floor.spawn")])
-        : Promise.resolve(null),
-      arenaTilePaths?.portal
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.portal)])
-        : Promise.resolve(null),
-      arenaTilePaths
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wall), resolveGameAsset("arena.shared.wall")])
-        : Promise.resolve(null),
-      arenaTilePaths?.wallAlt
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.wallAlt)])
-        : Promise.resolve(null),
-      arenaTilePaths
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crate), resolveGameAsset("gameplay.crate.sprite")])
-        : Promise.resolve(null),
-      arenaTilePaths?.crateAlt
-        ? loadFirstAvailableImage([resolveGameAsset(arenaTilePaths.crateAlt)])
-        : Promise.resolve(null),
-      loadImage(resolveGameAsset("gameplay.crate.break.0")),
-      loadImage(resolveGameAsset("gameplay.crate.break.1")),
-      loadImage(resolveGameAsset("gameplay.crate.break.2")),
-      loadImage(resolveGameAsset("gameplay.crate.break.3")),
-      loadImage(resolveGameAsset("gameplay.bomb.sprite")),
-      loadImage(resolveGameAsset("gameplay.bomb.flame")),
-      loadImage(resolveGameAsset("gameplay.bomb.flame.anim-sheet")),
-      loadImage(resolveGameAsset("effect.movement.speed-spark-trail")),
-      loadImage(resolveGameAsset("ui.arena.victory-emblem")),
-      loadImage(resolveGameAsset("ui.arena.stalemate-emblem")),
-      loadImage(resolveGameAsset("ui.hud.chrome.local")),
-      loadImage(resolveGameAsset("ui.hud.chrome.rival")),
-      loadImage(resolveGameAsset("ui.hud.chrome.center")),
-      loadImage(resolveGameAsset("ui.hud.chrome.ult")),
-      loadImage(resolveGameAsset("ui.hud.icon.bomb")),
-      loadImage(resolveGameAsset("ui.hud.icon.flame")),
-      loadImage(resolveGameAsset("ui.hud.icon.speed")),
+      loadFirstAvailableImage(arenaSources?.floor.base ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.baseAlt ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.baseAlt2 ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.baseAlt3 ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.lane ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.spawn ?? []),
+      loadFirstAvailableImage(arenaSources?.floor.portal ?? []),
+      loadFirstAvailableImage(arenaSources?.props.wall ?? []),
+      loadFirstAvailableImage(arenaSources?.props.wallAlt ?? []),
+      loadFirstAvailableImage(arenaSources?.props.crate ?? []),
+      loadFirstAvailableImage(arenaSources?.props.crateAlt ?? []),
+      loadImage(runtimeSources.crateBreakFrames[0]),
+      loadImage(runtimeSources.crateBreakFrames[1]),
+      loadImage(runtimeSources.crateBreakFrames[2]),
+      loadImage(runtimeSources.crateBreakFrames[3]),
+      loadImage(runtimeSources.bomb.sprite),
+      loadImage(runtimeSources.bomb.flame),
+      loadImage(runtimeSources.bomb.flameAnimSheet),
+      loadImage(runtimeSources.effects.speedSparkTrail),
+      loadImage(runtimeSources.arenaOutcomeUi.victoryEmblem),
+      loadImage(runtimeSources.arenaOutcomeUi.stalemateEmblem),
+      loadImage(runtimeSources.hudKit.panelLocal),
+      loadImage(runtimeSources.hudKit.panelRival),
+      loadImage(runtimeSources.hudKit.panelCenter),
+      loadImage(runtimeSources.hudKit.chipUlt),
+      loadImage(runtimeSources.hudKit.iconBomb),
+      loadImage(runtimeSources.hudKit.iconFlame),
+      loadImage(runtimeSources.hudKit.iconSpeed),
     ]),
     Promise.all(powerUpDefinitions.map(async (definition) => ([
       definition.type,
@@ -465,14 +446,4 @@ export async function loadGameAssets(arenaThemeId?: string | null): Promise<Game
     powerUps: Object.fromEntries(powerUpEntries) as Partial<Record<PowerUpType, HTMLImageElement | null>>,
     characterSpriteLoader,
   };
-}
-
-export function spriteForDirection(
-  sprites: DirectionalSprites,
-  direction: Direction,
-): HTMLImageElement | null {
-  if (direction === "up") return sprites.up;
-  if (direction === "down") return sprites.down;
-  if (direction === "left") return sprites.left;
-  return sprites.right;
 }

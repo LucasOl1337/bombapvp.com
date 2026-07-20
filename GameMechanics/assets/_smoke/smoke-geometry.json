@@ -1,0 +1,36 @@
+{
+  "viewports": {
+    "1280x720": {
+      "canvas": { "w": 709, "h": 580.1, "top": 85.7, "bottom": 665.8 },
+      "frame": { "w": 728.4, "h": 596, "top": 76, "bottom": 672 },
+      "hud": { "h": 72 },
+      "dock": { "top": 676, "bottom": 720 },
+      "insideViewport": true,
+      "overlaps": []
+    },
+    "800x600": {
+      "canvas": { "w": 608, "h": 497.4, "top": 60.5, "bottom": 557.9 },
+      "frame": { "w": 620.9, "h": 508, "top": 54, "bottom": 562 },
+      "hud": { "h": 50 },
+      "dock": { "top": 566, "bottom": 600 },
+      "insideViewport": true,
+      "overlaps": []
+    },
+    "1920x1080": {
+      "canvas": { "w": 1078, "h": 882, "top": 113, "bottom": 995 },
+      "frame": { "w": 1100, "h": 904, "top": 102, "bottom": 1006 },
+      "hud": { "h": 72 },
+      "dock": { "top": 1036, "bottom": 1080 },
+      "insideViewport": true,
+      "overlaps": []
+    }
+  },
+  "functionalSmoke1280x720": {
+    "bombsBeforePause": 1,
+    "bombsDuringPause": 1,
+    "bombsAfterResume": 1,
+    "pausedCommandsQueued": false,
+    "flamesObserved": 3,
+    "consoleErrorsAfterCleanReload": []
+  }
+}

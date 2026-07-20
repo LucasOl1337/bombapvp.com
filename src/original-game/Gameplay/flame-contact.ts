@@ -3,39 +3,20 @@
  * bots and tests can share the same geometry without canvas or audio.
  */
 import type { FlameState, PixelCoord, PlayerState, TileCoord } from "./types";
-import { TILE_SIZE } from "../PersonalConfig/config";
 import { parseTileKey } from "./tile-key";
 import {
   bodyOverlapsTile,
-  tileCenter,
   type BodyGeometryOptions,
-  wrappedAxisDelta,
 } from "./player-body";
 
-/** Half-extent of the vulnerable core as a fraction of one tile. */
-export const FLAME_HURTBOX_HALF_RATIO = 0.2;
-
-export interface FlameGeometryOptions extends BodyGeometryOptions {
-  flameHurtboxHalf?: number;
-}
+export type FlameGeometryOptions = BodyGeometryOptions;
 
 export function flameHurtboxOverlapsTile(
   position: PixelCoord,
   tile: TileCoord,
   options: FlameGeometryOptions = {},
 ): boolean {
-  const tileSize = options.tileSize ?? TILE_SIZE;
-  const hurtboxHalf = options.flameHurtboxHalf
-    ?? tileSize * FLAME_HURTBOX_HALF_RATIO;
-  const lethalCenterDistance = tileSize * 0.5 - hurtboxHalf;
-  const center = tileCenter(tile, tileSize);
-  const deltaX = Math.abs(options.arenaPixelWidth === undefined
-    ? position.x - center.x
-    : wrappedAxisDelta(position.x, center.x, options.arenaPixelWidth));
-  const deltaY = Math.abs(options.arenaPixelHeight === undefined
-    ? position.y - center.y
-    : wrappedAxisDelta(position.y, center.y, options.arenaPixelHeight));
-  return deltaX <= lethalCenterDistance && deltaY <= lethalCenterDistance;
+  return bodyOverlapsTile(position, tile, options);
 }
 
 export type FlameLike = Readonly<{
@@ -44,7 +25,7 @@ export type FlameLike = Readonly<{
   ownerId?: number | null;
 }>;
 
-/** True when an active flame's tile overlaps the vulnerable core at `position`. */
+/** True when an active flame's tile overlaps the canonical player body at `position`. */
 export function bodyOverlapsActiveFlame(
   position: PixelCoord,
   flame: FlameLike,
@@ -54,7 +35,7 @@ export function bodyOverlapsActiveFlame(
   return flameHurtboxOverlapsTile(position, flame.tile, options);
 }
 
-/** First active flame whose tile overlaps the vulnerable core, or null. */
+/** First active flame whose tile overlaps the canonical player body, or null. */
 export function findActiveFlameHittingBody(
   position: PixelCoord,
   flames: readonly FlameLike[],
@@ -77,7 +58,7 @@ export function bodyOverlapsAnyTile(
   return tiles.some((tile) => bodyOverlapsTile(position, tile, options));
 }
 
-/** True when any listed flame tile overlaps the vulnerable core. */
+/** True when any listed flame tile overlaps the canonical player body. */
 export function flameHurtboxOverlapsAnyTile(
   position: PixelCoord,
   tiles: readonly TileCoord[],
@@ -101,7 +82,7 @@ export function tilesFromKeys(keys: Iterable<string>): TileCoord[] {
   return tiles;
 }
 
-/** Alive players whose flame hurtbox overlaps any of the given tiles. */
+/** Alive players whose canonical body overlaps any of the given tiles. */
 export function findPlayersOverlappingTiles(
   players: readonly PlayerState[],
   tiles: readonly TileCoord[],

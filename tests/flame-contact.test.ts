@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   bodyOverlapsActiveFlame,
-  FLAME_HURTBOX_HALF_RATIO,
   flameHurtboxOverlapsTile,
   findActiveFlameHittingBody,
   findPlayersHitByFlames,
   findPlayersOverlappingTiles,
   tilesFromKeys,
 } from "../src/original-game/Gameplay/flame-contact.ts";
-import { PLAYER_BODY_HALF } from "../src/original-game/Gameplay/player-body.ts";
+import { bodyOverlapsTile, PLAYER_BODY_HALF } from "../src/original-game/Gameplay/player-body.ts";
 import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
 import type { PlayerState } from "../src/original-game/Gameplay/types.ts";
 
@@ -24,14 +23,24 @@ function playerAt(id: 1 | 2, x: number, y: number, alive = true): PlayerState {
 }
 
 describe("flame-contact pure helpers", () => {
-  it("uses a forgiving hurtbox independent from physical collision", () => {
+  it("uses the canonical physical player body for lethal flame contact", () => {
     const flameTile = { x: 3, y: 1 };
     const y = flameTile.y * TILE_SIZE + HALF;
     const flameEdge = flameTile.x * TILE_SIZE;
 
-    expect(FLAME_HURTBOX_HALF_RATIO).toBeLessThan(PLAYER_BODY_HALF / TILE_SIZE);
-    expect(flameHurtboxOverlapsTile({ x: flameEdge - 1, y }, flameTile)).toBe(false);
-    expect(flameHurtboxOverlapsTile({ x: flameEdge + 9, y }, flameTile)).toBe(true);
+    expect(flameHurtboxOverlapsTile({ x: flameEdge - PLAYER_BODY_HALF - 0.5, y }, flameTile)).toBe(false);
+    expect(flameHurtboxOverlapsTile({ x: flameEdge - PLAYER_BODY_HALF + 0.5, y }, flameTile)).toBe(true);
+  });
+
+  it("treats visible physical body overlap from a neighboring tile as lethal", () => {
+    const flameTile = { x: 3, y: 1 };
+    const y = flameTile.y * TILE_SIZE + HALF;
+    const flameLeft = flameTile.x * TILE_SIZE;
+    const pressedAgainstWallOverlap = { x: flameLeft - PLAYER_BODY_HALF + 0.5, y };
+
+    expect(Math.floor(pressedAgainstWallOverlap.x / TILE_SIZE)).toBe(flameTile.x - 1);
+    expect(bodyOverlapsTile(pressedAgainstWallOverlap, flameTile)).toBe(true);
+    expect(flameHurtboxOverlapsTile(pressedAgainstWallOverlap, flameTile)).toBe(true);
   });
 
   it("parses tile keys through the canonical codec", () => {

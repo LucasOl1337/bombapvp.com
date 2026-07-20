@@ -2,6 +2,7 @@ import { tileKey } from "../Arenas/arena";
 import { getBombFuseMsForPlayer } from "../Gameplay/powerups";
 import {
   BASE_MOVE_MS,
+  FLAME_DURATION_MS,
   MIN_MOVE_MS,
   SPEED_STEP_MS,
   TILE_SIZE,
@@ -13,8 +14,13 @@ import type {
   PowerUpType,
   TileCoord,
 } from "../Gameplay/types";
-import type { BotContext, BotDecision } from "./bot-contracts";
+import {
+  bodyTileOverlapArea,
+  bodyTouchedTileIndices,
+} from "../Gameplay/player-body";
+import type { BotContext, BotDecision, BotMovementOption } from "./bot-contracts";
 import { RANNI_SKILL_ID } from "../../../Champions/ranni/definition";
+import { RANNI_SKILL_CHANNEL_MS } from "../../../Champions/ranni/skill";
 
 export const BOMB_CHARACTER_INDEX = 0;
 
@@ -27,6 +33,14 @@ const DELTA: Readonly<Record<Direction, TileCoord>> = {
 };
 const ARRIVAL_MARGIN_MS = 180;
 const REACTION_WINDOW_MS = 1_300;
+// Leave an authoritative-step cushion: channel expiry is processed before the
+// last flame-contact pass, so equality can expose Ranni for one lethal step.
+const RANNI_PHASE_END_SAFETY_MS = 100;
+const RANNI_PHASE_COMMIT_WINDOW_MS = RANNI_SKILL_CHANNEL_MS
+  - FLAME_DURATION_MS
+  - RANNI_PHASE_END_SAFETY_MS;
+const RANNI_PHASE_NAVIGATION_MARGIN_MS = 400;
+const RANNI_RELEASE_SWEEP_GUARD_MS = 50;
 const TURN_CENTER_TOLERANCE_PX = 2;
 const POWER_UP_SCORE: Readonly<Record<PowerUpType, number>> = {
   "shield-up": 10,
@@ -155,11 +169,37 @@ function threatMap(
       threats.set(key, Math.min(threats.get(key) ?? Number.POSITIVE_INFINITY, bomb.fuseMs));
     }
   }
-  for (const flame of context.flames) threats.set(tileKey(flame.tile.x, flame.tile.y), 0);
+  for (const flame of context.flames) {
+    if (flame.remainingMs > 0) {
+      threats.set(tileKey(flame.tile.x, flame.tile.y), 0);
+    }
+  }
   for (const effect of context.suddenDeathClosureEffects) {
     threats.set(tileKey(effect.tile.x, effect.tile.y), 0);
   }
   return threats;
+}
+
+function bodyThreatEta(
+  player: PlayerState,
+  context: BotContext,
+  threats: ReadonlyMap<string, number>,
+): number | undefined {
+  const touched = bodyTouchedTileIndices(player.position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  let earliest: number | undefined;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = ((rawY % height) + height) % height;
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = ((rawX % width) + width) % width;
+      const eta = threats.get(tileKey(x, y));
+      if (eta !== undefined && (earliest === undefined || eta < earliest)) {
+        earliest = eta;
+      }
+    }
+  }
+  return earliest;
 }
 
 function safeEscapeDirection(
@@ -202,6 +242,37 @@ function safeEscapeDirection(
     }
   }
   return best?.firstDirection ?? null;
+}
+
+function minimumSafeEscapeSteps(
+  player: PlayerState,
+  context: BotContext,
+  threats: ReadonlyMap<string, number>,
+): number | undefined {
+  const queue: Array<Readonly<{ tile: TileCoord; steps: number }>> = [
+    { tile: player.tile, steps: 0 },
+  ];
+  const visited = new Set([tileKey(player.tile.x, player.tile.y)]);
+  const stepMs = moveDuration(player);
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const node = queue[cursor]!;
+    if (node.steps > 0 && !threats.has(tileKey(node.tile.x, node.tile.y))) {
+      return node.steps;
+    }
+    if (node.steps >= 12) continue;
+    for (const direction of DIRECTIONS) {
+      const tile = adjacentTile(node.tile, direction, context);
+      const key = tileKey(tile.x, tile.y);
+      if (visited.has(key) || !isOpen(tile, player.tile, context)) continue;
+      const steps = node.steps + 1;
+      const eta = threats.get(key);
+      if (eta !== undefined && eta <= steps * stepMs + ARRIVAL_MARGIN_MS) continue;
+      visited.add(key);
+      queue.push({ tile, steps });
+    }
+  }
+  return undefined;
 }
 
 function alignThreatenedEscapeToTileCenter(
@@ -268,6 +339,12 @@ function hasRanniSafetyWindowForNewBomb(player: PlayerState): boolean {
     && player.skill.cooldownRemainingMs + ARRIVAL_MARGIN_MS < getBombFuseMsForPlayer(player);
 }
 
+function hasUnresolvedOwnedExplosion(player: PlayerState, context: BotContext): boolean {
+  return player.activeBombs > 0
+    || context.bombs.some((bomb) => bomb.ownerId === player.id)
+    || context.flames.some((flame) => flame.ownerId === player.id && flame.remainingMs > 0);
+}
+
 function attackBombEscapeDirection(
   player: PlayerState,
   target: PlayerState,
@@ -275,9 +352,13 @@ function attackBombEscapeDirection(
   context: BotContext,
 ): Direction | null {
   if (
-    player.spawnProtectionMs > 0
+    context.suddenDeathActive
+    || player.spawnProtectionMs > 0
     || target.spawnProtectionMs > 0
-    || player.activeBombs >= player.maxBombs
+    // The current escape planner proves one owned explosion timeline at a
+    // time. Keep the commitment through its flame lifetime; otherwise the
+    // newly planned egress can steer back through the previous blast.
+    || hasUnresolvedOwnedExplosion(player, context)
     || !hasRanniSafetyWindowForNewBomb(player)
     || context.roomBombPlacementThrottleMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
@@ -303,8 +384,9 @@ function breakableBombEscapeDirection(
   context: BotContext,
 ): Direction | null {
   if (
-    player.spawnProtectionMs > 0
-    || player.activeBombs >= player.maxBombs
+    context.suddenDeathActive
+    || player.spawnProtectionMs > 0
+    || hasUnresolvedOwnedExplosion(player, context)
     || !hasRanniSafetyWindowForNewBomb(player)
     || context.roomBombPlacementThrottleMs > 0
     || context.bombs.some((bomb) => bomb.tile.x === player.tile.x && bomb.tile.y === player.tile.y)
@@ -356,6 +438,19 @@ function isInsideOwnedBombBlast(player: PlayerState, context: BotContext): boole
   ));
 }
 
+function shouldHoldOwnedBombRefuge(
+  player: PlayerState,
+  context: BotContext,
+  currentDanger: number | undefined,
+): boolean {
+  const imminentOwnedFuse = context.bombs
+    .filter((bomb) => bomb.ownerId === player.id && bomb.fuseMs <= REACTION_WINDOW_MS)
+    .reduce((earliest, bomb) => Math.min(earliest, bomb.fuseMs), Number.POSITIVE_INFINITY);
+  return Number.isFinite(imminentOwnedFuse)
+    && !isInsideOwnedBombBlast(player, context)
+    && (currentDanger === undefined || currentDanger >= imminentOwnedFuse);
+}
+
 function projectedRanniPlayer(player: PlayerState): PlayerState {
   const position = player.skill.projectedPosition ?? player.position;
   return {
@@ -369,7 +464,10 @@ function projectedRanniPlayer(player: PlayerState): PlayerState {
 }
 
 function isOverlappingAnyBlast(player: PlayerState, context: BotContext): boolean {
-  if (context.flames.some((flame) => context.isPlayerOverlappingTile(player, flame.tile))) {
+  if (context.flames.some((flame) => (
+    flame.remainingMs > 0
+    && context.isPlayerOverlappingTile(player, flame.tile)
+  ))) {
     return true;
   }
   return context.bombs.some((bomb) => (
@@ -377,35 +475,96 @@ function isOverlappingAnyBlast(player: PlayerState, context: BotContext): boolea
   ));
 }
 
+function movementDestination(
+  origin: Readonly<{ x: number; y: number }>,
+  option: BotMovementOption,
+): Readonly<{ x: number; y: number }> | null {
+  const candidates: ReadonlyArray<readonly [boolean, Readonly<{ x: number; y: number }>]> = [
+    [option.combinedFree, option.combinedMove],
+    [option.laneOnlyFree, option.laneOnlyMove],
+    [option.forwardOnlyFree, option.forwardOnlyMove],
+  ];
+  for (const [free, position] of candidates) {
+    if (free && position && (
+      Math.abs(position.x - origin.x) > 0.001
+      || Math.abs(position.y - origin.y) > 0.001
+    )) {
+      return position;
+    }
+  }
+  return null;
+}
+
 function continuousOverlapEscapeDirection(
   player: PlayerState,
   context: BotContext,
+  threats: ReadonlyMap<string, number>,
+  projected = false,
+  allowFallback = true,
 ): Direction | null {
-  const blast = [
-    ...context.flames.map((flame) => flame.tile),
+  const hazardByKey = new Map([
+    ...context.flames
+      .filter((flame) => flame.remainingMs > 0)
+      .map((flame) => flame.tile),
     ...context.bombs.flatMap((bomb) => blastTiles(bomb, context)),
-  ].filter((tile) => context.isPlayerOverlappingTile(player, tile));
-  if (blast.length === 0) return null;
+  ].map((tile) => [tileKey(tile.x, tile.y), tile] as const));
+  const hazards = [...hazardByKey.values()].filter((tile) => (
+    context.isPlayerOverlappingTile(player, tile)
+  ));
+  if (hazards.length === 0) return null;
 
-  const source = blast.reduce((furthest, tile) => {
-    const dx = player.position.x - (tile.x + 0.5) * TILE_SIZE;
-    const dy = player.position.y - (tile.y + 0.5) * TILE_SIZE;
-    const distanceSquared = dx * dx + dy * dy;
-    return distanceSquared > furthest.distanceSquared
-      ? { tile, distanceSquared }
-      : furthest;
-  }, { tile: blast[0]!, distanceSquared: Number.NEGATIVE_INFINITY }).tile;
-  const dx = player.position.x - (source.x + 0.5) * TILE_SIZE;
-  const dy = player.position.y - (source.y + 0.5) * TILE_SIZE;
-  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? "left" : "right";
-  if (Math.abs(dy) > 0) return dy < 0 ? "up" : "down";
-  return null;
+  const geometry = {
+    arenaPixelWidth: context.arena.config.grid.width * TILE_SIZE,
+    arenaPixelHeight: context.arena.config.grid.height * TILE_SIZE,
+  };
+  const overlapArea = (position: Readonly<{ x: number; y: number }>): number => (
+    hazards.reduce((total, tile) => (
+      total + bodyTileOverlapArea(position, tile, geometry)
+    ), 0)
+  );
+  const evaluate = projected
+    ? context.evaluateProjectedMovementOption
+    : context.evaluateMovementOption;
+  const probeMs = moveDuration(player) * 0.5;
+  const currentArea = overlapArea(player.position);
+  let fallback: Direction | null = null;
+  let best: Readonly<{ direction: Direction; area: number }> | null = null;
+  for (const direction of DIRECTIONS) {
+    const option = evaluate(player, direction, probeMs);
+    if (!context.canMovementOptionAdvance(player.position, option)) continue;
+    const destination = movementDestination(player.position, option);
+    if (!destination) {
+      if (projected) fallback ??= direction;
+      continue;
+    }
+    const destinationPlayer: PlayerState = { ...player, position: destination };
+    if (context.flames.some((flame) => (
+      flame.remainingMs > 0
+      && context.isPlayerOverlappingTile(destinationPlayer, flame.tile)
+    ))) {
+      continue;
+    }
+    const destinationDanger = bodyThreatEta(destinationPlayer, context, threats);
+    if (
+      destinationDanger !== undefined
+      && destinationDanger <= probeMs + ARRIVAL_MARGIN_MS
+    ) {
+      continue;
+    }
+    fallback ??= direction;
+    const area = overlapArea(destination);
+    if (area + 0.001 < currentArea && (best === null || area < best.area)) {
+      best = { direction, area };
+    }
+  }
+  return best?.direction ?? (allowFallback ? fallback : null);
 }
 
 function overlappingEnemyExitDirection(
   player: PlayerState,
   enemies: readonly PlayerState[],
   context: BotContext,
+  threats: ReadonlyMap<string, number>,
 ): Direction | null {
   const enemy = enemies.find((candidate) => (
     context.isPlayerOverlappingTile(player, candidate.tile)
@@ -420,17 +579,19 @@ function overlappingEnemyExitDirection(
     ? [dx >= 0 ? "right" : "left", dy >= 0 ? "down" : "up"]
     : [dy >= 0 ? "down" : "up", dx >= 0 ? "right" : "left"];
   return preferred.find((direction) => {
-    const destination = adjacentTile(player.tile, direction, context);
-    if (context.flames.some((flame) => (
-      flame.remainingMs > 0
-      && flame.ownerId === player.id
-      && flame.tile.x === destination.x
-      && flame.tile.y === destination.y
-    ))) {
-      return false;
-    }
     const option = context.evaluateMovementOption(player, direction, 1_000 / 60);
-    return context.canMovementOptionAdvance(player.position, option);
+    if (!context.canMovementOptionAdvance(player.position, option)) return false;
+    const destination = movementDestination(player.position, option);
+    if (!destination) {
+      const adjacentDanger = threats.get(tileKey(
+        adjacentTile(player.tile, direction, context).x,
+        adjacentTile(player.tile, direction, context).y,
+      ));
+      return adjacentDanger === undefined || adjacentDanger > ARRIVAL_MARGIN_MS + 1_000 / 60;
+    }
+    const destinationPlayer: PlayerState = { ...player, position: destination };
+    const danger = bodyThreatEta(destinationPlayer, context, threats);
+    return danger === undefined || danger > ARRIVAL_MARGIN_MS + 1_000 / 60;
   }) ?? null;
 }
 
@@ -590,7 +751,11 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     .map((id) => context.players[id])
     .filter((enemy) => enemy.active && enemy.alive);
   const threats = threatMap(context);
-  const currentDanger = threats.get(tileKey(player.tile.x, player.tile.y));
+  const currentTileKey = tileKey(player.tile.x, player.tile.y);
+  const currentDanger = bodyThreatEta(player, context, threats);
+  if (currentDanger !== undefined) {
+    threats.set(currentTileKey, Math.min(threats.get(currentTileKey) ?? Number.POSITIVE_INFINITY, currentDanger));
+  }
   const escapingOwnedBomb = isInsideOwnedBombBlast(player, context);
 
   if (player.skill.phase === "channeling") {
@@ -598,6 +763,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     if (
       player.skill.castElapsedMs > 0
       && (player.skill.projectedBombEgressIds?.length ?? 0) === 0
+      && (currentDanger === undefined || currentDanger > RANNI_RELEASE_SWEEP_GUARD_MS)
       && !isOverlappingAnyBlast(projectedPlayer, context)
     ) {
       return {
@@ -613,9 +779,17 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
       context,
       threats,
     );
-    const direction = routeDirection
+    const alignedDirection = routeDirection
       ? alignThreatenedEscapeToTileCenter(projectedPlayer, routeDirection, context, true)
-      : continuousOverlapEscapeDirection(projectedPlayer, context);
+      : null;
+    const bodyEgressDirection = continuousOverlapEscapeDirection(
+      projectedPlayer,
+      context,
+      threats,
+      true,
+      alignedDirection === null,
+    );
+    const direction = bodyEgressDirection ?? alignedDirection;
     return {
       direction,
       placeBomb: false,
@@ -626,19 +800,41 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     return { direction: null, placeBomb: false };
   }
 
+  // A proven refuge beside the owned blast is safer than reacting to a later
+  // rival threat or body pressure. Re-evaluate after the owned bomb resolves.
+  if (shouldHoldOwnedBombRefuge(player, context, currentDanger)) {
+    return { direction: null, placeBomb: false };
+  }
+
   if (
     escapingOwnedBomb
     || (currentDanger !== undefined && currentDanger <= REACTION_WINDOW_MS)
   ) {
     const routeDirection = safeEscapeDirection(player, enemies, context, threats);
-    const direction = routeDirection
+    const alignedDirection = routeDirection
       ? alignThreatenedEscapeToTileCenter(player, routeDirection, context)
-      : continuousOverlapEscapeDirection(player, context);
+      : null;
+    const bodyEgressDirection = continuousOverlapEscapeDirection(
+      player,
+      context,
+      threats,
+      false,
+      alignedDirection === null,
+    );
+    const direction = bodyEgressDirection ?? alignedDirection;
     const physicalEscapeDirection = routeDirection ?? direction;
+    const safeEscapeSteps = minimumSafeEscapeSteps(player, context, threats);
+    const discreteEscapeTimeMs = safeEscapeSteps === undefined
+      ? Number.POSITIVE_INFINITY
+      : safeEscapeSteps * moveDuration(player);
     if (
       physicalEscapeDirection !== null
       && currentDanger !== undefined
-      && currentDanger <= centerExitTimeMs(player, physicalEscapeDirection) + ARRIVAL_MARGIN_MS
+      && currentDanger <= RANNI_PHASE_COMMIT_WINDOW_MS
+      && currentDanger <= Math.max(
+        centerExitTimeMs(player, physicalEscapeDirection),
+        discreteEscapeTimeMs,
+      ) + ARRIVAL_MARGIN_MS + RANNI_PHASE_NAVIGATION_MARGIN_MS
       && player.skill.id === RANNI_SKILL_ID
       && player.skill.phase === "idle"
     ) {
@@ -647,7 +843,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     if (
       direction === null
       && currentDanger !== undefined
-      && currentDanger <= REACTION_WINDOW_MS
+      && currentDanger <= RANNI_PHASE_COMMIT_WINDOW_MS
       && player.skill.id === RANNI_SKILL_ID
       && player.skill.phase === "idle"
     ) {
@@ -659,7 +855,7 @@ export function getBombDecision(player: PlayerState, context: BotContext): BotDe
     };
   }
 
-  const enemyExitDirection = overlappingEnemyExitDirection(player, enemies, context);
+  const enemyExitDirection = overlappingEnemyExitDirection(player, enemies, context, threats);
   if (enemyExitDirection) {
     return {
       direction: enemyExitDirection,

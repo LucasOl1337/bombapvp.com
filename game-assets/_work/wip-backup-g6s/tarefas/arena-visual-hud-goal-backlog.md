@@ -1,0 +1,31 @@
+# Backlog: arena visual + HUD de partida
+
+## Supervisor status — 2026-07-19
+
+| Goal | Status |
+| --- | --- |
+| G1–G5 first pass | **reverted** — postmortem |
+| G6–G6e tile pack | **done** |
+| G6f–G6g gates + live screenshot | **done / PASS** |
+| G6h Spawn pad-only | **done** |
+| G6i Top-down crate break | **done** |
+| G6j Continuous lane (no sticker frames) | **done** — `g6j-lane-continuous-DONE.md` |
+| G6k Continuous wall (no gold frames) | **done** — `g6k-wall-continuous-DONE.md` |
+| G6l Floor baseAlt mean-match (no tone checker) | **done** — `g6l-floor-match-alt-DONE.md` |
+| G6m Portal floor tile (dashed ring, no square) | **done** — `g6m-portal-tile-DONE.md` |
+| G6n Wall masonry (readable courses @40px) | **done** — `g6n-wall-masonry-DONE.md` |
+| G6o CrateAlt micro-variation | **done** — `g6o-crate-alt-DONE.md` |
+| G6p WallAlt offset masonry checker | **done** — `g6p-wall-alt-DONE.md` |
+| G6q Portal stronger dashed ring @40px | **done** — `g6q-portal-strong-DONE.md` |
+| G6r Crate fill expand (pad 15→6) | **done** — `g6r-crate-fill-DONE.md` |
+| G6s Floor 4-way base (alt2/alt3) | **done** — `g6s-floor-4way-DONE.md` |
+
+## Main arena (tournament-clean) — READY
+
+Seamless cobble + **4-way** mean-matched base variants, continuous lanes, masonry walls + wallAlt, strong portal dashed rings (≠ spawn solid), solid-fill crate + crateAlt + matched break FX, spawn rings only on pads. Live training screenshots green.
+
+## Optional next
+
+- Owner commit/push when ordered  
+- Other themes; arcane-citadel flat floor-base  
+- HUD frame wire-up if pending  

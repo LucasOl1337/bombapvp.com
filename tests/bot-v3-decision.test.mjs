@@ -121,6 +121,41 @@ describe("segurança projetada do bot V3", () => {
     );
   });
 
+  it("continua movendo o fantasma até a hitbox inteira deixar a casa explosiva", () => {
+    const context = threatenedProjectionContext();
+    context.players[1].skill.projectedPosition = {
+      x: 3 * TILE_SIZE + 1,
+      y: 2 * TILE_SIZE + TILE_SIZE / 2,
+    };
+
+    const decision = getBotV3Decision(context.players[1], context);
+
+    expect(decision.direction).not.toBeNull();
+    expect(decision.placeBomb).toBe(false);
+  });
+
+  it("consome o egress projetado quando uma bomba rival nasce sob o fantasma", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.projectedLastMoveDirection = "left";
+    candidate.skill.projectedBombEgressIds = [7];
+    context.bombs = [{
+      id: 7,
+      ownerId: 2,
+      tile: { ...candidate.tile },
+      fuseMs: 5_000,
+      ownerCanPass: false,
+      bodyEgressPlayerIds: [],
+      flameRange: 1,
+    }];
+    context.canMovementOptionAdvance = (_position, option) => option.direction === "left";
+
+    expect(getBotV3Decision(candidate, context)).toMatchObject({
+      direction: "left",
+      placeBomb: false,
+    });
+  });
+
   it("mantém a projeção parada quando o término do cast não está ameaçado", () => {
     const context = threatenedProjectionContext();
     context.bombs[0].fuseMs = 5_000;
@@ -230,6 +265,32 @@ describe("segurança projetada do bot V3", () => {
     context.canMovementOptionAdvance = (_position, option) => option.direction === "left";
 
     expect(getBotV3Decision(candidate, context).direction).toBe("left");
+  });
+
+  it("abandona a própria bomba enquanto conserva ownerCanPass", () => {
+    const context = threatenedProjectionContext();
+    const candidate = context.players[1];
+    candidate.skill.phase = "cooldown";
+    candidate.skill.projectedPosition = null;
+    context.bombs = [{
+      id: 2,
+      ownerId: candidate.id,
+      tile: { ...candidate.tile },
+      fuseMs: 1_900,
+      ownerCanPass: true,
+      bodyEgressPlayerIds: [],
+      flameRange: 1,
+    }];
+    context.isPlayerOverlappingTile = (_player, tile) => (
+      tile.x === candidate.tile.x && tile.y === candidate.tile.y
+    );
+    context.evaluateMovementOption = vi.fn((_player, direction) => ({ direction }));
+    context.canMovementOptionAdvance = (_position, option) => option.direction === "right";
+
+    expect(getBotV3Decision(candidate, context)).toMatchObject({
+      direction: "right",
+      placeBomb: false,
+    });
   });
 
   it("planeja a fuga através da bomba que o corpo ainda pode atravessar", () => {

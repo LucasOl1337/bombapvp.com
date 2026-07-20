@@ -12,15 +12,23 @@ import type {
   PlayerState,
   TileCoord,
 } from "../Gameplay/types";
-import type { BotContext, BotDecision } from "./bot-contracts";
+import type { BotContext, BotDecision, BotMovementOption } from "./bot-contracts";
 import { tileKey } from "../Arenas/arena";
 import { getPowerUpPriorityScore, isPowerUpMaxed } from "../Gameplay/powerups";
+import {
+  bodyTileOverlapArea,
+  bodyTouchedTileIndices,
+  PLAYER_BODY_HALF,
+} from "../Gameplay/player-body";
 import {
   buildDangerMap,
   getBombBlastKeys as projectBombBlastKeys,
   type ProjectedBomb,
 } from "./danger-map";
-import { getBotDirectionStabilitySignal } from "./bot-direction-stability";
+import {
+  BOT_TURN_CENTER_TOLERANCE_PX,
+  getBotDirectionStabilitySignal,
+} from "./bot-direction-stability";
 import { getSuddenDeathPressureSignal } from "./bot-sudden-death-pressure";
 import { getBotBombEscapeBudget } from "./bot-bomb-escape-budget";
 import {
@@ -121,6 +129,14 @@ function decideBot(player: PlayerState, context: BotContext, safetyOnly: boolean
   const moveDuration = getMoveDuration(player);
   const strategicSafetyWindowMs = moveDuration * BOT_STRATEGIC_MOVE_WINDOW_STEPS + BOT_DANGER_ARRIVAL_BUFFER_MS;
   const overlappingBomb = getOverlappingBomb(player, context);
+  const continuousBodyEgress = getImmediateBodyEgressDirection(player, dangerMap, context);
+
+  if (continuousBodyEgress) {
+    return {
+      direction: continuousBodyEgress,
+      placeBomb: false,
+    };
+  }
 
   if (overlappingBomb) {
     const escapeBlast = getEscapeBlastKeys(player, overlappingBomb, context);
@@ -147,7 +163,7 @@ function decideBot(player: PlayerState, context: BotContext, safetyOnly: boolean
     }
   }
 
-  const threateningOwnedBomb = getThreateningOwnedBomb(player, playerTile, context);
+  const threateningOwnedBomb = getThreateningOwnedBomb(player, context);
   if (threateningOwnedBomb) {
     const ownBlastKeys = getOwnedBombBlastKeys(player, threateningOwnedBomb.fuseMs, context);
     const committedEscape = findDirectionToNearestTile(
@@ -174,8 +190,7 @@ function decideBot(player: PlayerState, context: BotContext, safetyOnly: boolean
     }
   }
 
-  const playerTileKey = tileKey(playerTile.x, playerTile.y);
-  const currentDangerMs = dangerMap.get(playerTileKey);
+  const currentDangerMs = getPlayerBodyDangerMs(player, dangerMap, context);
   const preemptiveDangerMs = moveDuration * BOT_PREEMPTIVE_ESCAPE_STEPS + BOT_DANGER_ARRIVAL_BUFFER_MS;
   const shouldPreemptivelyEscape = currentDangerMs !== undefined && currentDangerMs <= preemptiveDangerMs;
   const escapeRouteScoreCache = new Map<string, number>();
@@ -433,15 +448,14 @@ function isHigherPriorityOverlappingBomb(
 /**
  * Find a bomb owned by the player that would hit them
  */
-function getThreateningOwnedBomb(player: PlayerState, playerTile: TileCoord, context: BotContext): BombState | null {
-  const playerTileKey = tileKey(playerTile.x, playerTile.y);
+function getThreateningOwnedBomb(player: PlayerState, context: BotContext): BombState | null {
   let bestMatch: BombState | null = null;
   for (const bomb of context.bombs) {
     if (bomb.ownerId !== player.id) {
       continue;
     }
     const blastKeys = getBombBlastKeys(bomb.tile, bomb.flameRange, context);
-    if (!blastKeys.has(playerTileKey)) {
+    if (!doesPlayerBodyTouchAnyKey(player, blastKeys, context)) {
       continue;
     }
     if (
@@ -597,6 +611,9 @@ function canBotPlaceBombAtTile(
   });
 
   const maxEscapeSteps = escapeBudget.maxEscapeSteps;
+  const bodyTransitSafetyWindowMs = escapeBudget.moveDurationMs
+    * ((TILE_SIZE * 0.5 + PLAYER_BODY_HALF) / TILE_SIZE)
+    + BOT_DANGER_ARRIVAL_BUFFER_MS;
   const queue: Array<{ tile: TileCoord; distance: number }> = [{ tile: bombTile, distance: 0 }];
   const visited = new Set<string>([tileKey(bombTile.x, bombTile.y)]);
 
@@ -626,7 +643,12 @@ function canBotPlaceBombAtTile(
       if (
         visited.has(nextKey)
         || !isTilePathableForBot(player, next, context)
-        || !isTileSafeForArrival(dangerAfterBomb, next, nextArrivalMs)
+        || !isTileSafeForArrivalWithWindow(
+          dangerAfterBomb,
+          next,
+          nextArrivalMs,
+          bodyTransitSafetyWindowMs,
+        )
       ) {
         continue;
       }
@@ -996,7 +1018,7 @@ export function getBotPowerUpEscapeRouteSignalForTile(
 ): BotPowerUpEscapeRouteSignal {
   const playerTile = getTileFromPosition(player.position);
   const dangerMap = resolveDangerMap(context);
-  const dangerEtaMs = dangerMap.get(tileKey(playerTile.x, playerTile.y)) ?? null;
+  const dangerEtaMs = getPlayerBodyDangerMs(player, dangerMap, context) ?? null;
   return getEscapeRouteSignal(
     player,
     playerTile,
@@ -1211,6 +1233,13 @@ export function getStableBotDirection(
     return null;
   }
 
+  const laneRecoveryDirection = getLaneRecoveryDirection(player, desiredDirection, deltaMs, context);
+  if (laneRecoveryDirection) {
+    clearBotReversePending(player.id, context);
+    rememberBotDirection(player.id, laneRecoveryDirection, context);
+    return laneRecoveryDirection;
+  }
+
   const committedDirection = context.botCommittedDirection[player.id] ?? player.lastMoveDirection ?? player.direction;
   if (
     !committedDirection
@@ -1224,7 +1253,7 @@ export function getStableBotDirection(
   const currentTile = getTileFromPosition(player.position);
   const dangerMap = resolveDangerMap(context);
   const moveDuration = getMoveDuration(player);
-  const currentDangerMs = dangerMap.get(tileKey(currentTile.x, currentTile.y));
+  const currentDangerMs = getPlayerBodyDangerMs(player, dangerMap, context);
   const immediateDanger = currentDangerMs !== undefined
     && currentDangerMs <= moveDuration + BOT_DANGER_ARRIVAL_BUFFER_MS;
   const committedDelta = directionDelta[committedDirection];
@@ -1334,4 +1363,190 @@ export function rememberBotDirection(playerId: PlayerId, direction: Direction | 
     return;
   }
   context.botCommittedDirection[playerId] = direction;
+}
+
+/**
+ * Danger maps are tile-indexed, while lethality uses the complete physical
+ * body. Check every tile actually touched by the body so a bot cannot consider
+ * itself safe merely because its center has crossed into the neighboring tile.
+ */
+function getPlayerBodyDangerMs(
+  player: PlayerState,
+  danger: ReadonlyMap<string, number>,
+  context: BotContext,
+): number | undefined {
+  const touched = bodyTouchedTileIndices(player.position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  let earliest: number | undefined;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = normalizeTileAxis(rawY, height);
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = normalizeTileAxis(rawX, width);
+      const dangerMs = danger.get(tileKey(x, y));
+      if (dangerMs !== undefined && (earliest === undefined || dangerMs < earliest)) {
+        earliest = dangerMs;
+      }
+    }
+  }
+  return earliest;
+}
+
+type BodyDangerScore = Readonly<{
+  earliestMs: number | undefined;
+  weightedOverlap: number;
+}>;
+
+function getBodyDangerScore(
+  position: PixelCoord,
+  danger: ReadonlyMap<string, number>,
+  dangerWindowMs: number,
+  context: BotContext,
+): BodyDangerScore {
+  const touched = bodyTouchedTileIndices(position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  const geometry = {
+    arenaPixelWidth: width * TILE_SIZE,
+    arenaPixelHeight: height * TILE_SIZE,
+  };
+  let earliestMs: number | undefined;
+  let weightedOverlap = 0;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = normalizeTileAxis(rawY, height);
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = normalizeTileAxis(rawX, width);
+      const etaMs = danger.get(tileKey(x, y));
+      if (etaMs === undefined || etaMs > dangerWindowMs) {
+        continue;
+      }
+      earliestMs = earliestMs === undefined ? etaMs : Math.min(earliestMs, etaMs);
+      weightedOverlap += bodyTileOverlapArea(position, { x, y }, geometry)
+        * (dangerWindowMs - etaMs + 1);
+    }
+  }
+  return { earliestMs, weightedOverlap };
+}
+
+function isBodyDangerScoreBetter(candidate: BodyDangerScore, current: BodyDangerScore): boolean {
+  if (candidate.earliestMs === undefined) {
+    return current.earliestMs !== undefined;
+  }
+  if (current.earliestMs === undefined) {
+    return false;
+  }
+  if (candidate.earliestMs !== current.earliestMs) {
+    return candidate.earliestMs > current.earliestMs;
+  }
+  return candidate.weightedOverlap + 0.001 < current.weightedOverlap;
+}
+
+function getMovementOptionDestination(
+  origin: PixelCoord,
+  option: BotMovementOption,
+): PixelCoord | null {
+  const candidates: ReadonlyArray<readonly [boolean, PixelCoord]> = [
+    [option.combinedFree, option.combinedMove],
+    [option.laneOnlyFree, option.laneOnlyMove],
+    [option.forwardOnlyFree, option.forwardOnlyMove],
+  ];
+  for (const [free, position] of candidates) {
+    if (free && (Math.abs(position.x - origin.x) > 0.001 || Math.abs(position.y - origin.y) > 0.001)) {
+      return position;
+    }
+  }
+  return null;
+}
+
+/**
+ * Tile search cannot express "move a few pixels away from the adjacent blast".
+ * When the physical body already touches imminent danger, probe executable
+ * continuous moves and choose the one that reduces actual overlap area.
+ */
+function getImmediateBodyEgressDirection(
+  player: PlayerState,
+  danger: ReadonlyMap<string, number>,
+  context: BotContext,
+): Direction | null {
+  const moveDurationMs = getMoveDuration(player);
+  const dangerWindowMs = moveDurationMs + BOT_DANGER_ARRIVAL_BUFFER_MS;
+  const currentScore = getBodyDangerScore(player.position, danger, dangerWindowMs, context);
+  if (currentScore.earliestMs === undefined) {
+    return null;
+  }
+
+  const probeMs = moveDurationMs * 0.5;
+  let bestDirection: Direction | null = null;
+  let bestScore = currentScore;
+  for (const direction of ["up", "down", "left", "right"] as const) {
+    const option = context.evaluateMovementOption(player, direction, probeMs);
+    const candidatePosition = getMovementOptionDestination(player.position, option);
+    if (!candidatePosition) {
+      continue;
+    }
+    const candidateScore = getBodyDangerScore(candidatePosition, danger, dangerWindowMs, context);
+    if (isBodyDangerScoreBetter(candidateScore, bestScore)) {
+      bestDirection = direction;
+      bestScore = candidateScore;
+    }
+  }
+  return bestDirection;
+}
+
+/**
+ * Recover a lane before a perpendicular turn when a dash or collision left
+ * the body between tile centers. This only runs when the requested move is
+ * physically unable to advance and the centering move itself is executable.
+ */
+function getLaneRecoveryDirection(
+  player: PlayerState,
+  desiredDirection: Direction,
+  deltaMs: number,
+  context: BotContext,
+): Direction | null {
+  const desiredOption = context.evaluateMovementOption(player, desiredDirection, deltaMs);
+  if (context.canMovementOptionAdvance(player.position, desiredOption)) {
+    return null;
+  }
+
+  const verticalMove = desiredDirection === "up" || desiredDirection === "down";
+  const coordinate = verticalMove ? player.position.x : player.position.y;
+  const nearestCenter = Math.round((coordinate - TILE_SIZE * 0.5) / TILE_SIZE) * TILE_SIZE + TILE_SIZE * 0.5;
+  const offset = coordinate - nearestCenter;
+  if (Math.abs(offset) <= BOT_TURN_CENTER_TOLERANCE_PX) {
+    return null;
+  }
+
+  const recoveryDirection: Direction = verticalMove
+    ? offset > 0 ? "left" : "right"
+    : offset > 0 ? "up" : "down";
+  const recoveryOption = context.evaluateMovementOption(player, recoveryDirection, deltaMs);
+  return context.canMovementOptionAdvance(player.position, recoveryOption)
+    ? recoveryDirection
+    : null;
+}
+
+function doesPlayerBodyTouchAnyKey(
+  player: PlayerState,
+  keys: ReadonlySet<string>,
+  context: BotContext,
+): boolean {
+  const touched = bodyTouchedTileIndices(player.position);
+  const width = context.arena.config.grid.width;
+  const height = context.arena.config.grid.height;
+  for (let rawY = touched.minTileY; rawY <= touched.maxTileY; rawY += 1) {
+    const y = normalizeTileAxis(rawY, height);
+    for (let rawX = touched.minTileX; rawX <= touched.maxTileX; rawX += 1) {
+      const x = normalizeTileAxis(rawX, width);
+      if (keys.has(tileKey(x, y))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function normalizeTileAxis(value: number, size: number): number {
+  const wrapped = value % size;
+  return wrapped < 0 ? wrapped + size : wrapped;
 }

@@ -5,9 +5,12 @@
 | Caminho | Conteudo |
 | --- | --- |
 | `src/app/` | Launcher: estado, catalogo e UI. |
+| `src/launcher.css` | Design system responsivo e componentes visuais exclusivos da pagina inicial. |
+| `src/styles.css` | Estilos compartilhados das telas internas e primitives gerais. |
 | `src/matches/` | Contrato de launch request e adaptador de URL. |
 | `src/lab/` | Cliente, runtime e telemetria do Laboratorio. |
 | `src/original-game/` | Motor, bots e regras genericas da arena. |
+| `GameMechanics/` | Reconstrucao paralela isolada: simulacao, browser adapter, assets, testes e plano de migracao. |
 | `Champions/` | Modulos verticais e assets privados dos personagens. |
 | `game-assets/` | Assets compartilhados tipados (nao pertencem a um Champion). |
 | `public/Assets/Characters/Animations/default-players/` | Sprites genericos de fallback do engine. |

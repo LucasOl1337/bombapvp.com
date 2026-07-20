@@ -9,9 +9,9 @@ import { tileKey } from "../../src/original-game/Arenas/arena";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
 import type { NicoBeamEffect } from "./contracts";
-import { NICO_SKILL_COOLDOWN_MS, NICO_SKILL_ID } from "./definition";
+import { NICO_SKILL_COOLDOWN_MS, NICO_SKILL_ID } from "./identity";
 
-export { NICO_CHARACTER_ID, NICO_SKILL_COOLDOWN_MS } from "./definition";
+export { NICO_CHARACTER_ID, NICO_SKILL_COOLDOWN_MS } from "./identity";
 
 export const NICO_SKILL_CHANNEL_MS = 2_000;
 export const NICO_SKILL_RELEASE_MS = 260;

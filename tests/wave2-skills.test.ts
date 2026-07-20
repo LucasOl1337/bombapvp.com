@@ -53,6 +53,7 @@ describe("Mirelle Tide Exchange (kept wave-2 champion)", () => {
     const slugs = listChampionMembership().map((m) => m.slug);
     expect(slugs).toContain("mirelle");
     expect(slugs).toContain("pendula");
+    expect(slugs).toContain("lee-sin");
     for (const dead of ["bram", "zephyr", "hexa", "aegis", "lumen"]) {
       expect(slugs).not.toContain(dead);
     }

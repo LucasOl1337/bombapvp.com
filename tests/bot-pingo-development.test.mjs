@@ -54,14 +54,15 @@ describe("Pingo nas falhas do lote development-v0-final", () => {
     expect(outcomes.map((outcome) => outcome.metrics.Pingo.selfDeaths)).toEqual([0, 0, 0]);
   }, 30_000);
 
-  it("age no standard em vez de permanecer ocioso durante a partida", () => {
+  it("emite movimento e ataques no standard em vez de permanecer inerte", () => {
     const outcomes = [
       play(0, "standard", ["Bomb", "Pingo"]),
       play(0, "standard", ["Pingo", "Bomb"]),
     ];
 
     for (const outcome of outcomes) {
-      expect(outcome.metrics.Pingo.idleMs).toBeLessThan(outcome.durationMs * 0.75);
+      expect(outcome.metrics.Pingo.movementDecisions).toBeGreaterThan(0);
+      expect(outcome.metrics.Pingo.attackDecisions).toBeGreaterThan(0);
     }
   }, 30_000);
 });

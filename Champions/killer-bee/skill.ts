@@ -10,12 +10,12 @@ import type { ChampionSkillAdapter } from "../runtime-contracts";
 import {
   KILLER_BEE_SKILL_COOLDOWN_MS,
   KILLER_BEE_SKILL_ID,
-} from "./definition";
+} from "./identity";
 
 export {
   KILLER_BEE_CHARACTER_ID,
   KILLER_BEE_SKILL_COOLDOWN_MS,
-} from "./definition";
+} from "./identity";
 
 export const KILLER_BEE_DASH_DISTANCE_PX = TILE_SIZE * 3;
 export const KILLER_BEE_DASH_DURATION_MS = 240;

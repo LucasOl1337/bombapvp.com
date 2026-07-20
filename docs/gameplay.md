@@ -6,6 +6,7 @@ SOMENTE ao alterar launcher, arena, bots, Lab ou contrato de URL.
 
 - `src/main.ts` monta o launcher. Em `/arena/`, faca navegacao de documento completo (isola o ciclo de vida do jogo).
 - `arena/index.html` carrega `src/original-game/main.ts` → resolve `LaunchRequest` → `GameApp`.
+- `/GameMechanics/` carrega o quarto modo isolado. Ele nao usa `LaunchRequest`, `GameApp`, `Champions` nem assets compartilhados.
 - Contrato: `/arena/?mode=<modo>&character=<uuid>`.
   - `training` → 1 bot, modo `classic`.
   - `continuous` → 3 bots, modo `endless`.
@@ -20,6 +21,7 @@ SOMENTE ao alterar launcher, arena, bots, Lab ou contrato de URL.
 | Topologia de explosao | `src/original-game/Engine/bomb-explosions.ts` |
 | Power-ups | `src/original-game/Gameplay/powerups.ts` |
 | Policies de bot | `bot-contracts.ts` / `bot-runtime.ts` + catalogs |
+| Reconstrucao paralela / quarto modo | `GameMechanics/` — ver `GameMechanics/ARCHITECTURE.md` |
 | Personagens | modulo vertical em `Champions/<slug>/` — ver `Champions/README.md` |
 | Assets compartilhados | `game-assets/` via `game-assets/index.ts` |
 | Fallback generico de sprite | `public/Assets/Characters/Animations/default-players/` |

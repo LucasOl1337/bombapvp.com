@@ -22,6 +22,19 @@ export interface BotDecision {
   intent?: "remote-detonation" | "bomb-attack" | "attack-position" | "chase-enemy";
 }
 
+export interface BotMovementOption {
+  direction: Direction;
+  horizontal: boolean;
+  laneTarget: number;
+  canAdvanceForward: boolean;
+  combinedMove: PixelCoord;
+  laneOnlyMove: PixelCoord;
+  forwardOnlyMove: PixelCoord;
+  combinedFree: boolean;
+  laneOnlyFree: boolean;
+  forwardOnlyFree: boolean;
+}
+
 /**
  * Snapshot and movement capabilities a decision policy needs from the match.
  * It deliberately contains no GameApp type, so policies can run in a browser,
@@ -45,10 +58,10 @@ export interface BotContext {
   botPendingReverseFrames: Record<PlayerId, number>;
   dangerMap?: Map<string, number>;
   canOccupyPosition: (position: PixelCoord, tile: TileCoord) => boolean;
-  evaluateMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
-  evaluateProjectedMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => any;
+  evaluateMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => BotMovementOption;
+  evaluateProjectedMovementOption: (player: PlayerState, direction: Direction, deltaMs: number) => BotMovementOption;
   projectSkillTarget: (player: PlayerState, direction: Direction) => PixelCoord;
-  canMovementOptionAdvance: (position: PixelCoord, movementOption: any) => boolean;
+  canMovementOptionAdvance: (position: PixelCoord, movementOption: BotMovementOption) => boolean;
   areOppositeDirections: (first: Direction, second: Direction) => boolean;
   isPlayerOverlappingTile: (player: PlayerState, tile: TileCoord) => boolean;
 }

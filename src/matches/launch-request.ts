@@ -5,6 +5,10 @@ import {
   getLocalBotMetadataByModel,
   type LocalBotId,
 } from "../original-game/Engine/bot-catalog";
+import {
+  CHAMPION_MEMBERSHIP,
+  type CharacterId,
+} from "../../Champions/membership";
 
 export type OfflineLaunchMode = "training" | "continuous";
 
@@ -25,7 +29,12 @@ export type LabLaunchRequest = Readonly<{
   competitors: readonly LabLaunchCompetitor[];
 }>;
 
-export type LaunchRequest = OfflineLaunchRequest | LabLaunchRequest;
+export type OnlineLaunchRequest = Readonly<{
+  mode: "online";
+  character: CharacterId;
+}>;
+
+export type LaunchRequest = OfflineLaunchRequest | LabLaunchRequest | OnlineLaunchRequest;
 
 export type LaunchRequestCandidate =
   | Readonly<{
@@ -37,12 +46,17 @@ export type LaunchRequestCandidate =
       mode: "lab";
       models: readonly string[];
       labels?: readonly string[];
+    }>
+  | Readonly<{
+      mode: "online";
+      character: string | null;
     }>;
 
 export type LaunchRequestError =
   | "lab_competitors_invalid"
   | "lab_competitors_missing"
-  | "lab_competitor_gap";
+  | "lab_competitor_gap"
+  | "online_character_invalid";
 
 export type LaunchRequestResult =
   | Readonly<{ ok: true; request: LaunchRequest }>
@@ -53,6 +67,10 @@ export const OFFLINE_LAUNCH_DEFAULTS: Readonly<Record<OfflineLaunchMode, LocalBo
     training: DEFAULT_TRAINING_BOT_ID,
     continuous: DEFAULT_CONTINUOUS_BOT_ID,
   });
+
+const ONLINE_CHARACTER_IDS = new Set<CharacterId>(
+  Object.values(CHAMPION_MEMBERSHIP).map(({ characterId }) => characterId),
+);
 
 function normalizeLabLabel(label: string | null | undefined): string {
   return (label ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 48);
@@ -85,6 +103,17 @@ export function resolveLaunchRequest(candidate: LaunchRequestCandidate): LaunchR
     };
   }
 
+  if (candidate.mode === "online") {
+    const character = normalizeCharacterId(candidate.character);
+    if (!character || !ONLINE_CHARACTER_IDS.has(character as CharacterId)) {
+      return { ok: false, error: "online_character_invalid" };
+    }
+    return {
+      ok: true,
+      request: { mode: "online", character: character as CharacterId },
+    };
+  }
+
   const requestedBot = getLocalBotMetadataById(candidate.bot);
   return {
     ok: true,
@@ -108,6 +137,10 @@ export function serializeLaunchRequest(request: LaunchRequest): readonly [string
           : [[`model${slot}`, competitor.model]];
       }),
     ];
+  }
+
+  if (request.mode === "online") {
+    return [["mode", "online"], ["character", request.character]];
   }
 
   return [

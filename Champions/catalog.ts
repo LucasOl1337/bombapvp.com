@@ -29,7 +29,11 @@ for (const [modulePath, module] of Object.entries(definitionModules)) {
   const definition = module.CHAMPION_DEFINITION;
   if (
     definition.id !== identity.characterId ||
-    definition.skill.id !== identity.skillId
+    definition.skill.id !== identity.skillId ||
+    definition.name !== identity.name ||
+    definition.roster.order !== identity.rosterOrder ||
+    definition.roster.defaultSlot !== identity.defaultSlot ||
+    definition.skill.cooldownMs !== identity.skillCooldownMs
   ) {
     throw new Error(
       `Champion definition does not match membership: ${championSlug}`,

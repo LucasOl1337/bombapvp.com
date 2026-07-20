@@ -290,8 +290,10 @@ function renderRosterShowcase(
 
   const panel = element(document, "aside", "roster-showcase");
   panel.setAttribute("aria-label", snapshot.copy.charactersLabel);
+  panel.dataset.slot = "card";
 
   const main = element(document, "div", "roster-showcase__main");
+  main.dataset.slot = "card-content";
 
   const stageWrap = element(document, "div", "roster-showcase__stage");
   const portraitHost = element(document, "div", "roster-showcase__viewport");
@@ -328,14 +330,19 @@ function renderRosterShowcase(
   const counter = element(document, "p", "roster-showcase__counter");
   counter.setAttribute("aria-live", "polite");
   const profile = element(document, "section", "roster-showcase__profile");
+  profile.id = "launcher-character-profile";
+  profile.setAttribute("role", "tabpanel");
   profile.setAttribute("aria-label", isPortuguese ? "Ficha do personagem" : "Character profile");
+  profile.dataset.slot = "tabs-content";
   profile.append(label, name, description, skillBlock, analysis, counter);
-  detail.append(renderControlsGuide(document, snapshot), profile);
+  detail.append(profile);
 
   main.append(stageWrap, detail);
 
   const thumbs = element(document, "div", "roster-showcase__thumbs");
+  thumbs.setAttribute("role", "tablist");
   thumbs.setAttribute("aria-label", snapshot.copy.charactersLabel);
+  thumbs.dataset.slot = "tabs-list";
 
   const thumbButtons: HTMLButtonElement[] = [];
   characters.forEach((character, thumbIndex) => {
@@ -345,8 +352,11 @@ function renderRosterShowcase(
       "roster-showcase__thumb",
     ) as HTMLButtonElement;
     thumb.type = "button";
+    thumb.setAttribute("role", "tab");
+    thumb.setAttribute("aria-controls", profile.id);
     thumb.setAttribute("aria-label", character.name);
-    thumb.setAttribute("aria-pressed", "false");
+    thumb.setAttribute("aria-selected", "false");
+    thumb.dataset.slot = "tabs-trigger";
     const thumbImage = createCharacterImage(document, character, {
       decorative: true,
       width: 64,
@@ -388,6 +398,10 @@ function renderRosterShowcase(
     const analysisPrefix = isPortuguese ? "Leitura: " : "Read: ";
 
     portraitHost.dataset.accent = character.accent;
+    const presentation = getLauncherPreview(character.id)?.presentation;
+    sprite.style.setProperty("--portrait-scale", String(presentation?.scale ?? 1));
+    sprite.style.setProperty("--portrait-offset-x", `${presentation?.offsetXPercent ?? 0}%`);
+    sprite.style.setProperty("--portrait-offset-y", `${presentation?.offsetYPercent ?? 0}%`);
     label.textContent = character.label;
     name.textContent = character.name;
     description.textContent = character.description;
@@ -400,7 +414,8 @@ function renderRosterShowcase(
     thumbButtons.forEach((thumb, thumbIndex) => {
       const selected = thumbIndex === index;
       thumb.classList.toggle("is-active", selected);
-      thumb.setAttribute("aria-pressed", String(selected));
+      thumb.setAttribute("aria-selected", String(selected));
+      thumb.tabIndex = selected ? 0 : -1;
     });
   }
 
@@ -421,15 +436,14 @@ function renderRosterShowcase(
     playForCurrent();
   });
 
-  panel.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      step(-1);
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      step(1);
-    }
+  thumbs.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Home") index = 0;
+    else if (event.key === "End") index = characters.length - 1;
+    else index = (index + (event.key === "ArrowLeft" ? -1 : 1) + characters.length) % characters.length;
+    paint();
+    thumbButtons[index]?.focus();
   });
 
   // Stop timers when the launcher node is discarded on re-render.
@@ -453,9 +467,10 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
   const guide = snapshot.copy.controlsGuide;
   const section = element(document, "section", "controls-guide");
   section.setAttribute("aria-label", guide.title);
-  section.tabIndex = 0;
+  section.dataset.slot = "card";
 
   const header = element(document, "header", "controls-guide__header");
+  header.dataset.slot = "card-header";
   header.append(
     element(document, "p", "controls-guide__label", guide.label),
     element(document, "h3", "controls-guide__title", guide.title),
@@ -468,6 +483,7 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
   );
 
   const grid = element(document, "div", "controls-guide__grid");
+  grid.dataset.slot = "card-content";
   const inputKeys = ["W", "A", "S", "D", "Q", "R", "SPACE", "E"];
   const keyElements = new Map<string, HTMLElement[]>();
   guide.bindings.forEach((binding, bindingIndex) => {
@@ -484,7 +500,6 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
       const inputKey = bindingIndex === 0 ? inputKeys[keyIndex] : inputKeys[bindingIndex + 3];
       if (inputKey) {
         keyElement.dataset.inputKey = inputKey;
-        keyElement.tabIndex = 0;
         const matches = keyElements.get(inputKey) ?? [];
         matches.push(keyElement);
         keyElements.set(inputKey, matches);
@@ -502,6 +517,7 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
     snapshot.locale === "pt-BR" ? "[ INPUT PRONTO ]" : "[ INPUT READY ]",
   );
   feedback.setAttribute("aria-live", "polite");
+  feedback.dataset.slot = "badge";
 
   const setKeyState = (inputKey: string, active: boolean): void => {
     const matches = keyElements.get(inputKey);
@@ -519,14 +535,6 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
 
-  keyElements.forEach((elements, inputKey) => {
-    elements.forEach((keyElement) => {
-      keyElement.addEventListener("pointerdown", () => setKeyState(inputKey, true));
-      keyElement.addEventListener("pointerup", () => setKeyState(inputKey, false));
-      keyElement.addEventListener("pointerleave", () => setKeyState(inputKey, false));
-    });
-  });
-
   const observer = new MutationObserver(() => {
     if (!section.isConnected) {
       window.removeEventListener("keydown", onKeyDown);
@@ -540,27 +548,50 @@ function renderControlsGuide(document: Document, snapshot: AppSnapshot): HTMLEle
   return section;
 }
 
+function openExperience(
+  experience: ExperienceSnapshot,
+  snapshot: AppSnapshot,
+  dispatch: Dispatch,
+  getOnlinePvpCharacterId: () => CharacterId | null,
+): void {
+  // Online PvP enters global matchmaking with the unit currently shown.
+  if (experience.id === "continuous-room") {
+    const characterId = getOnlinePvpCharacterId()
+      ?? snapshot.selectedCharacter?.id
+      ?? snapshot.characters[0]?.id
+      ?? null;
+    dispatch(characterId
+      ? { type: "start-online-pvp", characterId }
+      : { type: "start-online-pvp" });
+    return;
+  }
+  dispatch({ type: "open-experience", experienceId: experience.id });
+}
+
 function renderExperienceGrid(
   document: Document,
   snapshot: AppSnapshot,
   dispatch: Dispatch,
   options: Readonly<{
     onPreview?: (experience: ExperienceSnapshot, index: number) => void;
-    /** Character focused on the landing roster — used by online PvP direct entry. */
-    getOnlinePvpCharacterId?: () => CharacterId | null;
-  }> = {},
+    getOnlinePvpCharacterId: () => CharacterId | null;
+  }>,
 ): HTMLElement {
   const grid = element(document, "div", "experience-grid");
+  grid.dataset.slot = "card-list";
   const cards: HTMLElement[] = [];
+
   snapshot.experiences.forEach((experience, index) => {
-    const article = element(
+    const card = element(
       document,
       "article",
       "experience-card experience-card--" + String(index + 1),
     );
-    article.dataset.experience = experience.id;
+    card.dataset.experience = experience.id;
+    card.dataset.slot = "card";
 
     const header = element(document, "div", "experience-card__header");
+    header.dataset.slot = "card-header";
     const number = element(
       document,
       "span",
@@ -568,48 +599,58 @@ function renderExperienceGrid(
       String(index + 1).padStart(2, "0"),
     );
     number.setAttribute("aria-hidden", "true");
+    number.dataset.slot = "badge";
     header.append(
       number,
       element(document, "p", "experience-card__journey", experience.journeyLabel),
     );
 
     const copy = element(document, "div", "experience-card__copy");
-    copy.append(
-      element(document, "h3", "experience-card__name", experience.name),
-      element(document, "p", "experience-card__description", experience.description),
+    copy.dataset.slot = "card-content";
+    const title = element(document, "h3", "experience-card__name", experience.name);
+    title.id = `launcher-mode-${experience.id}`;
+    const description = element(
+      document,
+      "p",
+      "experience-card__description",
+      experience.description,
     );
+    description.id = `launcher-mode-${experience.id}-description`;
+    copy.append(
+      title,
+      description,
+    );
+    card.setAttribute("aria-labelledby", title.id);
+    card.setAttribute("aria-describedby", description.id);
 
-    const action = element(document, "button", "action action--card", experience.actionLabel) as HTMLButtonElement;
+    const action = element(
+      document,
+      "button",
+      `action action--card${index === 0 ? " action--card-primary" : " action--card-outline"}`,
+      experience.actionLabel,
+    ) as HTMLButtonElement;
     action.type = "button";
+    action.dataset.slot = "button";
     action.addEventListener("click", () => {
-      // Online PvP jumps straight into the arena with the unit currently shown
-      // on the landing roster — no secondary character-selection screen.
-      if (experience.id === "continuous-room") {
-        const characterId: CharacterId | null = options.getOnlinePvpCharacterId?.()
-          ?? snapshot.selectedCharacter?.id
-          ?? snapshot.characters[0]?.id
-          ?? null;
-        if (characterId) {
-          dispatch({ type: "start-online-pvp", characterId });
-        } else {
-          dispatch({ type: "start-online-pvp" });
-        }
-        return;
-      }
-      dispatch({ type: "open-experience", experienceId: experience.id });
+      openExperience(experience, snapshot, dispatch, options.getOnlinePvpCharacterId);
     });
     addArrow(document, action);
-    article.append(header, copy, action);
+    const footer = element(document, "div", "experience-card__footer");
+    footer.dataset.slot = "card-footer";
+    footer.append(action);
+    card.append(header, copy, footer);
+
     const preview = (): void => {
-      cards.forEach((card, cardIndex) => card.classList.toggle("is-previewed", cardIndex === index));
+      cards.forEach((candidate, cardIndex) => candidate.classList.toggle("is-previewed", cardIndex === index));
       options.onPreview?.(experience, index);
     };
-    article.addEventListener("pointerenter", preview);
-    article.addEventListener("focusin", preview);
-    if (index === 0) article.classList.add("is-previewed");
-    grid.append(article);
-    cards.push(article);
+    card.addEventListener("pointerenter", preview);
+    card.addEventListener("focusin", preview);
+    if (index === 0) card.classList.add("is-previewed");
+    grid.append(card);
+    cards.push(card);
   });
+
   return grid;
 }
 
@@ -662,22 +703,41 @@ function getModeBriefing(locale: AppSnapshot["locale"], experienceId: string): M
           note: "You do not control a fighter here: set up the clash and read the outcome.",
         };
   }
+  if (experienceId === "game-mechanics-prototype") {
+    return isPortuguese
+      ? {
+          code: "CANAL 04 // PROTÓTIPO",
+          summary: "Runtime reconstruído em paralelo para validar regras determinísticas sem alterar os três modos atuais.",
+          format: "Duelo local 1v1",
+          pace: "Experimental",
+          ideal: "Testar e reportar bugs",
+          note: "Movimento, bombas, crates, chamas e fim de rodada já rodam sem importar o motor original.",
+        }
+      : {
+          code: "CHANNEL 04 // PROTOTYPE",
+          summary: "A parallel runtime for validating deterministic rules without changing the three current modes.",
+          format: "Local 1v1 duel",
+          pace: "Experimental",
+          ideal: "Test and report bugs",
+          note: "Movement, bombs, crates, flames, and round endings already run without importing the original engine.",
+        };
+  }
   return isPortuguese
     ? {
         code: "CANAL 01 // AO VIVO",
-        summary: "Sala contínua de rodadas rápidas. O personagem em foco no elenco entra direto na arena com Completers Bomb e Pingo.",
-        format: "PvP contínuo",
+        summary: "Fila global para um duelo 1v1 entre dois jogadores reais. A simulação da partida roda no servidor e os clientes enviam apenas comandos.",
+        format: "Jogador vs jogador",
         pace: "Competitivo",
-        ideal: "Entrar e jogar",
-        note: "É a experiência principal do Bomba PvP e o caminho mais rápido até uma partida.",
+        ideal: "Duelo online justo",
+        note: "A arena só começa quando o matchmaking encontra um segundo jogador compatível.",
       }
     : {
         code: "CHANNEL 01 // LIVE",
-        summary: "A continuous room of fast rounds. The fighter in focus on the roster jumps straight into the arena with Bomb and Pingo Completers.",
-        format: "Continuous PvP",
+        summary: "Global matchmaking for a 1v1 duel between two real players. The server runs the match and clients send commands only.",
+        format: "Player vs player",
         pace: "Competitive",
-        ideal: "Jump in and play",
-        note: "This is the main Bomba PvP experience and the fastest route into a match.",
+        ideal: "Fair online duel",
+        note: "The arena starts only after matchmaking finds a compatible second player.",
       };
 }
 
@@ -688,6 +748,9 @@ function renderModeBriefing(
   const isPortuguese = snapshot.locale === "pt-BR";
   const aside = element(document, "aside", "mode-briefing");
   aside.setAttribute("aria-label", isPortuguese ? "Detalhes do modo" : "Mode details");
+  aside.setAttribute("aria-live", "polite");
+  aside.setAttribute("aria-atomic", "true");
+  aside.dataset.slot = "card";
 
   const code = element(document, "samp", "mode-briefing__code");
   const indexLabel = element(document, "span", "mode-briefing__index");
@@ -708,6 +771,7 @@ function renderModeBriefing(
   });
   const note = element(document, "p", "mode-briefing__note");
   const header = element(document, "header", "mode-briefing__header");
+  header.dataset.slot = "card-header";
   header.append(code, indexLabel);
   aside.append(
     header,
@@ -740,30 +804,8 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
 
   const launcherHeading = element(document, "h2", "sr-only", snapshot.copy.launcherTitle);
 
-  const modes = element(document, "div", "launcher-modes");
-  const modesHeader = element(document, "div", "launcher-modes__header");
-  modesHeader.append(
-    element(document, "p", "launcher-modes__label", snapshot.copy.experiencesLabel),
-    element(
-      document,
-      "samp",
-      "launcher-modes__count",
-      snapshot.locale === "pt-BR"
-        ? `0${snapshot.experiences.length} / MODOS`
-        : `0${snapshot.experiences.length} / MODES`,
-    ),
-  );
-  const modeBriefing = renderModeBriefing(document, snapshot);
-  const rosterShowcase = renderRosterShowcase(document, snapshot);
-  const experienceGrid = renderExperienceGrid(document, snapshot, dispatch, {
-    onPreview: modeBriefing.show,
-    getOnlinePvpCharacterId: rosterShowcase.getFocusedCharacterId,
-  });
-  const firstExperience = snapshot.experiences[0];
-  if (firstExperience) modeBriefing.show(firstExperience, 0);
-  modes.append(modesHeader, experienceGrid, modeBriefing.element);
-
   const roster = element(document, "div", "launcher-roster");
+  roster.dataset.slot = "page-stack";
   const rosterHeader = element(document, "div", "launcher-roster__header");
   rosterHeader.append(
     element(
@@ -781,12 +823,37 @@ function renderLauncher(document: Document, snapshot: AppSnapshot, dispatch: Dis
         : `${String(snapshot.characters.length).padStart(2, "0")} / ACTIVE`,
     ),
   );
-  roster.append(
-    rosterHeader,
-    rosterShowcase.element,
-  );
+  const rosterShowcase = renderRosterShowcase(document, snapshot);
+  roster.append(rosterHeader, rosterShowcase.element);
 
-  region.append(launcherHeading, modes, roster);
+  const modes = element(document, "div", "launcher-modes");
+  modes.dataset.slot = "page-stack";
+  const modesHeader = element(document, "div", "launcher-modes__header");
+  modesHeader.append(
+    element(document, "p", "launcher-modes__label", snapshot.copy.experiencesLabel),
+    element(
+      document,
+      "samp",
+      "launcher-modes__count",
+      snapshot.locale === "pt-BR"
+        ? `${String(snapshot.experiences.length).padStart(2, "0")} / MODOS`
+        : `${String(snapshot.experiences.length).padStart(2, "0")} / MODES`,
+    ),
+  );
+  const modeBriefing = renderModeBriefing(document, snapshot);
+  const experienceGrid = renderExperienceGrid(document, snapshot, dispatch, {
+    onPreview: modeBriefing.show,
+    getOnlinePvpCharacterId: rosterShowcase.getFocusedCharacterId,
+  });
+  const firstExperience = snapshot.experiences[0];
+  if (firstExperience) modeBriefing.show(firstExperience, 0);
+  modes.append(modesHeader, experienceGrid, modeBriefing.element);
+
+  const support = element(document, "div", "launcher-support");
+  support.append(renderControlsGuide(document, snapshot));
+
+  // DOM order mirrors the decision sequence: fighter → mode → launch → controls.
+  region.append(launcherHeading, roster, modes, support);
   return region;
 }
 
@@ -903,7 +970,7 @@ function renderCharacterSelection(
   );
   confirm.disabled = !snapshot.selectedCharacter;
   addArrow(document, confirm);
-  // Bot opponent picker is training-only. Online PvP always uses Bomb + Pingo Completers.
+  // Bot opponent picker is training-only. Online PvP has a human rival.
   if (snapshot.activeExperience?.id === "bot-training") {
     const opponentField = element(document, "label", "training-bot-field");
     const opponentLabel = element(
@@ -943,6 +1010,7 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
   const region = element(document, "section", "ready-state");
   region.setAttribute("aria-label", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena");
   const isLabLaunch = snapshot.activeExperience?.id === "bot-vs-bot-lab";
+  const isMechanicsLaunch = snapshot.activeExperience?.id === "game-mechanics-prototype";
   const portrait = element(
     document,
     "div",
@@ -953,15 +1021,15 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
     portrait.append(createCharacterImage(document, snapshot.selectedCharacter));
   }
 
-  // Training surfaces the chosen opponent bot. Online PvP always faces Bomb + Pingo.
+  // Training surfaces the chosen bot. Online PvP surfaces the human matchmaking contract.
   const isContinuousLaunch = snapshot.activeExperience?.id === "continuous-room";
-  const opponentBotLabel = isLabLaunch || isContinuousLaunch
+  const opponentBotLabel = isLabLaunch || isContinuousLaunch || isMechanicsLaunch
     ? null
     : (snapshot.bots.find((bot) => bot.id === snapshot.selectedBot)?.label ?? null);
   const continuousOpponentLabel = isContinuousLaunch
-    ? (snapshot.locale === "pt-BR" ? "vs Bomb + Pingo" : "vs Bomb + Pingo")
+    ? (snapshot.locale === "pt-BR" ? "vs jogador online" : "vs online player")
     : null;
-  const choiceLine = isLabLaunch
+  const choiceLine = isLabLaunch || isMechanicsLaunch
     ? (snapshot.activeExperience?.name ?? "")
     : [
       snapshot.selectedCharacter?.name,
@@ -970,16 +1038,30 @@ function renderGameLaunch(document: Document, snapshot: AppSnapshot, dispatch: D
     ].filter(Boolean).join(" · ");
   const reviseLabel = isLabLaunch
     ? snapshot.copy.reviseLabLabel
-    : isContinuousLaunch
+    : isContinuousLaunch || isMechanicsLaunch
       ? snapshot.copy.backToLauncherLabel
       : snapshot.copy.reviseLabel;
 
+  const launchKicker = isMechanicsLaunch
+    ? (snapshot.locale === "pt-BR" ? "NOVO RUNTIME ISOLADO" : "NEW ISOLATED RUNTIME")
+    : (snapshot.locale === "pt-BR" ? "GAMEPLAY ORIGINAL" : "ORIGINAL GAMEPLAY");
+  const launchTitle = isMechanicsLaunch
+    ? (snapshot.locale === "pt-BR" ? "Abrindo GameMechanics" : "Opening GameMechanics")
+    : (snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena");
+  const launchDescription = isMechanicsLaunch
+    ? (snapshot.locale === "pt-BR"
+        ? "Carregando o primeiro protótipo da reconstrução paralela."
+        : "Loading the first prototype of the parallel rebuild.")
+    : (snapshot.locale === "pt-BR"
+        ? "Carregando o motor original de Bomba PvP."
+        : "Loading the original Bomba PvP engine.");
+
   const copy = element(document, "div", "ready-state__copy");
   copy.append(
-    element(document, "p", "page-intro__kicker", snapshot.locale === "pt-BR" ? "GAMEPLAY ORIGINAL" : "ORIGINAL GAMEPLAY"),
-    element(document, "h2", "page-intro__title", snapshot.locale === "pt-BR" ? "Abrindo arena" : "Opening arena"),
+    element(document, "p", "page-intro__kicker", launchKicker),
+    element(document, "h2", "page-intro__title", launchTitle),
     element(document, "p", "ready-state__choice", choiceLine),
-    element(document, "p", "page-intro__description", snapshot.locale === "pt-BR" ? "Carregando o motor original de Bomba PvP." : "Loading the original Bomba PvP engine."),
+    element(document, "p", "page-intro__description", launchDescription),
   );
   const actions = element(document, "div", "ready-state__actions");
   actions.append(

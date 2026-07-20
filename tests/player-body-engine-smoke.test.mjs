@@ -82,7 +82,7 @@ describe("GameApp body integration smoke", () => {
     expect(result.players[1].alive).toBe(true);
   });
 
-  it("does not kill when only the larger physical body clips residual flame", () => {
+  it("kills when the physical body clips residual flame", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     const flameTile = { x: 2, y: 1 };
@@ -108,10 +108,10 @@ describe("GameApp body integration smoke", () => {
     app.advanceServerSimulation(1_000 / 60);
 
     const result = app.exportOnlineSnapshot();
-    expect(result.players[1].alive).toBe(true);
+    expect(result.players[1].alive).toBe(false);
   });
 
-  it("kills when the vulnerable core enters the residual flame tile", () => {
+  it("kills when the physical body enters the residual flame tile", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     const flameTile = { x: 2, y: 1 };

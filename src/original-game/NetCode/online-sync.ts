@@ -20,6 +20,7 @@ import { tileKey } from "../Arenas/arena";
 import type { SfxKey } from "../Engine/sound-manager";
 
 export const ONLINE_SNAPSHOT_INTERVAL_MS = 50;
+export const ONLINE_INPUT_INTERVAL_MS = 1_000 / 30;
 const ONLINE_RENDER_SMOOTHING = 0.48;
 const ONLINE_MIN_INTERPOLATION_DELAY_MS = 18;
 const ONLINE_MAX_INTERPOLATION_DELAY_MS = 34;

@@ -6,12 +6,12 @@ import type {
 import { tileKey } from "../../src/original-game/Arenas/arena";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
-import { CROCODILO_SKILL_COOLDOWN_MS, CROCODILO_SKILL_ID } from "./definition";
+import { CROCODILO_SKILL_COOLDOWN_MS, CROCODILO_SKILL_ID } from "./identity";
 
 export {
   CROCODILO_CHARACTER_ID,
   CROCODILO_SKILL_COOLDOWN_MS,
-} from "./definition";
+} from "./identity";
 
 export const CROCODILO_SKILL_CHANNEL_MS = 1_600;
 export const CROCODILO_SKILL_RELEASE_MS = 240;

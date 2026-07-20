@@ -5,9 +5,9 @@ import type {
 } from "../../src/original-game/Gameplay/types";
 import type { SkillContext } from "../../src/original-game/ultimate/shared";
 import type { ChampionSkillAdapter } from "../runtime-contracts";
-import { RANNI_SKILL_COOLDOWN_MS, RANNI_SKILL_ID } from "./definition";
+import { RANNI_SKILL_COOLDOWN_MS, RANNI_SKILL_ID } from "./identity";
 
-export { RANNI_CHARACTER_ID, RANNI_SKILL_COOLDOWN_MS } from "./definition";
+export { RANNI_CHARACTER_ID, RANNI_SKILL_COOLDOWN_MS } from "./identity";
 
 export const RANNI_SKILL_CHANNEL_MS = 1_500;
 

@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultArenaDefinition } from "../src/original-game/Arenas/arena.ts";
 import { GameApp } from "../src/original-game/Engine/game-app.ts";
+import { TILE_SIZE } from "../src/original-game/PersonalConfig/config.ts";
+import { PLAYER_BODY_HALF } from "../src/original-game/Gameplay/player-body.ts";
 
 function assets() {
   return {
@@ -140,7 +142,7 @@ describe("letalidade autoritativa da chama residual", () => {
     expect(result.endlessStats.kills[2]).toBe(1);
   });
 
-  it("nao mata por contato marginal do corpo fisico com a chama vizinha", () => {
+  it("mata por contato visivel do corpo fisico com a chama vizinha", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     snapshot.players[1].position = { x: 119, y: 60 };
@@ -162,14 +164,14 @@ describe("letalidade autoritativa da chama residual", () => {
 
     const result = app.exportOnlineSnapshot();
     expect(result.players[1].tile).toEqual({ x: 2, y: 1 });
-    expect(result.players[1].alive).toBe(true);
-    expect(result.endlessStats.kills[2]).toBe(0);
+    expect(result.players[1].alive).toBe(false);
+    expect(result.endlessStats.kills[2]).toBe(1);
   });
 
-  it("nao mata no instante da explosao por contato marginal com tile adjacente", () => {
+  it("mata no instante da explosao por contato visivel com tile adjacente", () => {
     const app = createMatch([1, 2, 3]);
     const snapshot = app.exportOnlineSnapshot();
-    // Player only clips blast tile (2,1); bomb at (3,1) does not reach center tile (1,1).
+    // Player visibly clips blast tile (2,1); bomb at (3,1) does not reach center tile (1,1).
     snapshot.players[1].position = { x: 79, y: 60 }; // tile 1,1 center-ish right edge (tile1: 40-80)
     snapshot.players[1].tile = { x: 1, y: 1 };
     snapshot.players[1].spawnProtectionMs = 0;
@@ -192,11 +194,11 @@ describe("letalidade autoritativa da chama residual", () => {
     app.advanceServerSimulation(1_000 / 60);
 
     const result = app.exportOnlineSnapshot();
-    expect(result.players[1].alive).toBe(true);
-    expect(result.endlessStats.kills[2]).toBe(0);
+    expect(result.players[1].alive).toBe(false);
+    expect(result.endlessStats.kills[2]).toBe(1);
   });
 
-  it("mata depois que o nucleo vulneravel entra no tile da chama", () => {
+  it("mata depois que o corpo fisico entra no tile da chama", () => {
     const app = createMatch();
     const snapshot = app.exportOnlineSnapshot();
     snapshot.players[1].position = { x: 109, y: 60 };
@@ -217,6 +219,42 @@ describe("letalidade autoritativa da chama residual", () => {
     app.advanceServerSimulation(1_000 / 60);
 
     const result = app.exportOnlineSnapshot();
+    expect(result.players[1].alive).toBe(false);
+    expect(result.endlessStats.kills[2]).toBe(1);
+  });
+
+  it("mata corpo visivelmente sobreposto a chama enquanto jogador segura movimento contra a borda", () => {
+    const app = createMatch();
+    const snapshot = app.exportOnlineSnapshot();
+    const flameTile = { x: 3, y: 1 };
+    const flameLeft = flameTile.x * TILE_SIZE;
+    const x = flameLeft - PLAYER_BODY_HALF + 0.5;
+    snapshot.players[1].position = { x, y: flameTile.y * TILE_SIZE + TILE_SIZE * 0.5 };
+    snapshot.players[1].tile = { x: 2, y: 1 };
+    snapshot.players[1].spawnProtectionMs = 0;
+    snapshot.players[1].flameGuardMs = 0;
+    snapshot.players[1].shieldCharges = 0;
+    snapshot.players[2].position = { x: 220, y: 220 };
+    snapshot.players[2].tile = { x: 5, y: 5 };
+    snapshot.flames = [{
+      tile: flameTile,
+      remainingMs: 500,
+      style: "normal",
+      ownerId: 2,
+    }];
+    app.applyOnlineSnapshot(snapshot);
+
+    app.replaceServerPlayerInput(1, {
+      direction: "right",
+      bombPressed: false,
+      detonatePressed: false,
+      skillPressed: false,
+      skillHeld: false,
+    });
+    app.advanceServerSimulation(1_000 / 60);
+
+    const result = app.exportOnlineSnapshot();
+    expect(result.players[1].tile).toEqual({ x: 2, y: 1 });
     expect(result.players[1].alive).toBe(false);
     expect(result.endlessStats.kills[2]).toBe(1);
   });

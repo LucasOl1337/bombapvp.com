@@ -99,12 +99,24 @@ describe("character catalog", () => {
         order: 6,
         defaultSlot: undefined,
       },
+      {
+        id: "b7e4c2a1-5d6f-4a8b-9c0d-1e2f3a4b5c6d",
+        name: "Lee Sin",
+        order: 7,
+        defaultSlot: undefined,
+      },
+      {
+        id: "e7a1c4d2-9f3b-4c5e-a8d1-2b6f8e0c4a7d",
+        name: "Thresh",
+        order: 8,
+        defaultSlot: undefined,
+      },
     ]);
   });
 
   it("projects localized launcher presentation from the same definitions", () => {
     const presentations = listCharacterPresentations("en");
-    expect(presentations).toHaveLength(7);
+    expect(presentations).toHaveLength(9);
     expect(presentations.map((entry) => entry.name)).toEqual([
       "Ranni",
       "Killer Bee",
@@ -113,6 +125,8 @@ describe("character catalog", () => {
       "Nix Ember",
       "Pendula",
       "Mirelle",
+      "Lee Sin",
+      "Thresh",
     ]);
     expect(presentations[0]).toMatchObject({
       id: "03a976fb-7313-4064-a477-5bb9b0760034",
@@ -134,6 +148,8 @@ describe("character catalog", () => {
       "Ember Vault",
       "Command: Pull",
       "Tide Exchange",
+      "Dragon's Rage",
+      "Death Sentence",
     ]);
   });
 
@@ -176,6 +192,16 @@ describe("character catalog", () => {
         name: "Mirelle",
         order: 6,
       },
+      {
+        id: "b7e4c2a1-5d6f-4a8b-9c0d-1e2f3a4b5c6d",
+        name: "Lee Sin",
+        order: 7,
+      },
+      {
+        id: "e7a1c4d2-9f3b-4c5e-a8d1-2b6f8e0c4a7d",
+        name: "Thresh",
+        order: 8,
+      },
     ]);
   });
 
@@ -214,6 +240,16 @@ describe("character catalog", () => {
       {
         characterId: "a1b2c3d4-e5f6-4789-a012-3456789abc01",
         skillId: "mirelle-tide-swap",
+        cooldownMs: 8_000,
+      },
+      {
+        characterId: "b7e4c2a1-5d6f-4a8b-9c0d-1e2f3a4b5c6d",
+        skillId: "lee-sin-dragon-rage",
+        cooldownMs: 6_500,
+      },
+      {
+        characterId: "e7a1c4d2-9f3b-4c5e-a8d1-2b6f8e0c4a7d",
+        skillId: "thresh-death-sentence",
         cooldownMs: 8_000,
       },
     ]);

@@ -21,7 +21,10 @@ Champions/
 ├── crocodilo-arcano/
 ├── nico/
 ├── nix-ember/               # roster order 4 · Ember Vault
-└── pendula/                 # roster order 5 · Command: Pull
+├── pendula/                 # roster order 5 · Command: Pull
+├── mirelle/                 # roster order 6 · Tide Exchange
+├── lee-sin/                 # roster order 7 · Dragon's Rage
+└── thresh/                  # roster order 8 · Death Sentence
 ```
 
 Cada pasta de personagem contém:

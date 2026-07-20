@@ -1,32 +1,20 @@
 import { resolveGameAsset } from "../../../game-assets";
+import {
+  type SfxKey,
+  type SoundManifest,
+} from "./sound-contract";
 
-export type SfxKey =
-  | "bombPlace"
-  | "bombExplode"
-  | "crateBreak"
-  | "flames"
-  | "matchStart"
-  | "roundEnd"
-  | "matchWin"
-  | "powerCollect"
-  | "shieldBlock"
-  | "suddenDeathAlarm";
-
-interface SoundDefinition {
-  url: string;
-  volume: number;
-}
-
-type SoundManifestEntry = SoundDefinition | SoundDefinition[];
+export {
+  AUDIO_MUTED_STORAGE_KEY,
+  AUDIO_VOLUME_STORAGE_KEY,
+  type SfxKey,
+} from "./sound-contract";
 
 interface SoundPlaybackPolicy {
   minIntervalMs?: number;
 }
 
 const MASTER_VOLUME = 0.38;
-export const AUDIO_VOLUME_STORAGE_KEY = "bomba-audio-volume";
-export const AUDIO_MUTED_STORAGE_KEY = "bomba-audio-muted";
-
 function clampVolume(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -40,7 +28,7 @@ const SFX_PLAYBACK_POLICIES: Partial<Record<SfxKey, SoundPlaybackPolicy>> = {
   suddenDeathAlarm: { minIntervalMs: 1200 },
 };
 
-export const SFX_MANIFEST: Partial<Record<SfxKey, SoundManifestEntry>> = {
+export const SFX_MANIFEST: SoundManifest = {
   bombPlace: { url: resolveGameAsset("audio.bomb.place"), volume: 0.72 * MASTER_VOLUME },
   bombExplode: [
     { url: resolveGameAsset("audio.bomb.explode.default"), volume: 0.84 * MASTER_VOLUME },
@@ -89,7 +77,7 @@ export class SoundManager {
     return this.muted;
   }
 
-  public async loadSounds(manifest: Partial<Record<SfxKey, SoundManifestEntry>>): Promise<void> {
+  public async loadSounds(manifest: SoundManifest): Promise<void> {
     if (typeof Audio === "undefined") {
       return;
     }
