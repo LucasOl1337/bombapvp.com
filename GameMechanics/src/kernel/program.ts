@@ -103,6 +103,7 @@ function projectSnapshot(state: WorldState, revision: number): GameSnapshot {
                 cooldownRemainingMs: skill.cooldownRemainingMs,
                 channelRemainingMs: skill.channelRemainingMs,
                 projection: skill.projection ? freezePosition(skill.projection) : null,
+                aimDirection: skill.aimDirection,
               }),
             }
           : {}),

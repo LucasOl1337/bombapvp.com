@@ -30,8 +30,40 @@ export type CompetitorId = string & { readonly [CompetitorIdBrand]: "CompetitorI
 
 export type Direction = "up" | "down" | "left" | "right";
 
-export const RANNI_ICE_BLINK_SKILL_ID = "ranni-ice-blink" as const;
-export type SkillId = typeof RANNI_ICE_BLINK_SKILL_ID;
+/** Canonical skill ids (aligned with character roster skill identifiers). */
+export const SKILL_IDS = [
+  "ranni-ice-blink",
+  "killer-bee-wing-dash",
+  "crocodilo-emerald-surge",
+  "nico-arcane-beam",
+  "nix-ember-vault",
+  "pendula-command-shockwave",
+  "mirelle-tide-swap",
+  "lee-sin-dragon-rage",
+  "thresh-death-sentence",
+  "katarina-bouncing-blade",
+  "madara-fireball-jutsu",
+] as const;
+
+export type SkillId = (typeof SKILL_IDS)[number];
+
+export const RANNI_ICE_BLINK_SKILL_ID = "ranni-ice-blink" as const satisfies SkillId;
+export const KILLER_BEE_WING_DASH_SKILL_ID = "killer-bee-wing-dash" as const satisfies SkillId;
+export const CROCODILO_EMERALD_SURGE_SKILL_ID = "crocodilo-emerald-surge" as const satisfies SkillId;
+export const NICO_ARCANE_BEAM_SKILL_ID = "nico-arcane-beam" as const satisfies SkillId;
+export const NIX_EMBER_VAULT_SKILL_ID = "nix-ember-vault" as const satisfies SkillId;
+export const PENDULA_COMMAND_SHOCKWAVE_SKILL_ID = "pendula-command-shockwave" as const satisfies SkillId;
+export const MIRELLE_TIDE_SWAP_SKILL_ID = "mirelle-tide-swap" as const satisfies SkillId;
+export const LEE_SIN_DRAGON_RAGE_SKILL_ID = "lee-sin-dragon-rage" as const satisfies SkillId;
+export const THRESH_DEATH_SENTENCE_SKILL_ID = "thresh-death-sentence" as const satisfies SkillId;
+export const KATARINA_BOUNCING_BLADE_SKILL_ID = "katarina-bouncing-blade" as const satisfies SkillId;
+export const MADARA_FIREBALL_JUTSU_SKILL_ID = "madara-fireball-jutsu" as const satisfies SkillId;
+
+const SKILL_ID_SET: ReadonlySet<string> = new Set(SKILL_IDS);
+
+export function isSkillId(value: string): value is SkillId {
+  return SKILL_ID_SET.has(value);
+}
 
 /** Competitive Match phases + adapter-only `paused` overlay in the facade snapshot. */
 export type MatchPhase =
@@ -97,6 +129,7 @@ export type SkillSnapshot = Readonly<{
   cooldownRemainingMs: number;
   channelRemainingMs: number;
   projection: WorldPosition | null;
+  aimDirection: Direction | null;
 }>;
 
 export type CompetitorSnapshot = Readonly<{
@@ -239,6 +272,12 @@ export type EliminationCause =
   | Readonly<{
       kind: "pressure";
       pressureIndex: number;
+      at: TileCoord;
+    }>
+  | Readonly<{
+      kind: "skill";
+      skillId: SkillId;
+      ownerId: CompetitorId;
       at: TileCoord;
     }>;
 

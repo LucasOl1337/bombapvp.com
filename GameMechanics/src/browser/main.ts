@@ -1,3 +1,8 @@
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/800.css";
+import "@fontsource/space-grotesk/700.css";
+
 import "./styles.css";
 
 import brandMarkUrl from "../../assets/brand/brand-mark.png";
@@ -26,205 +31,31 @@ import powerBombUrl from "../../assets/gameplay/power-bomb.png";
 import powerFlameUrl from "../../assets/gameplay/power-flame.png";
 import hudBombIconUrl from "../../assets/hud/icon-bomb-v1.png";
 import hudFlameIconUrl from "../../assets/hud/icon-flame-v1.png";
-import hudPanelCenterUrl from "../../assets/hud/panel-center-v1.png";
-import hudPanelLocalUrl from "../../assets/hud/panel-local-v1.png";
-import hudPanelRivalUrl from "../../assets/hud/panel-rival-v1.png";
-import ranniPortraitUrl from "../../assets/champions/ranni/portrait.png";
-import nicoPortraitUrl from "../../assets/champions/nico/portrait.png";
-import ranniSouthUrl from "../../assets/champions/ranni/south.png";
-import ranniNorthUrl from "../../assets/champions/ranni/north.png";
-import ranniEastUrl from "../../assets/champions/ranni/east.png";
-import ranniWestUrl from "../../assets/champions/ranni/west.png";
-import ranniIdleSouth0 from "../../assets/champions/ranni/idle-south-0.png";
-import ranniIdleSouth1 from "../../assets/champions/ranni/idle-south-1.png";
-import ranniIdleSouth2 from "../../assets/champions/ranni/idle-south-2.png";
-import ranniIdleSouth3 from "../../assets/champions/ranni/idle-south-3.png";
-import ranniIdleNorth0 from "../../assets/champions/ranni/idle-north-0.png";
-import ranniIdleNorth1 from "../../assets/champions/ranni/idle-north-1.png";
-import ranniIdleNorth2 from "../../assets/champions/ranni/idle-north-2.png";
-import ranniIdleNorth3 from "../../assets/champions/ranni/idle-north-3.png";
-import ranniIdleEast0 from "../../assets/champions/ranni/idle-east-0.png";
-import ranniIdleEast1 from "../../assets/champions/ranni/idle-east-1.png";
-import ranniIdleEast2 from "../../assets/champions/ranni/idle-east-2.png";
-import ranniIdleEast3 from "../../assets/champions/ranni/idle-east-3.png";
-import ranniIdleWest0 from "../../assets/champions/ranni/idle-west-0.png";
-import ranniIdleWest1 from "../../assets/champions/ranni/idle-west-1.png";
-import ranniIdleWest2 from "../../assets/champions/ranni/idle-west-2.png";
-import ranniIdleWest3 from "../../assets/champions/ranni/idle-west-3.png";
-import ranniWalkSouth0 from "../../assets/champions/ranni/walk-south-0.png";
-import ranniWalkSouth1 from "../../assets/champions/ranni/walk-south-1.png";
-import ranniWalkSouth2 from "../../assets/champions/ranni/walk-south-2.png";
-import ranniWalkSouth3 from "../../assets/champions/ranni/walk-south-3.png";
-import ranniWalkSouth4 from "../../assets/champions/ranni/walk-south-4.png";
-import ranniWalkSouth5 from "../../assets/champions/ranni/walk-south-5.png";
-import ranniWalkSouth6 from "../../assets/champions/ranni/walk-south-6.png";
-import ranniWalkSouth7 from "../../assets/champions/ranni/walk-south-7.png";
-import ranniWalkNorth0 from "../../assets/champions/ranni/walk-north-0.png";
-import ranniWalkNorth1 from "../../assets/champions/ranni/walk-north-1.png";
-import ranniWalkNorth2 from "../../assets/champions/ranni/walk-north-2.png";
-import ranniWalkNorth3 from "../../assets/champions/ranni/walk-north-3.png";
-import ranniWalkNorth4 from "../../assets/champions/ranni/walk-north-4.png";
-import ranniWalkNorth5 from "../../assets/champions/ranni/walk-north-5.png";
-import ranniWalkNorth6 from "../../assets/champions/ranni/walk-north-6.png";
-import ranniWalkNorth7 from "../../assets/champions/ranni/walk-north-7.png";
-import ranniWalkEast0 from "../../assets/champions/ranni/walk-east-0.png";
-import ranniWalkEast1 from "../../assets/champions/ranni/walk-east-1.png";
-import ranniWalkEast2 from "../../assets/champions/ranni/walk-east-2.png";
-import ranniWalkEast3 from "../../assets/champions/ranni/walk-east-3.png";
-import ranniWalkEast4 from "../../assets/champions/ranni/walk-east-4.png";
-import ranniWalkEast5 from "../../assets/champions/ranni/walk-east-5.png";
-import ranniWalkEast6 from "../../assets/champions/ranni/walk-east-6.png";
-import ranniWalkEast7 from "../../assets/champions/ranni/walk-east-7.png";
-import ranniWalkWest0 from "../../assets/champions/ranni/walk-west-0.png";
-import ranniWalkWest1 from "../../assets/champions/ranni/walk-west-1.png";
-import ranniWalkWest2 from "../../assets/champions/ranni/walk-west-2.png";
-import ranniWalkWest3 from "../../assets/champions/ranni/walk-west-3.png";
-import ranniWalkWest4 from "../../assets/champions/ranni/walk-west-4.png";
-import ranniWalkWest5 from "../../assets/champions/ranni/walk-west-5.png";
-import ranniWalkWest6 from "../../assets/champions/ranni/walk-west-6.png";
-import ranniWalkWest7 from "../../assets/champions/ranni/walk-west-7.png";
-import nicoSouthUrl from "../../assets/champions/nico/south.png";
-import nicoNorthUrl from "../../assets/champions/nico/north.png";
-import nicoEastUrl from "../../assets/champions/nico/east.png";
-import nicoWestUrl from "../../assets/champions/nico/west.png";
-import nicoIdleSouth0 from "../../assets/champions/nico/idle-south-0.png";
-import nicoIdleSouth1 from "../../assets/champions/nico/idle-south-1.png";
-import nicoIdleSouth2 from "../../assets/champions/nico/idle-south-2.png";
-import nicoIdleSouth3 from "../../assets/champions/nico/idle-south-3.png";
-import nicoIdleNorth0 from "../../assets/champions/nico/idle-north-0.png";
-import nicoIdleNorth1 from "../../assets/champions/nico/idle-north-1.png";
-import nicoIdleNorth2 from "../../assets/champions/nico/idle-north-2.png";
-import nicoIdleNorth3 from "../../assets/champions/nico/idle-north-3.png";
-import nicoIdleEast0 from "../../assets/champions/nico/idle-east-0.png";
-import nicoIdleEast1 from "../../assets/champions/nico/idle-east-1.png";
-import nicoIdleEast2 from "../../assets/champions/nico/idle-east-2.png";
-import nicoIdleEast3 from "../../assets/champions/nico/idle-east-3.png";
-import nicoIdleWest0 from "../../assets/champions/nico/idle-west-0.png";
-import nicoIdleWest1 from "../../assets/champions/nico/idle-west-1.png";
-import nicoIdleWest2 from "../../assets/champions/nico/idle-west-2.png";
-import nicoIdleWest3 from "../../assets/champions/nico/idle-west-3.png";
-import nicoWalkSouth0 from "../../assets/champions/nico/walk-south-0.png";
-import nicoWalkSouth1 from "../../assets/champions/nico/walk-south-1.png";
-import nicoWalkSouth2 from "../../assets/champions/nico/walk-south-2.png";
-import nicoWalkSouth3 from "../../assets/champions/nico/walk-south-3.png";
-import nicoWalkNorth0 from "../../assets/champions/nico/walk-north-0.png";
-import nicoWalkNorth1 from "../../assets/champions/nico/walk-north-1.png";
-import nicoWalkNorth2 from "../../assets/champions/nico/walk-north-2.png";
-import nicoWalkNorth3 from "../../assets/champions/nico/walk-north-3.png";
-import nicoWalkNorth4 from "../../assets/champions/nico/walk-north-4.png";
-import nicoWalkNorth5 from "../../assets/champions/nico/walk-north-5.png";
-import nicoWalkEast0 from "../../assets/champions/nico/walk-east-0.png";
-import nicoWalkEast1 from "../../assets/champions/nico/walk-east-1.png";
-import nicoWalkEast2 from "../../assets/champions/nico/walk-east-2.png";
-import nicoWalkEast3 from "../../assets/champions/nico/walk-east-3.png";
-import nicoWalkEast4 from "../../assets/champions/nico/walk-east-4.png";
-import nicoWalkEast5 from "../../assets/champions/nico/walk-east-5.png";
-import nicoWalkWest0 from "../../assets/champions/nico/walk-west-0.png";
-import nicoWalkWest1 from "../../assets/champions/nico/walk-west-1.png";
-import nicoWalkWest2 from "../../assets/champions/nico/walk-west-2.png";
-import nicoWalkWest3 from "../../assets/champions/nico/walk-west-3.png";
-import nicoWalkWest4 from "../../assets/champions/nico/walk-west-4.png";
-import nicoWalkWest5 from "../../assets/champions/nico/walk-west-5.png";
 import crateBreak0Url from "../../assets/gameplay/crate-break-0.png";
 import crateBreak1Url from "../../assets/gameplay/crate-break-1.png";
 import crateBreak2Url from "../../assets/gameplay/crate-break-2.png";
 import crateBreak3Url from "../../assets/gameplay/crate-break-3.png";
-import ranniDeathSouth0 from "../../assets/champions/ranni/death-south-0.png";
-import ranniDeathSouth1 from "../../assets/champions/ranni/death-south-1.png";
-import ranniDeathSouth2 from "../../assets/champions/ranni/death-south-2.png";
-import ranniDeathSouth3 from "../../assets/champions/ranni/death-south-3.png";
-import ranniDeathSouth4 from "../../assets/champions/ranni/death-south-4.png";
-import ranniDeathSouth5 from "../../assets/champions/ranni/death-south-5.png";
-import ranniDeathSouth6 from "../../assets/champions/ranni/death-south-6.png";
-import ranniDeathNorth0 from "../../assets/champions/ranni/death-north-0.png";
-import ranniDeathNorth1 from "../../assets/champions/ranni/death-north-1.png";
-import ranniDeathNorth2 from "../../assets/champions/ranni/death-north-2.png";
-import ranniDeathNorth3 from "../../assets/champions/ranni/death-north-3.png";
-import ranniDeathNorth4 from "../../assets/champions/ranni/death-north-4.png";
-import ranniDeathNorth5 from "../../assets/champions/ranni/death-north-5.png";
-import ranniDeathNorth6 from "../../assets/champions/ranni/death-north-6.png";
-import ranniDeathEast0 from "../../assets/champions/ranni/death-east-0.png";
-import ranniDeathEast1 from "../../assets/champions/ranni/death-east-1.png";
-import ranniDeathEast2 from "../../assets/champions/ranni/death-east-2.png";
-import ranniDeathEast3 from "../../assets/champions/ranni/death-east-3.png";
-import ranniDeathEast4 from "../../assets/champions/ranni/death-east-4.png";
-import ranniDeathEast5 from "../../assets/champions/ranni/death-east-5.png";
-import ranniDeathEast6 from "../../assets/champions/ranni/death-east-6.png";
-import ranniDeathWest0 from "../../assets/champions/ranni/death-west-0.png";
-import ranniDeathWest1 from "../../assets/champions/ranni/death-west-1.png";
-import ranniDeathWest2 from "../../assets/champions/ranni/death-west-2.png";
-import ranniDeathWest3 from "../../assets/champions/ranni/death-west-3.png";
-import ranniDeathWest4 from "../../assets/champions/ranni/death-west-4.png";
-import ranniDeathWest5 from "../../assets/champions/ranni/death-west-5.png";
-import ranniDeathWest6 from "../../assets/champions/ranni/death-west-6.png";
-import ranniCastSouth0 from "../../assets/champions/ranni/cast-south-0.png";
-import ranniCastSouth1 from "../../assets/champions/ranni/cast-south-1.png";
-import ranniCastSouth2 from "../../assets/champions/ranni/cast-south-2.png";
-import ranniCastSouth3 from "../../assets/champions/ranni/cast-south-3.png";
-import ranniCastNorth0 from "../../assets/champions/ranni/cast-north-0.png";
-import ranniCastNorth1 from "../../assets/champions/ranni/cast-north-1.png";
-import ranniCastNorth2 from "../../assets/champions/ranni/cast-north-2.png";
-import ranniCastNorth3 from "../../assets/champions/ranni/cast-north-3.png";
-import ranniCastEast0 from "../../assets/champions/ranni/cast-east-0.png";
-import ranniCastEast1 from "../../assets/champions/ranni/cast-east-1.png";
-import ranniCastEast2 from "../../assets/champions/ranni/cast-east-2.png";
-import ranniCastEast3 from "../../assets/champions/ranni/cast-east-3.png";
-import ranniCastWest0 from "../../assets/champions/ranni/cast-west-0.png";
-import ranniCastWest1 from "../../assets/champions/ranni/cast-west-1.png";
-import ranniCastWest2 from "../../assets/champions/ranni/cast-west-2.png";
-import ranniCastWest3 from "../../assets/champions/ranni/cast-west-3.png";
-import nicoDeathSouth0 from "../../assets/champions/nico/death-south-0.png";
-import nicoDeathSouth1 from "../../assets/champions/nico/death-south-1.png";
-import nicoDeathSouth2 from "../../assets/champions/nico/death-south-2.png";
-import nicoDeathSouth3 from "../../assets/champions/nico/death-south-3.png";
-import nicoDeathSouth4 from "../../assets/champions/nico/death-south-4.png";
-import nicoDeathSouth5 from "../../assets/champions/nico/death-south-5.png";
-import nicoDeathNorth0 from "../../assets/champions/nico/death-north-0.png";
-import nicoDeathNorth1 from "../../assets/champions/nico/death-north-1.png";
-import nicoDeathNorth2 from "../../assets/champions/nico/death-north-2.png";
-import nicoDeathNorth3 from "../../assets/champions/nico/death-north-3.png";
-import nicoDeathNorth4 from "../../assets/champions/nico/death-north-4.png";
-import nicoDeathNorth5 from "../../assets/champions/nico/death-north-5.png";
-import nicoDeathEast0 from "../../assets/champions/nico/death-east-0.png";
-import nicoDeathEast1 from "../../assets/champions/nico/death-east-1.png";
-import nicoDeathEast2 from "../../assets/champions/nico/death-east-2.png";
-import nicoDeathEast3 from "../../assets/champions/nico/death-east-3.png";
-import nicoDeathEast4 from "../../assets/champions/nico/death-east-4.png";
-import nicoDeathEast5 from "../../assets/champions/nico/death-east-5.png";
-import nicoDeathWest0 from "../../assets/champions/nico/death-west-0.png";
-import nicoDeathWest1 from "../../assets/champions/nico/death-west-1.png";
-import nicoDeathWest2 from "../../assets/champions/nico/death-west-2.png";
-import nicoDeathWest3 from "../../assets/champions/nico/death-west-3.png";
-import nicoDeathWest4 from "../../assets/champions/nico/death-west-4.png";
-import nicoDeathWest5 from "../../assets/champions/nico/death-west-5.png";
-import nicoCastSouth0 from "../../assets/champions/nico/cast-south-0.png";
-import nicoCastSouth1 from "../../assets/champions/nico/cast-south-1.png";
-import nicoCastSouth2 from "../../assets/champions/nico/cast-south-2.png";
-import nicoCastSouth3 from "../../assets/champions/nico/cast-south-3.png";
-import nicoCastSouth4 from "../../assets/champions/nico/cast-south-4.png";
-import nicoCastSouth5 from "../../assets/champions/nico/cast-south-5.png";
-import nicoCastNorth0 from "../../assets/champions/nico/cast-north-0.png";
-import nicoCastNorth1 from "../../assets/champions/nico/cast-north-1.png";
-import nicoCastNorth2 from "../../assets/champions/nico/cast-north-2.png";
-import nicoCastNorth3 from "../../assets/champions/nico/cast-north-3.png";
-import nicoCastNorth4 from "../../assets/champions/nico/cast-north-4.png";
-import nicoCastNorth5 from "../../assets/champions/nico/cast-north-5.png";
-import nicoCastEast0 from "../../assets/champions/nico/cast-east-0.png";
-import nicoCastEast1 from "../../assets/champions/nico/cast-east-1.png";
-import nicoCastEast2 from "../../assets/champions/nico/cast-east-2.png";
-import nicoCastEast3 from "../../assets/champions/nico/cast-east-3.png";
-import nicoCastEast4 from "../../assets/champions/nico/cast-east-4.png";
-import nicoCastEast5 from "../../assets/champions/nico/cast-east-5.png";
-import nicoCastWest0 from "../../assets/champions/nico/cast-west-0.png";
-import nicoCastWest1 from "../../assets/champions/nico/cast-west-1.png";
-import nicoCastWest2 from "../../assets/champions/nico/cast-west-2.png";
-import nicoCastWest3 from "../../assets/champions/nico/cast-west-3.png";
-import nicoCastWest4 from "../../assets/champions/nico/cast-west-4.png";
-import nicoCastWest5 from "../../assets/champions/nico/cast-west-5.png";
+import {
+  collectChampionAssetUrls,
+  DEFAULT_P1_SLUG,
+  DEFAULT_P2_SLUG,
+  getChampionPresentation,
+  listChampionPresentations,
+  resolveChampionSlug,
+  type ChampPack,
+  type ChampPresentation,
+  type Facing,
+} from "./champion-packs.ts";
 
 import { createGameMechanics } from "../game-mechanics.ts";
 import { createLocalDuel1v1MatchConfig, createMatchConfig } from "../match-config.ts";
-import { RANNI_CHANNEL_MS } from "../modules/skills/index.ts";
+import {
+  RANNI_CHANNEL_MS,
+  RANNI_COOLDOWN_MS,
+  skillChannelMs,
+  THRESH_CHANNEL_MS,
+  THRESH_HOOK_RANGE,
+} from "../modules/skills/index.ts";
 import {
   initSoundUnlock,
   playSoundsForEvents,
@@ -233,7 +64,7 @@ import {
 } from "./audio.ts";
 import {
   GAME_MECHANICS_VERSION,
-  RANNI_ICE_BLINK_SKILL_ID,
+  THRESH_DEATH_SENTENCE_SKILL_ID,
   TICK_DURATION_MS,
   type CompetitorId,
   type Direction,
@@ -248,8 +79,11 @@ import {
   BOMB_FUSE_MS,
   CANONICAL_SPAWNS,
   FLAME_DURATION_MS,
+  isFlameLethal,
+  LANE_CORRECTION_MAX,
   PRESSURE_FALL_MS,
   UNITS_PER_TILE,
+  wrapDelta,
 } from "../kernel/world-state.ts";
 import {
   createBotMemory,
@@ -279,9 +113,14 @@ const LOGICAL_HEIGHT = ARENA_HEIGHT * TILE_SIZE;
 const MAX_FRAME_DELTA_MS = 100;
 const EVENT_LOG_LIMIT = 10;
 const MOVE_SPEED_THRESHOLD = 8;
-/** Opaque champion height in tiles after source-rect trim (oracle ~1.45, target 1.5–1.9). */
-const CHAMPION_HEIGHT_TILES = 1.72;
-const CHAMPION_MAX_WIDTH_TILES = 1.35;
+/**
+ * Opaque champion height in tiles after source-rect trim.
+ * Matches product arena scale (1.45). Dense packs further multiply by
+ * {@link ChampPresentation.arenaScale} so full-cell art does not read oversized.
+ */
+const CHAMPION_HEIGHT_TILES = 1.45;
+/** Max width in tiles after aspect fit (product arena uses 1.2). */
+const CHAMPION_MAX_WIDTH_TILES = 1.2;
 const SPRITE_ALPHA_THRESHOLD = 24;
 const IDLE_FRAME_MS = 180;
 const WALK_FRAME_MS = 90;
@@ -303,6 +142,11 @@ const BLINK_TRAIL_FX_MS = 280;
 const POWER_UP_POP_MS = 200;
 /** Blink = teleport: a jump larger than this in one frame spawns a trail. */
 const BLINK_JUMP_TILES = 1.25;
+/** Thresh hook projectile visual timing. */
+const HOOK_FLIGHT_MS = 300;
+const HOOK_IMPACT_MS = 250;
+const HOOK_FADE_MS = 200;
+const HOOK_TOTAL_MS = HOOK_FLIGHT_MS + HOOK_IMPACT_MS + HOOK_FADE_MS;
 
 type SpriteTrimBounds = Readonly<{
   x: number;
@@ -349,6 +193,16 @@ type DeathAnim = {
   startMs: number;
 };
 
+/** Thresh Death Sentence hook projectile visual state. */
+type HookProjectileFx = {
+  ownerId: CompetitorId;
+  originTile: TileCoord;
+  direction: Direction;
+  reachTiles: number;
+  hit: boolean;
+  startMs: number;
+};
+
 type RecentExplosion = {
   bombId: number;
   tile: TileCoord;
@@ -358,7 +212,6 @@ type RecentExplosion = {
 
 /** Presentation-only local control slots. Not domain identity. */
 type LocalControlSlot = "control-a" | "control-b";
-type Facing = "south" | "north" | "east" | "west";
 
 type BrowserCopy = Readonly<{
   back: string;
@@ -390,8 +243,10 @@ type BrowserCopy = Readonly<{
   controlName: (slot: LocalControlSlot) => string;
   p2Human: string;
   p2Bot: string;
-  skillReady: string;
-  skillChanneling: string;
+  you: string;
+  ultReady: string;
+  ultCast: string;
+  rivalOut: string;
   skillCooldown: (seconds: number) => string;
   p2ModeLabel: (control: "human" | "bot") => string;
 }>;
@@ -423,12 +278,14 @@ const PT_COPY: BrowserCopy = Object.freeze({
   ready: "Arena pronta.",
   winner: (name) => `${name} venceu a rodada`,
   matchWinner: (name) => `${name} venceu a partida`,
-  controlName: (slot) => (slot === "control-a" ? "Ranni" : "Nico"),
+  controlName: (slot) => championName(slot),
   p2Human: "Humano",
   p2Bot: "Bot",
-  skillReady: "Espaço · Pronta",
-  skillChanneling: "Espaço · Canalizando",
-  skillCooldown: (seconds) => `Espaço · ${seconds.toFixed(1)}s`,
+  you: "VOCÊ",
+  ultReady: "RDY",
+  ultCast: "CAST",
+  rivalOut: "FORA",
+  skillCooldown: (seconds) => `${seconds.toFixed(1)}`,
   p2ModeLabel: (control) => (control === "bot" ? "P2: Bot" : "P2: Humano"),
 });
 
@@ -459,21 +316,23 @@ const EN_COPY: BrowserCopy = Object.freeze({
   ready: "Arena ready.",
   winner: (name) => `${name} wins the round`,
   matchWinner: (name) => `${name} wins the match`,
-  controlName: (slot) => (slot === "control-a" ? "Ranni" : "Nico"),
+  controlName: (slot) => championName(slot),
   p2Human: "Human",
   p2Bot: "Bot",
-  skillReady: "Space · Ready",
-  skillChanneling: "Space · Channeling",
-  skillCooldown: (seconds) => `Space · ${seconds.toFixed(1)}s`,
+  you: "YOU",
+  ultReady: "RDY",
+  ultCast: "CAST",
+  rivalOut: "OUT",
+  skillCooldown: (seconds) => `${seconds.toFixed(1)}`,
   p2ModeLabel: (control) => (control === "bot" ? "P2: Bot" : "P2: Human"),
 });
 
-/** Presentational portal pads (mid-edge) — visual only, no kernel coupling. */
+/** Presentational portal pads (mid-edge) — visual floor art over the real wrap portals. */
 const VISUAL_PORTALS: readonly TileCoord[] = Object.freeze([
-  Object.freeze({ x: 1, y: 4 }),
-  Object.freeze({ x: ARENA_WIDTH - 2, y: 4 }),
-  Object.freeze({ x: 5, y: 1 }),
-  Object.freeze({ x: 5, y: ARENA_HEIGHT - 2 }),
+  Object.freeze({ x: 0, y: 4 }),
+  Object.freeze({ x: ARENA_WIDTH - 1, y: 4 }),
+  Object.freeze({ x: 5, y: 0 }),
+  Object.freeze({ x: 5, y: ARENA_HEIGHT - 1 }),
 ]);
 
 const SPAWN_PAD_KEYS = new Set(CANONICAL_SPAWNS.map((t) => `${t.x},${t.y}`));
@@ -493,150 +352,63 @@ const FLAME_ANIM_URLS = [
 
 const CRATE_BREAK_URLS = [crateBreak0Url, crateBreak1Url, crateBreak2Url, crateBreak3Url] as const;
 
-type ChampPack = Readonly<{
-  portrait: string;
-  static: Readonly<Record<Facing, string>>;
-  idle: Readonly<Record<Facing, readonly string[]>>;
-  walk: Readonly<Record<Facing, readonly string[]>>;
-  cast: Readonly<Record<Facing, readonly string[]>>;
-  death: Readonly<Record<Facing, readonly string[]>>;
-}>;
+/** Active visual packs + roster meta for the local duel. */
+let selectedP1 = resolveChampionSlug(null, DEFAULT_P1_SLUG);
+let selectedP2 = resolveChampionSlug(null, DEFAULT_P2_SLUG);
 
-const CHAMPIONS: Readonly<Record<LocalControlSlot, ChampPack>> = Object.freeze({
-  "control-a": Object.freeze({
-    portrait: ranniPortraitUrl,
-    static: Object.freeze({
-      south: ranniSouthUrl,
-      north: ranniNorthUrl,
-      east: ranniEastUrl,
-      west: ranniWestUrl,
-    }),
-    idle: Object.freeze({
-      south: Object.freeze([ranniIdleSouth0, ranniIdleSouth1, ranniIdleSouth2, ranniIdleSouth3]),
-      north: Object.freeze([ranniIdleNorth0, ranniIdleNorth1, ranniIdleNorth2, ranniIdleNorth3]),
-      east: Object.freeze([ranniIdleEast0, ranniIdleEast1, ranniIdleEast2, ranniIdleEast3]),
-      west: Object.freeze([ranniIdleWest0, ranniIdleWest1, ranniIdleWest2, ranniIdleWest3]),
-    }),
-    walk: Object.freeze({
-      south: Object.freeze([
-        ranniWalkSouth0, ranniWalkSouth1, ranniWalkSouth2, ranniWalkSouth3,
-        ranniWalkSouth4, ranniWalkSouth5, ranniWalkSouth6, ranniWalkSouth7,
-      ]),
-      north: Object.freeze([
-        ranniWalkNorth0, ranniWalkNorth1, ranniWalkNorth2, ranniWalkNorth3,
-        ranniWalkNorth4, ranniWalkNorth5, ranniWalkNorth6, ranniWalkNorth7,
-      ]),
-      east: Object.freeze([
-        ranniWalkEast0, ranniWalkEast1, ranniWalkEast2, ranniWalkEast3,
-        ranniWalkEast4, ranniWalkEast5, ranniWalkEast6, ranniWalkEast7,
-      ]),
-      west: Object.freeze([
-        ranniWalkWest0, ranniWalkWest1, ranniWalkWest2, ranniWalkWest3,
-        ranniWalkWest4, ranniWalkWest5, ranniWalkWest6, ranniWalkWest7,
-      ]),
-    }),
-    cast: Object.freeze({
-      south: Object.freeze([ranniCastSouth0, ranniCastSouth1, ranniCastSouth2, ranniCastSouth3]),
-      north: Object.freeze([ranniCastNorth0, ranniCastNorth1, ranniCastNorth2, ranniCastNorth3]),
-      east: Object.freeze([ranniCastEast0, ranniCastEast1, ranniCastEast2, ranniCastEast3]),
-      west: Object.freeze([ranniCastWest0, ranniCastWest1, ranniCastWest2, ranniCastWest3]),
-    }),
-    death: Object.freeze({
-      south: Object.freeze([
-        ranniDeathSouth0, ranniDeathSouth1, ranniDeathSouth2, ranniDeathSouth3,
-        ranniDeathSouth4, ranniDeathSouth5, ranniDeathSouth6,
-      ]),
-      north: Object.freeze([
-        ranniDeathNorth0, ranniDeathNorth1, ranniDeathNorth2, ranniDeathNorth3,
-        ranniDeathNorth4, ranniDeathNorth5, ranniDeathNorth6,
-      ]),
-      east: Object.freeze([
-        ranniDeathEast0, ranniDeathEast1, ranniDeathEast2, ranniDeathEast3,
-        ranniDeathEast4, ranniDeathEast5, ranniDeathEast6,
-      ]),
-      west: Object.freeze([
-        ranniDeathWest0, ranniDeathWest1, ranniDeathWest2, ranniDeathWest3,
-        ranniDeathWest4, ranniDeathWest5, ranniDeathWest6,
-      ]),
-    }),
-  }),
-  "control-b": Object.freeze({
-    portrait: nicoPortraitUrl,
-    static: Object.freeze({
-      south: nicoSouthUrl,
-      north: nicoNorthUrl,
-      east: nicoEastUrl,
-      west: nicoWestUrl,
-    }),
-    idle: Object.freeze({
-      south: Object.freeze([nicoIdleSouth0, nicoIdleSouth1, nicoIdleSouth2, nicoIdleSouth3]),
-      north: Object.freeze([nicoIdleNorth0, nicoIdleNorth1, nicoIdleNorth2, nicoIdleNorth3]),
-      east: Object.freeze([nicoIdleEast0, nicoIdleEast1, nicoIdleEast2, nicoIdleEast3]),
-      west: Object.freeze([nicoIdleWest0, nicoIdleWest1, nicoIdleWest2, nicoIdleWest3]),
-    }),
-    walk: Object.freeze({
-      south: Object.freeze([nicoWalkSouth0, nicoWalkSouth1, nicoWalkSouth2, nicoWalkSouth3]),
-      north: Object.freeze([
-        nicoWalkNorth0, nicoWalkNorth1, nicoWalkNorth2, nicoWalkNorth3,
-        nicoWalkNorth4, nicoWalkNorth5,
-      ]),
-      east: Object.freeze([
-        nicoWalkEast0, nicoWalkEast1, nicoWalkEast2, nicoWalkEast3,
-        nicoWalkEast4, nicoWalkEast5,
-      ]),
-      west: Object.freeze([
-        nicoWalkWest0, nicoWalkWest1, nicoWalkWest2, nicoWalkWest3,
-        nicoWalkWest4, nicoWalkWest5,
-      ]),
-    }),
-    cast: Object.freeze({
-      south: Object.freeze([
-        nicoCastSouth0, nicoCastSouth1, nicoCastSouth2, nicoCastSouth3,
-        nicoCastSouth4, nicoCastSouth5,
-      ]),
-      north: Object.freeze([
-        nicoCastNorth0, nicoCastNorth1, nicoCastNorth2, nicoCastNorth3,
-        nicoCastNorth4, nicoCastNorth5,
-      ]),
-      east: Object.freeze([
-        nicoCastEast0, nicoCastEast1, nicoCastEast2, nicoCastEast3,
-        nicoCastEast4, nicoCastEast5,
-      ]),
-      west: Object.freeze([
-        nicoCastWest0, nicoCastWest1, nicoCastWest2, nicoCastWest3,
-        nicoCastWest4, nicoCastWest5,
-      ]),
-    }),
-    death: Object.freeze({
-      south: Object.freeze([
-        nicoDeathSouth0, nicoDeathSouth1, nicoDeathSouth2, nicoDeathSouth3,
-        nicoDeathSouth4, nicoDeathSouth5,
-      ]),
-      north: Object.freeze([
-        nicoDeathNorth0, nicoDeathNorth1, nicoDeathNorth2, nicoDeathNorth3,
-        nicoDeathNorth4, nicoDeathNorth5,
-      ]),
-      east: Object.freeze([
-        nicoDeathEast0, nicoDeathEast1, nicoDeathEast2, nicoDeathEast3,
-        nicoDeathEast4, nicoDeathEast5,
-      ]),
-      west: Object.freeze([
-        nicoDeathWest0, nicoDeathWest1, nicoDeathWest2, nicoDeathWest3,
-        nicoDeathWest4, nicoDeathWest5,
-      ]),
-    }),
-  }),
-});
+function presentationFor(slot: LocalControlSlot): ChampPresentation {
+  const slug = slot === "control-a" ? selectedP1 : selectedP2;
+  const entry = getChampionPresentation(slug);
+  if (!entry) throw new Error(`Missing champion presentation: ${slug}`);
+  return entry;
+}
 
-const localDuelConfig = createLocalDuel1v1MatchConfig();
-const matchConfig = createMatchConfig({
-  ...localDuelConfig,
-  seats: localDuelConfig.seats.map((seat, index) => ({
-    seatId: seat.seatId,
-    competitorId: seat.competitorId,
-    ...(index === 0 ? { skillId: RANNI_ICE_BLINK_SKILL_ID } : {}),
-  })),
-});
+function activePack(slot: LocalControlSlot): ChampPack {
+  return presentationFor(slot).pack;
+}
+
+function championName(slot: LocalControlSlot): string {
+  return presentationFor(slot).name;
+}
+
+function championCooldownMs(slot: LocalControlSlot): number {
+  return presentationFor(slot).skillCooldownMs;
+}
+
+function buildMatchConfig(p1Slug: string, p2Slug: string) {
+  const localDuelConfig = createLocalDuel1v1MatchConfig();
+  const p1 = getChampionPresentation(p1Slug);
+  const p2 = getChampionPresentation(p2Slug);
+  return createMatchConfig({
+    ...localDuelConfig,
+    seats: localDuelConfig.seats.map((seat, index) => {
+      const champ = index === 0 ? p1 : p2;
+      const skillId = champ?.kernelSkillId;
+      return {
+        seatId: seat.seatId,
+        competitorId: seat.competitorId,
+        ...(skillId ? { skillId } : {}),
+      };
+    }),
+  });
+}
+
+// Seed selection from URL (?p1=ranni&p2=nico) so deep-links skip re-picking.
+try {
+  const params = new URLSearchParams(window.location.search);
+  selectedP1 = resolveChampionSlug(params.get("p1") ?? params.get("character") ?? params.get("char1"), DEFAULT_P1_SLUG);
+  const rawP2 = params.get("char2") ?? params.get("p2");
+  const p2AsChar = rawP2 && rawP2 !== "bot" && rawP2 !== "human" ? rawP2 : null;
+  selectedP2 = resolveChampionSlug(
+    p2AsChar,
+    selectedP1 === DEFAULT_P2_SLUG ? DEFAULT_P1_SLUG : DEFAULT_P2_SLUG,
+  );
+} catch {
+  selectedP1 = DEFAULT_P1_SLUG;
+  selectedP2 = DEFAULT_P2_SLUG;
+}
+
+let matchConfig = buildMatchConfig(selectedP1, selectedP2);
 const localCompetitorBySlot: Readonly<Record<LocalControlSlot, CompetitorId>> = Object.freeze({
   "control-a": matchConfig.seats[0]!.competitorId,
   "control-b": matchConfig.seats[1]!.competitorId,
@@ -654,7 +426,11 @@ const P2_COMPETITOR_ID = localCompetitorBySlot["control-b"];
 type P2Control = "human" | "bot";
 function initialP2Control(): P2Control {
   try {
-    return new URLSearchParams(window.location.search).get("p2") === "bot" ? "bot" : "human";
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("bot") === "1" || params.get("control2") === "bot") return "bot";
+    // Legacy: ?p2=bot still means bot-controlled P2.
+    if (params.get("p2") === "bot") return "bot";
+    return "human";
   } catch {
     return "human";
   }
@@ -777,7 +553,7 @@ document.documentElement.lang = isEnglish ? "en" : "pt-BR";
 document.title = isEnglish ? "Bomba PvP · Arena" : "Bomba PvP · Arena";
 root.removeAttribute("aria-live");
 
-const game = createGameMechanics(matchConfig);
+let game = createGameMechanics(matchConfig);
 const imageCache = new Map<string, HTMLImageElement>();
 const spriteTrimCache = new WeakMap<HTMLImageElement, SpriteTrimBounds | null>();
 let trimProbeCanvas: HTMLCanvasElement | null = null;
@@ -790,6 +566,10 @@ const chainSparkFx: ChainSparkFx[] = [];
 const blinkTrailFx: BlinkTrailFx[] = [];
 const pressureWarnFx: PressureWarnFx[] = [];
 const deathAnims = new Map<CompetitorId, DeathAnim>();
+/** Thresh hook projectile FX (visual only, kernel logic is authoritative). */
+const hookProjectileFx: HookProjectileFx[] = [];
+/** Track previous skill phase per competitor to detect channel→cooldown transitions. */
+const prevSkillPhase = new Map<CompetitorId, string>();
 /** Bomb tile by id from the latest snapshot (chain-spark origin lookup). */
 const bombTilesById = new Map<number, TileCoord>();
 /** Pop-in clock for freshly placed bombs. */
@@ -847,21 +627,8 @@ function preloadAll(): void {
     ...CRATE_BREAK_URLS,
     hudBombIconUrl,
     hudFlameIconUrl,
-    hudPanelCenterUrl,
-    hudPanelLocalUrl,
-    hudPanelRivalUrl,
   ]);
-  for (const slot of ["control-a", "control-b"] as const) {
-    const pack = CHAMPIONS[slot];
-    urls.add(pack.portrait);
-    for (const facing of ["south", "north", "east", "west"] as const) {
-      urls.add(pack.static[facing]);
-      for (const frame of pack.idle[facing]) urls.add(frame);
-      for (const frame of pack.walk[facing]) urls.add(frame);
-      for (const frame of pack.cast[facing]) urls.add(frame);
-      for (const frame of pack.death[facing]) urls.add(frame);
-    }
-  }
+  for (const url of collectChampionAssetUrls()) urls.add(url);
   for (const url of urls) loadImage(url);
 }
 
@@ -971,15 +738,9 @@ function crateUrlFor(x: number, y: number): string {
 // ── DOM shell ────────────────────────────────────────────────
 
 const app = element(document, "main", "arena-app");
-app.style.setProperty("--hud-panel-local", `url("${hudPanelLocalUrl}")`);
-app.style.setProperty("--hud-panel-rival", `url("${hudPanelRivalUrl}")`);
-app.style.setProperty("--hud-panel-center", `url("${hudPanelCenterUrl}")`);
 
 const hud = element(document, "header", "arena-hud");
 const hudBar = element(document, "div", "arena-hud__bar");
-const sideLeft = element(document, "div", "arena-hud__side arena-hud__side--left");
-const sideRight = element(document, "div", "arena-hud__side arena-hud__side--right");
-const center = element(document, "div", "arena-center");
 
 const brand = element(document, "a", "arena-brand");
 brand.href = "/";
@@ -989,97 +750,383 @@ brandImg.src = brandMarkUrl;
 brandImg.alt = "";
 brand.append(brandImg, element(document, "span", undefined, "Bomba PvP"));
 
-function createPlayerCard(slot: LocalControlSlot): Readonly<{
+// ── LoL-inspired dual HUD (P1 left · timer center · P2 right) ──
+
+type LolHudPanel = Readonly<{
   root: HTMLElement;
-  wins: HTMLElement;
+  portrait: HTMLImageElement;
+  name: HTMLElement;
+  tag: HTMLElement;
+  skillName: HTMLElement;
+  status: HTMLElement;
+  statusBar: HTMLElement;
+  pips: HTMLElement;
   bombs: HTMLElement;
   range: HTMLElement;
-  status: HTMLElement;
-  skill: HTMLElement;
-  bombStat: HTMLElement;
-  flameStat: HTMLElement;
+  bombChip: HTMLElement;
+  flameChip: HTMLElement;
+  spellQ: HTMLElement;
+  spellR: HTMLElement;
+  spellRLabel: HTMLElement;
+  spellRCd: HTMLElement;
+  portraitRing: HTMLElement;
   competitorId: CompetitorId;
-}> {
-  const css = slot === "control-a" ? "p1" : "p2";
-  const card = element(document, "div", `arena-player-card arena-player-card--${css}`);
-  const portraitWrap = element(document, "div", "arena-player-card__portrait");
-  const portrait = document.createElement("img");
-  portrait.src = CHAMPIONS[slot].portrait;
-  portrait.alt = copy.controlName(slot);
-  portraitWrap.append(portrait);
+  slot: LocalControlSlot;
+}>;
 
-  const meta = element(document, "div", "arena-player-card__meta");
-  const nameRow = element(document, "div", "arena-player-card__name-row");
-  nameRow.append(
-    element(document, "span", "arena-player-card__tag", slot === "control-a" ? "P1" : "P2"),
-    element(document, "span", "arena-player-card__name", copy.controlName(slot)),
+function createLolHudPanel(slot: LocalControlSlot): LolHudPanel {
+  const side = slot === "control-a" ? "p1" : "p2";
+  const root = element(
+    document,
+    "div",
+    `arena-player-card arena-player-card--${side} lol-hud lol-hud--${side}`,
   );
-  const stats = element(document, "div", "arena-player-card__stats");
-  const bombStat = element(document, "span", "arena-player-card__stat");
+  root.dataset.slot = side;
+  root.dataset.accent = presentationFor(slot).accent;
+
+  const portraitWrap = element(document, "div", "lol-hud__portrait-wrap");
+  const portraitRing = element(document, "div", "lol-hud__portrait-ring");
+  const portrait = document.createElement("img");
+  portrait.className = "lol-hud__portrait";
+  portrait.alt = "";
+  portrait.decoding = "async";
+  portrait.src = presentationFor(slot).portrait;
+  portraitWrap.append(portraitRing, portrait);
+
+  const body = element(document, "div", "lol-hud__body");
+  const header = element(document, "div", "lol-hud__header");
+  const tag = element(document, "span", "lol-hud__tag", side === "p1" ? "P1" : "P2");
+  const name = element(document, "span", "lol-hud__name", championName(slot));
+  const pips = element(document, "div", "lol-hud__pips hud-pips");
+  header.append(tag, name, pips);
+
+  const statusRow = element(document, "div", "lol-hud__status-row");
+  const statusBar = element(document, "div", "lol-hud__hp");
+  const statusBarFill = element(document, "span", "lol-hud__hp-fill");
+  statusBarFill.style.width = "100%";
+  statusBar.append(statusBarFill);
+  const status = element(document, "span", "lol-hud__status", "");
+  statusRow.append(statusBar, status);
+
+  const skillName = element(
+    document,
+    "div",
+    "lol-hud__skill-name",
+    presentationFor(slot).skillName,
+  );
+
+  const powerRail = element(document, "div", "lol-hud__power hud-power");
+  const bombChip = element(document, "span", "hud-power__chip");
   const bombIcon = document.createElement("img");
   bombIcon.src = hudBombIconUrl;
   bombIcon.alt = "";
-  const bombs = element(document, "span", undefined, "1/1");
-  bombStat.append(bombIcon, bombs);
-  const flameStat = element(document, "span", "arena-player-card__stat");
+  const bombs = element(document, "span", "hud-power__value", "1/1");
+  bombChip.append(bombIcon, bombs);
+  const flameChip = element(document, "span", "hud-power__chip");
   const flameIcon = document.createElement("img");
   flameIcon.src = hudFlameIconUrl;
   flameIcon.alt = "";
-  const range = element(document, "span", undefined, "1");
-  flameStat.append(flameIcon, range);
-  const status = element(document, "span", "arena-player-card__stat", "");
-  const skill = element(document, "span", "arena-player-card__skill", "");
-  skill.hidden = true;
-  stats.append(bombStat, flameStat, status);
-  meta.append(nameRow, stats, skill);
+  const range = element(document, "span", "hud-power__value", "1");
+  flameChip.append(flameIcon, range);
+  powerRail.append(bombChip, flameChip);
 
-  const wins = element(document, "div", "arena-player-card__wins", "W0");
-  if (slot === "control-a") {
-    card.append(portraitWrap, meta, wins);
-  } else {
-    card.append(wins, meta, portraitWrap);
-  }
+  const spells = element(document, "div", "lol-hud__spells");
+  const spellQ = element(document, "div", "lol-hud__spell lol-hud__spell--q");
+  spellQ.title = slot === "control-a" ? "Q · Bomba" : "O · Bomba";
+  spellQ.append(element(document, "span", "lol-hud__spell-key", slot === "control-a" ? "Q" : "O"));
+  const spellQIcon = document.createElement("img");
+  spellQIcon.src = hudBombIconUrl;
+  spellQIcon.alt = "";
+  spellQ.append(spellQIcon);
+
+  const spellR = element(document, "div", "lol-hud__spell lol-hud__spell--r is-ready");
+  const skillKey = slot === "control-a" ? "R" : "I";
+  spellR.title = `${skillKey} · ${presentationFor(slot).skillName}`;
+  spellR.append(element(document, "span", "lol-hud__spell-key", skillKey));
+  const spellRLabel = element(
+    document,
+    "span",
+    "lol-hud__spell-label",
+    presentationFor(slot).skillName.slice(0, 1).toUpperCase(),
+  );
+  const spellRCd = element(document, "span", "lol-hud__spell-cd", "");
+  spellR.append(spellRLabel, spellRCd);
+  spells.append(spellQ, spellR);
+
+  body.append(header, statusRow, skillName, powerRail, spells);
+  root.append(portraitWrap, body);
+
   return {
-    root: card,
-    wins,
+    root,
+    portrait,
+    name,
+    tag,
+    skillName,
+    status,
+    statusBar: statusBarFill,
+    pips,
     bombs,
     range,
-    status,
-    skill,
-    bombStat,
-    flameStat,
+    bombChip,
+    flameChip,
+    spellQ,
+    spellR,
+    spellRLabel,
+    spellRCd,
+    portraitRing,
     competitorId: localCompetitorBySlot[slot],
+    slot,
   };
 }
 
-const cardA = createPlayerCard("control-a");
-const cardB = createPlayerCard("control-b");
+function paintLolIdentity(panel: LolHudPanel): void {
+  const champ = presentationFor(panel.slot);
+  panel.root.dataset.accent = champ.accent;
+  panel.portrait.src = champ.portrait;
+  panel.name.textContent = champ.name;
+  panel.skillName.textContent = champ.skillName;
+  panel.spellR.title = `${panel.slot === "control-a" ? "R" : "I"} · ${champ.skillName}`;
+  panel.spellRLabel.textContent = champ.skillName.slice(0, 1).toUpperCase();
+  panel.spellR.classList.toggle("is-locked", !champ.kernelSkillId);
+}
 
-/** Brief pulse on the HUD stat that just grew (power-up pickup feedback). */
+const p1Hud = createLolHudPanel("control-a");
+const p2Hud = createLolHudPanel("control-b");
+/** @deprecated alias kept for pulseHudStat compatibility */
+const localPanel = p1Hud;
+const rivalPill = p2Hud;
+
+/** Brief pulse on the HUD power chip that just grew (pickup feedback). */
 function pulseHudStat(competitorId: CompetitorId, powerUpType: "bomb-up" | "flame-up"): void {
-  const card = competitorId === cardA.competitorId
-    ? cardA
-    : competitorId === cardB.competitorId
-      ? cardB
-      : null;
-  if (!card) return;
-  const target = powerUpType === "bomb-up" ? card.bombStat : card.flameStat;
+  const panel =
+    competitorId === p1Hud.competitorId
+      ? p1Hud
+      : competitorId === p2Hud.competitorId
+        ? p2Hud
+        : null;
+  if (!panel) return;
+  const target = powerUpType === "bomb-up" ? panel.bombChip : panel.flameChip;
   target.classList.remove("is-pulsed");
-  // Force reflow so the animation restarts on rapid consecutive pickups.
   void target.offsetWidth;
   target.classList.add("is-pulsed");
 }
-sideLeft.append(brand, cardA.root);
-sideRight.append(cardB.root);
 
-const timerShell = element(document, "div", "arena-timer-shell");
-const roundLabel = element(document, "div", "arena-timer-shell__round", `${copy.round} 1 · ${copy.firstTo}2`);
+const timerShell = element(document, "div", "arena-timer-shell hud-meta");
+const roundLabel = element(document, "div", "arena-timer-shell__round", "R1 · FT2");
 const timeValue = element(document, "div", "arena-timer-shell__time", "00:00");
-const phaseLabelEl = element(document, "div", "arena-timer-shell__phase", copy.playing);
-timerShell.append(roundLabel, timeValue, phaseLabelEl);
-center.append(timerShell);
-hudBar.append(sideLeft, center, sideRight);
-hud.append(hudBar);
+const sdMeter = element(document, "div", "hud-meta__sd");
+const sdMeterFill = element(document, "span", "hud-meta__sd-fill");
+sdMeter.append(sdMeterFill);
+timerShell.append(roundLabel, timeValue, sdMeter);
+
+hudBar.append(p1Hud.root, timerShell, p2Hud.root);
+hud.append(brand, hudBar);
+
+// ── Character select (mode 4 roster pick) ─────────────────────
+
+let matchStarted = false;
+let pickP1 = selectedP1;
+let pickP2 = selectedP2;
+
+const selectScreen = element(document, "section", "char-select");
+selectScreen.setAttribute("aria-label", isEnglish ? "Character select" : "Seleção de personagens");
+
+const selectInner = element(document, "div", "char-select__inner");
+const selectTitle = element(
+  document,
+  "h1",
+  "char-select__title",
+  isEnglish ? "Choose your fighters" : "Escolha seus personagens",
+);
+const selectSub = element(
+  document,
+  "p",
+  "char-select__sub",
+  isEnglish
+    ? "P1 left · P2 right · click a portrait or use A/D and ←/→"
+    : "P1 esquerda · P2 direita · clique no retrato ou use A/D e ←/→",
+);
+
+function buildPickColumn(side: "p1" | "p2"): {
+  root: HTMLElement;
+  portrait: HTMLImageElement;
+  name: HTMLElement;
+  skill: HTMLElement;
+  grid: HTMLElement;
+} {
+  const root = element(document, "div", `char-select__col char-select__col--${side}`);
+  const badge = element(document, "div", "char-select__badge", side === "p1" ? "PLAYER 1" : "PLAYER 2");
+  const stage = element(document, "div", "char-select__stage");
+  const portrait = document.createElement("img");
+  portrait.className = "char-select__hero";
+  portrait.alt = "";
+  portrait.decoding = "async";
+  const name = element(document, "h2", "char-select__name", "");
+  const skill = element(document, "p", "char-select__skill", "");
+  stage.append(portrait, name, skill);
+  const grid = element(document, "div", "char-select__grid");
+  grid.setAttribute("role", "listbox");
+  grid.setAttribute("aria-label", side === "p1" ? "P1 roster" : "P2 roster");
+  root.append(badge, stage, grid);
+  return { root, portrait, name, skill, grid };
+}
+
+const colP1 = buildPickColumn("p1");
+const colP2 = buildPickColumn("p2");
+const selectCols = element(document, "div", "char-select__cols");
+selectCols.append(colP1.root, colP2.root);
+
+const startBtn = element(
+  document,
+  "button",
+  "arena-button arena-button--primary char-select__start",
+  isEnglish ? "Fight" : "Lutar",
+) as HTMLButtonElement;
+startBtn.type = "button";
+
+const changeBtn = element(
+  document,
+  "button",
+  "arena-button char-select__change",
+  isEnglish ? "Characters" : "Personagens",
+) as HTMLButtonElement;
+changeBtn.type = "button";
+changeBtn.title = isEnglish ? "Open character select" : "Abrir seleção de personagens";
+
+selectInner.append(selectTitle, selectSub, selectCols, startBtn);
+selectScreen.append(selectInner);
+
+function paintPickColumn(
+  col: ReturnType<typeof buildPickColumn>,
+  slug: string,
+  side: "p1" | "p2",
+): void {
+  const champ = getChampionPresentation(slug);
+  if (!champ) return;
+  col.portrait.src = champ.portrait;
+  col.name.textContent = champ.name;
+  col.skill.textContent = `${champ.skillName} · ${(champ.skillCooldownMs / 1000).toFixed(0)}s`;
+  col.root.dataset.accent = champ.accent;
+  for (const btn of col.grid.querySelectorAll<HTMLButtonElement>("button")) {
+    const active = btn.dataset.slug === slug;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+  void side;
+}
+
+function fillRosterGrid(col: ReturnType<typeof buildPickColumn>, side: "p1" | "p2"): void {
+  col.grid.replaceChildren();
+  for (const champ of listChampionPresentations()) {
+    const btn = element(document, "button", "char-select__thumb") as HTMLButtonElement;
+    btn.type = "button";
+    btn.dataset.slug = champ.slug;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-label", champ.name);
+    btn.title = champ.name;
+    const img = document.createElement("img");
+    img.src = champ.portrait;
+    img.alt = "";
+    img.decoding = "async";
+    btn.append(img, element(document, "span", "char-select__thumb-name", champ.name));
+    btn.addEventListener("click", () => {
+      if (side === "p1") pickP1 = champ.slug;
+      else pickP2 = champ.slug;
+      paintPickColumn(colP1, pickP1, "p1");
+      paintPickColumn(colP2, pickP2, "p2");
+    });
+    col.grid.append(btn);
+  }
+}
+
+fillRosterGrid(colP1, "p1");
+fillRosterGrid(colP2, "p2");
+paintPickColumn(colP1, pickP1, "p1");
+paintPickColumn(colP2, pickP2, "p2");
+
+function stepPick(side: "p1" | "p2", delta: number): void {
+  const roster = listChampionPresentations();
+  const current = side === "p1" ? pickP1 : pickP2;
+  const idx = Math.max(0, roster.findIndex((c) => c.slug === current));
+  const next = roster[(idx + delta + roster.length) % roster.length]!;
+  if (side === "p1") pickP1 = next.slug;
+  else pickP2 = next.slug;
+  paintPickColumn(colP1, pickP1, "p1");
+  paintPickColumn(colP2, pickP2, "p2");
+}
+
+function showSelectScreen(show: boolean): void {
+  selectScreen.classList.toggle("is-open", show);
+  selectScreen.setAttribute("aria-hidden", show ? "false" : "true");
+  app.classList.toggle("is-selecting", show);
+}
+
+function applyRosterAndRestart(p1Slug: string, p2Slug: string, restartMatch = true): void {
+  selectedP1 = resolveChampionSlug(p1Slug, DEFAULT_P1_SLUG);
+  selectedP2 = resolveChampionSlug(p2Slug, DEFAULT_P2_SLUG);
+  pickP1 = selectedP1;
+  pickP2 = selectedP2;
+  matchConfig = buildMatchConfig(selectedP1, selectedP2);
+  game = createGameMechanics(matchConfig);
+  botPrng = createBotPrng(matchConfig.seed);
+  botMemory = createBotMemory();
+  paintLolIdentity(p1Hud);
+  paintLolIdentity(p2Hud);
+  paintPickColumn(colP1, pickP1, "p1");
+  paintPickColumn(colP2, pickP2, "p2");
+  clearCombatPresentation();
+  deathAnims.clear();
+  lastFacing.set(localCompetitorBySlot["control-a"], "south");
+  lastFacing.set(localCompetitorBySlot["control-b"], "north");
+  eventMessages.length = 0;
+  eventMessages.push(copy.ready);
+  renderLog();
+  if (restartMatch) {
+    // Fresh mechanics already start at round-start; just render.
+    render();
+  }
+  // Persist selection in the URL without reloading.
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("p1", selectedP1);
+    url.searchParams.set("p2", selectedP2);
+    if (p2IsBot()) url.searchParams.set("bot", "1");
+    else url.searchParams.delete("bot");
+    window.history.replaceState({}, "", url);
+  } catch {
+    /* ignore */
+  }
+}
+
+function confirmCharacterSelect(): void {
+  applyRosterAndRestart(pickP1, pickP2, true);
+  matchStarted = true;
+  showSelectScreen(false);
+}
+
+startBtn.addEventListener("click", () => confirmCharacterSelect());
+changeBtn.addEventListener("click", () => {
+  pickP1 = selectedP1;
+  pickP2 = selectedP2;
+  paintPickColumn(colP1, pickP1, "p1");
+  paintPickColumn(colP2, pickP2, "p2");
+  showSelectScreen(true);
+});
+
+// Open select by default unless ?skipSelect=1
+let skipSelect = false;
+try {
+  skipSelect = new URLSearchParams(window.location.search).get("skipSelect") === "1";
+} catch {
+  skipSelect = false;
+}
+if (skipSelect) {
+  matchStarted = true;
+  showSelectScreen(false);
+} else {
+  matchStarted = false;
+  showSelectScreen(true);
+}
 
 const stage = element(document, "section", "arena-stage");
 const canvasFrame = element(document, "div", "arena-canvas-frame");
@@ -1135,7 +1182,7 @@ devToggle.title = "Toggle diagnostics (?dev=1)";
 const p2ModeButton = element(document, "button", "arena-button arena-button--p2", copy.p2ModeLabel(p2Control));
 p2ModeButton.type = "button";
 p2ModeButton.title = "Toggle P2 human/bot (?p2=bot)";
-actions.append(p2ModeButton);
+actions.append(p2ModeButton, changeBtn);
 
 function syncP2ModeButton(): void {
   p2ModeButton.textContent = copy.p2ModeLabel(p2Control);
@@ -1173,7 +1220,7 @@ const devNote = element(
 );
 devPanel.append(devTitle, devMeta, devLog, devNote);
 
-app.append(hud, stage, dock, devPanel);
+app.append(hud, stage, dock, devPanel, selectScreen);
 root.replaceChildren(app);
 
 /** Keep the metallic HUD strip aligned to the live arena frame width. */
@@ -1244,12 +1291,14 @@ function clearCombatPresentation(): void {
   chainSparkFx.length = 0;
   blinkTrailFx.length = 0;
   pressureWarnFx.length = 0;
+  hookProjectileFx.length = 0;
   recentExplosions.length = 0;
   deathAnims.clear();
   bombTilesById.clear();
   bombPlaceFx.clear();
   powerUpRevealFx.clear();
   lastCompetitorPose.clear();
+  prevSkillPhase.clear();
   screenShakeUntilMs = 0;
   screenShakeAmplitudePx = 0;
 }
@@ -1341,6 +1390,39 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
   if (chainSparkFx.length > 12) chainSparkFx.splice(0, chainSparkFx.length - 12);
   if (blinkTrailFx.length > 8) blinkTrailFx.splice(0, blinkTrailFx.length - 8);
   if (pressureWarnFx.length > 8) pressureWarnFx.splice(0, pressureWarnFx.length - 8);
+  if (hookProjectileFx.length > 4) hookProjectileFx.splice(0, hookProjectileFx.length - 4);
+}
+
+/** Detect Thresh hook launches by watching for channel→cooldown transitions. */
+function detectHookLaunches(snapshot: GameSnapshot, nowMs: number): void {
+  for (const competitor of snapshot.competitors) {
+    const skill = competitor.skill;
+    if (!skill || skill.id !== THRESH_DEATH_SENTENCE_SKILL_ID) continue;
+    const prevPhase = prevSkillPhase.get(competitor.id);
+    const currentPhase = skill.phase;
+    prevSkillPhase.set(competitor.id, currentPhase);
+    // Transition from channeling to cooldown = hook was fired.
+    if (prevPhase !== "channeling" || currentPhase !== "cooldown") continue;
+    const originTile = {
+      x: Math.floor(competitor.position.x / UNITS_PER_TILE),
+      y: Math.floor(competitor.position.y / UNITS_PER_TILE),
+    };
+    const aim = skill.aimDirection ?? "down";
+    // Detect hit: check if any other competitor was teleported this tick
+    // (a skill-movement fact with teleport != null for someone other than the caster).
+    // For presentation purposes, we approximate by checking if cooldown is full
+    // (hit = THRESH_COOLDOWN_MS) or reduced (miss = THRESH_MISS_COOLDOWN_MS).
+    const hit = skill.cooldownRemainingMs > 5000; // full cooldown = hit
+    const reachTiles = hit ? THRESH_HOOK_RANGE : THRESH_HOOK_RANGE;
+    hookProjectileFx.push({
+      ownerId: competitor.id,
+      originTile,
+      direction: aim,
+      reachTiles,
+      hit,
+      startMs: nowMs,
+    });
+  }
 }
 
 function appendEvents(events: readonly GameEvent[], nowMs = performance.now()): void {
@@ -1361,7 +1443,7 @@ function championFrameUrl(
   moving: boolean,
   animMs: number,
 ): string {
-  const pack = CHAMPIONS[slot];
+  const pack = activePack(slot);
   const frames = moving ? pack.walk[facing] : pack.idle[facing];
   if (frames.length === 0) return pack.static[facing];
   const frameMs = moving ? WALK_FRAME_MS : IDLE_FRAME_MS;
@@ -1628,31 +1710,37 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
   }
 
   for (const flame of snapshot.flames) {
+    // Lethal window (Decision 012): only fresh flames kill. Past the window
+    // the tile keeps burning as harmless residual fog — dimmer, smaller, no
+    // additive bloom, so players can read that walking through it is safe.
+    const lethal = isFlameLethal(flame.remainingMs);
     // Dissipate tail: fade + shrink through the last FLAME_DISSIPATE_TAIL_MS.
     const tailAlpha = Math.max(0, Math.min(1, flame.remainingMs / FLAME_DISSIPATE_TAIL_MS));
-    const alpha = Math.max(0.3, tailAlpha);
-    const dissipateScale = 0.9 + tailAlpha * 0.1;
+    const alpha = lethal ? Math.max(0.3, tailAlpha) : Math.min(0.38, 0.12 + tailAlpha * 0.26);
+    const dissipateScale = lethal ? 0.9 + tailAlpha * 0.1 : 0.68 + tailAlpha * 0.12;
     // Per-tile phase offset so tiles never run the same frame in lockstep.
     const tilePhase = ((flame.tile.x * 31 + flame.tile.y * 17) % 8) * 70;
     const frameIndex = Math.floor((animMs + tilePhase) / 70) % FLAME_ANIM_URLS.length;
     const frameUrl = FLAME_ANIM_URLS[frameIndex]!;
     const centerX = flame.tile.x * TILE_SIZE + TILE_SIZE / 2;
     const centerY = flame.tile.y * TILE_SIZE + TILE_SIZE / 2;
-    // Additive warm bloom so blasts read as light, not stickers.
-    context.save();
-    context.globalCompositeOperation = "lighter";
-    const bloom = context.createRadialGradient(centerX, centerY, 2, centerX, centerY, TILE_SIZE * 0.72);
-    bloom.addColorStop(0, `rgba(255, 196, 96, ${0.3 * alpha})`);
-    bloom.addColorStop(0.55, `rgba(255, 110, 40, ${0.14 * alpha})`);
-    bloom.addColorStop(1, "rgba(255, 80, 30, 0)");
-    context.fillStyle = bloom;
-    context.fillRect(
-      flame.tile.x * TILE_SIZE - TILE_SIZE * 0.3,
-      flame.tile.y * TILE_SIZE - TILE_SIZE * 0.3,
-      TILE_SIZE * 1.6,
-      TILE_SIZE * 1.6,
-    );
-    context.restore();
+    if (lethal) {
+      // Additive warm bloom so blasts read as light, not stickers.
+      context.save();
+      context.globalCompositeOperation = "lighter";
+      const bloom = context.createRadialGradient(centerX, centerY, 2, centerX, centerY, TILE_SIZE * 0.72);
+      bloom.addColorStop(0, `rgba(255, 196, 96, ${0.3 * alpha})`);
+      bloom.addColorStop(0.55, `rgba(255, 110, 40, ${0.14 * alpha})`);
+      bloom.addColorStop(1, "rgba(255, 80, 30, 0)");
+      context.fillStyle = bloom;
+      context.fillRect(
+        flame.tile.x * TILE_SIZE - TILE_SIZE * 0.3,
+        flame.tile.y * TILE_SIZE - TILE_SIZE * 0.3,
+        TILE_SIZE * 1.6,
+        TILE_SIZE * 1.6,
+      );
+      context.restore();
+    }
     context.save();
     context.globalAlpha = alpha;
     const size = TILE_SIZE * 1.05 * dissipateScale;
@@ -1805,13 +1893,16 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     });
     let frameUrl: string;
     if (channeling) {
-      const pack = CHAMPIONS[slot];
+      const pack = activePack(slot);
       const frames = pack.cast[facing];
       // Play the cast cycle once from channel start, then hold the last
       // frame — looping the cycle reads as a buggy strobe on long channels.
+      // Use the skill's actual channel duration (not a hardcoded champion's).
+      const skillId = competitor.skill?.id;
+      const channelMs = skillId ? skillChannelMs(skillId) : RANNI_CHANNEL_MS;
       const channelElapsedMs = Math.max(
         0,
-        RANNI_CHANNEL_MS - (competitor.skill?.channelRemainingMs ?? 0),
+        channelMs - (competitor.skill?.channelRemainingMs ?? 0),
       );
       const castIndex = Math.min(frames.length - 1, Math.floor(channelElapsedMs / CAST_FRAME_MS));
       frameUrl = frames[castIndex] ?? pack.static[facing];
@@ -1821,7 +1912,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     renderables.push({
       id: competitor.id,
       slot,
-      position: competitor.position,
+      position: renderPositionFor(competitor.id, competitor.position),
       facing,
       frameUrl,
       alive: true,
@@ -1833,7 +1924,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
   // Eliminated competitors keep a held-pose death animation until the round resets.
   for (const [id, death] of deathAnims) {
     const slot = slotForCompetitor(id);
-    const pack = CHAMPIONS[slot];
+    const pack = activePack(slot);
     const frames = pack.death[death.facing];
     const age = Math.max(0, animMs - death.startMs);
     const index = Math.min(frames.length - 1, Math.floor(age / DEATH_FRAME_MS));
@@ -1855,9 +1946,11 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     const cx = (entry.position.x / UNITS_PER_TILE) * TILE_SIZE;
     const cy = (entry.position.y / UNITS_PER_TILE) * TILE_SIZE;
     // Feet sit on body bottom (body center + half extent), matching product anchor.
+    // Hitbox is always BODY_HALF_EXTENT — arenaScale is presentation-only.
     const bodyBottom = cy + (BODY_HALF_EXTENT / UNITS_PER_TILE) * TILE_SIZE;
-    const spriteHeight = TILE_SIZE * CHAMPION_HEIGHT_TILES;
-    const maxSpriteWidth = TILE_SIZE * CHAMPION_MAX_WIDTH_TILES;
+    const arenaScale = presentationFor(entry.slot).arenaScale;
+    const spriteHeight = TILE_SIZE * CHAMPION_HEIGHT_TILES * arenaScale;
+    const maxSpriteWidth = TILE_SIZE * CHAMPION_MAX_WIDTH_TILES * arenaScale;
     const identity = entry.slot === "control-a" ? "56, 217, 245" : "255, 120, 50";
 
     // Soft ground contact shadow under feet.
@@ -1942,6 +2035,122 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       context.fillText(label, cx + 2, pillY + pillHeight / 2 + 0.5);
       context.restore();
     }
+  }
+
+  // ── Thresh hook projectile ──────────────────────────────────────
+  for (let i = hookProjectileFx.length - 1; i >= 0; i -= 1) {
+    const fx = hookProjectileFx[i]!;
+    const age = animMs - fx.startMs;
+    if (age < 0 || age > HOOK_TOTAL_MS) {
+      hookProjectileFx.splice(i, 1);
+      continue;
+    }
+    const slot = slotForCompetitor(fx.ownerId);
+    const pack = activePack(slot);
+    const hookAssets = pack.hookProjectile;
+    if (!hookAssets) continue;
+
+    const facing: Facing = fx.direction === "up" ? "north"
+      : fx.direction === "down" ? "south"
+      : fx.direction === "left" ? "west"
+      : "east";
+    const headUrl = hookAssets.head[facing] ?? hookAssets.head.south;
+    const chainUrl = hookAssets.chainLink;
+
+    const ox = fx.originTile.x * TILE_SIZE + TILE_SIZE / 2;
+    const oy = fx.originTile.y * TILE_SIZE + TILE_SIZE / 2;
+    const dirX = fx.direction === "left" ? -1 : fx.direction === "right" ? 1 : 0;
+    const dirY = fx.direction === "up" ? -1 : fx.direction === "down" ? 1 : 0;
+    const maxReach = fx.reachTiles * TILE_SIZE;
+
+    // Phase 1: Flight (0 → HOOK_FLIGHT_MS) — hook head travels, chain extends.
+    // Phase 2: Impact (HOOK_FLIGHT_MS → +HOOK_IMPACT_MS) — flash at tip.
+    // Phase 3: Fade (rest) — everything fades out.
+    const flightT = Math.min(1, age / HOOK_FLIGHT_MS);
+    const impactAge = age - HOOK_FLIGHT_MS;
+    const fadeT = Math.max(0, (age - HOOK_FLIGHT_MS - HOOK_IMPACT_MS) / HOOK_FADE_MS);
+    const globalAlpha = fadeT > 0 ? 1 - fadeT : 1;
+
+    // Hook head position along the line.
+    const hookDist = flightT * maxReach;
+    const hx = ox + dirX * hookDist;
+    const hy = oy + dirY * hookDist;
+
+    context.save();
+    context.globalAlpha = globalAlpha;
+
+    // Draw chain links between origin and hook head.
+    if (hookDist > 4) {
+      const linkSpacing = TILE_SIZE * 0.35;
+      const numLinks = Math.floor(hookDist / linkSpacing);
+      const linkSize = TILE_SIZE * 0.5;
+      for (let li = 1; li <= numLinks; li += 1) {
+        const lt = li / (numLinks + 1);
+        const lx = ox + dirX * hookDist * lt;
+        const ly = oy + dirY * hookDist * lt;
+        // Pulse each link slightly.
+        const pulse = 0.85 + 0.15 * Math.sin(animMs / 80 + li * 1.2);
+        const ls = linkSize * pulse;
+        context.save();
+        context.translate(lx, ly);
+        // Rotate chain links to align with direction.
+        if (dirX !== 0) context.rotate(dirX > 0 ? 0 : Math.PI);
+        else context.rotate(dirY > 0 ? Math.PI / 2 : -Math.PI / 2);
+        drawImageUrl(context, chainUrl, -ls / 2, -ls / 2, ls, ls);
+        context.restore();
+      }
+    }
+
+    // Draw hook head.
+    const headSize = TILE_SIZE * 1.0;
+    context.save();
+    context.translate(hx, hy);
+    // Rotate hook head to face flight direction.
+    if (dirX > 0) context.rotate(0);
+    else if (dirX < 0) context.rotate(Math.PI);
+    else if (dirY > 0) context.rotate(Math.PI / 2);
+    else context.rotate(-Math.PI / 2);
+    // Slight bob during flight.
+    const bob = age < HOOK_FLIGHT_MS ? Math.sin(animMs / 60) * 2 : 0;
+    drawImageUrl(context, headUrl, -headSize / 2, -headSize / 2 + bob, headSize, headSize);
+    context.restore();
+
+    // Hitbox indicator during flight (subtle green circle).
+    if (age < HOOK_FLIGHT_MS) {
+      context.save();
+      context.strokeStyle = `rgba(57, 255, 136, ${0.25 * globalAlpha})`;
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.arc(hx, hy, TILE_SIZE * 0.3, 0, Math.PI * 2);
+      context.stroke();
+      context.restore();
+    }
+
+    // Impact flash at hook tip.
+    if (fx.hit && impactAge >= 0 && impactAge < HOOK_IMPACT_MS) {
+      const impactT = impactAge / HOOK_IMPACT_MS;
+      const frameIdx = Math.min(
+        hookAssets.impact.length - 1,
+        Math.floor(impactT * hookAssets.impact.length),
+      );
+      const impactUrl = hookAssets.impact[frameIdx];
+      if (impactUrl) {
+        const impactSize = TILE_SIZE * 2 * (0.6 + impactT * 0.4);
+        context.save();
+        context.globalAlpha = globalAlpha * (1 - impactT * 0.3);
+        drawImageUrl(
+          context,
+          impactUrl,
+          hx - impactSize / 2,
+          hy - impactSize / 2,
+          impactSize,
+          impactSize,
+        );
+        context.restore();
+      }
+    }
+
+    context.restore();
   }
 
   // Presentation-only power-up feedback (burst / ring / floating label).
@@ -2035,7 +2244,7 @@ function renderOverlay(snapshot: GameSnapshot): void {
       ? snapshot.matchWinner
       : null;
   if (overlayWinner) {
-    overlayPortrait.src = CHAMPIONS[slotForCompetitor(overlayWinner)].portrait;
+    overlayPortrait.src = activePack(slotForCompetitor(overlayWinner)).portrait;
     overlayPortraitWrap.hidden = false;
   } else {
     overlayPortraitWrap.hidden = true;
@@ -2077,52 +2286,97 @@ function renderOverlay(snapshot: GameSnapshot): void {
   }
 }
 
+function updateLolPanel(panel: LolHudPanel, snapshot: GameSnapshot): void {
+  const competitor = snapshot.competitors.find((entry) => entry.id === panel.competitorId);
+  if (!competitor) return;
+  const champ = presentationFor(panel.slot);
+  panel.root.classList.toggle("is-eliminated", !competitor.alive);
+  panel.bombs.textContent = `${Math.max(0, competitor.maxBombs - competitor.activeBombs)}/${competitor.maxBombs}`;
+  panel.range.textContent = String(competitor.flameRange);
+  panel.status.textContent = !competitor.alive
+    ? copy.rivalOut
+    : competitor.spawnProtectionRemainingMs > 0
+      ? copy.protected
+      : "";
+  const hp = !competitor.alive
+    ? 0
+    : competitor.spawnProtectionRemainingMs > 0
+      ? 0.7
+      : 1;
+  panel.statusBar.style.width = `${Math.round(hp * 100)}%`;
+  panel.statusBar.classList.toggle("is-down", !competitor.alive);
+  panel.statusBar.classList.toggle("is-shield", competitor.spawnProtectionRemainingMs > 0);
+
+  const wins = scoreFor(snapshot, competitor.id);
+  const pipNodes: HTMLElement[] = [];
+  for (let i = 0; i < snapshot.targetRoundWins; i += 1) {
+    pipNodes.push(element(
+      document,
+      "span",
+      i < wins ? "hud-pips__pip hud-pips__pip--filled" : "hud-pips__pip",
+    ));
+  }
+  panel.pips.replaceChildren(...pipNodes);
+
+  const skill = competitor.skill;
+  const cooldownMs = champ.skillCooldownMs || RANNI_COOLDOWN_MS;
+  panel.spellR.classList.remove("is-locked");
+  if (!skill) {
+    // No skill snapshot only if seat has no skillId — should not happen for roster picks.
+    panel.spellR.classList.add("is-locked");
+    panel.spellR.classList.remove("is-ready", "is-cast", "is-cooldown");
+    panel.spellRCd.textContent = "";
+    panel.portraitRing.style.setProperty("--cd", "1");
+    return;
+  }
+  const state = skill.phase === "idle"
+    ? "ready"
+    : skill.phase === "channeling"
+      ? "cast"
+      : "cooldown";
+  panel.spellR.classList.toggle("is-ready", state === "ready");
+  panel.spellR.classList.toggle("is-cast", state === "cast");
+  panel.spellR.classList.toggle("is-cooldown", state === "cooldown");
+  panel.spellRCd.textContent = state === "ready"
+    ? copy.ultReady
+    : state === "cast"
+      ? copy.ultCast
+      : copy.skillCooldown(skill.cooldownRemainingMs / 1_000);
+  const progress = state === "ready" || state === "cast"
+    ? 1
+    : 1 - Math.min(1, Math.max(0, skill.cooldownRemainingMs / cooldownMs));
+  panel.portraitRing.style.setProperty("--cd", String(progress));
+}
+
 function renderHud(snapshot: GameSnapshot): void {
   const displayMs = timerDisplayMs(snapshot);
-  if (snapshot.phase === "sudden-death") {
-    timeValue.textContent = formatTime(displayMs);
-    timerShell.classList.add("is-sudden-death");
+  timeValue.textContent = formatTime(displayMs);
+  timerShell.classList.toggle("is-sudden-death", snapshot.phase === "sudden-death");
+  roundLabel.textContent = `R${snapshot.roundNumber} · FT${snapshot.targetRoundWins}`;
+
+  const sdActive = snapshot.phase === "sudden-death";
+  sdMeter.classList.toggle("is-active", sdActive);
+  if (sdActive) {
+    sdMeterFill.style.width = "100%";
   } else {
-    timeValue.textContent = formatTime(displayMs);
-    timerShell.classList.remove("is-sudden-death");
+    const total = snapshot.roundElapsedMs + snapshot.roundRemainingMs;
+    const progress = total > 0 ? snapshot.roundElapsedMs / total : 0;
+    sdMeterFill.style.width = `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`;
   }
-  phaseLabelEl.textContent = phaseLabel(snapshot);
-  roundLabel.textContent =
-    `${copy.round} ${snapshot.roundNumber} · ${copy.firstTo}${snapshot.targetRoundWins}`;
 
   pauseButton.textContent = snapshot.phase === "paused" ? copy.resume : copy.pause;
   pauseButton.disabled =
-    snapshot.phase === "round-over" || snapshot.phase === "match-over";
+    snapshot.phase === "round-over" || snapshot.phase === "match-over" || !matchStarted;
 
-  for (const card of [cardA, cardB]) {
-    const competitor = snapshot.competitors.find((entry) => entry.id === card.competitorId);
-    if (!competitor) continue;
-    card.root.classList.toggle("is-eliminated", !competitor.alive);
-    card.wins.textContent = `W${scoreFor(snapshot, competitor.id)}`;
-    card.bombs.textContent = `${Math.max(0, competitor.maxBombs - competitor.activeBombs)}/${competitor.maxBombs}`;
-    card.range.textContent = String(competitor.flameRange);
-    card.status.textContent = !competitor.alive
-      ? "×"
-      : competitor.spawnProtectionRemainingMs > 0
-        ? copy.protected
-        : "";
-    card.skill.hidden = competitor.skill === undefined;
-    if (competitor.skill) {
-      card.skill.classList.toggle("is-channeling", competitor.skill.phase === "channeling");
-      card.skill.classList.toggle("is-cooldown", competitor.skill.phase === "cooldown");
-      card.skill.textContent = competitor.skill.phase === "idle"
-        ? copy.skillReady
-        : competitor.skill.phase === "channeling"
-          ? copy.skillChanneling
-          : copy.skillCooldown(competitor.skill.cooldownRemainingMs / 1_000);
-    }
-  }
+  updateLolPanel(p1Hud, snapshot);
+  updateLolPanel(p2Hud, snapshot);
 
   if (devOpen) {
     devMeta.textContent =
       `tick=${snapshot.revision} phase=${snapshot.phase} R${snapshot.roundNumber} `
       + `K=${snapshot.targetRoundWins} bombs=${snapshot.bombs.length} flames=${snapshot.flames.length} `
-      + `powerups=${snapshot.powerUps.length} pressure=${snapshot.pressure.closing ? "closing" : "—"}`;
+      + `powerups=${snapshot.powerUps.length} pressure=${snapshot.pressure.closing ? "closing" : "—"} `
+      + `p1=${selectedP1} p2=${selectedP2}`;
   }
 }
 
@@ -2137,6 +2391,7 @@ function render(snapshot = game.snapshot(), animMs = performance.now()): void {
   }
   lastKnownPhase = snapshot.phase;
 
+  detectHookLaunches(snapshot, animMs);
   renderCanvas(snapshot, animMs);
   renderHud(snapshot);
   renderSuddenDeathBanner(snapshot, animMs);
@@ -2170,6 +2425,24 @@ devToggle.addEventListener("click", () => {
 });
 
 function onKeyDown(event: KeyboardEvent): void {
+  // Character select keyboard: A/D P1, arrows P2, Enter starts.
+  if (!matchStarted || selectScreen.classList.contains("is-open")) {
+    if (event.code === "KeyA") { event.preventDefault(); stepPick("p1", -1); return; }
+    if (event.code === "KeyD") { event.preventDefault(); stepPick("p1", 1); return; }
+    if (event.code === "ArrowLeft") { event.preventDefault(); stepPick("p2", -1); return; }
+    if (event.code === "ArrowRight") { event.preventDefault(); stepPick("p2", 1); return; }
+    if (event.code === "Enter" || event.code === "Space") {
+      event.preventDefault();
+      confirmCharacterSelect();
+      return;
+    }
+    if (event.code === "Escape" && matchStarted) {
+      event.preventDefault();
+      showSelectScreen(false);
+      return;
+    }
+    return;
+  }
   const movement = MOVEMENT_BINDINGS[event.code];
   if (movement) {
     event.preventDefault();
@@ -2259,6 +2532,49 @@ let previousFrameMs = performance.now();
 let accumulatorMs = 0;
 
 /**
+ * Presentation-only tick interpolation (never kernel state). The kernel
+ * advances at 50 Hz; rendering draws between the last two tick poses so
+ * movement reads smooth at any display refresh rate (~1 tick of latency).
+ */
+const WORLD_SPAN_X = ARENA_WIDTH * UNITS_PER_TILE;
+const WORLD_SPAN_Y = ARENA_HEIGHT * UNITS_PER_TILE;
+let prevTickPositions: ReadonlyMap<CompetitorId, WorldPositionLike> | null = null;
+let currTickPositions: ReadonlyMap<CompetitorId, WorldPositionLike> | null = null;
+let tickBlendAlpha = 1;
+
+type WorldPositionLike = Readonly<{ x: number; y: number }>;
+
+function captureTickPositions(snapshot: GameSnapshot): Map<CompetitorId, WorldPositionLike> {
+  const map = new Map<CompetitorId, WorldPositionLike>();
+  for (const competitor of snapshot.competitors) {
+    map.set(competitor.id, { x: competitor.position.x, y: competitor.position.y });
+  }
+  return map;
+}
+
+/**
+ * Render position between the last two kernel ticks. Jumps larger than the
+ * contract max step (blink teleport, round reset) snap instead of lerping
+ * across the arena.
+ */
+function renderPositionFor(
+  competitorId: CompetitorId,
+  current: WorldPositionLike,
+): WorldPositionLike {
+  if (tickBlendAlpha >= 1 || !prevTickPositions || !currTickPositions?.has(competitorId)) {
+    return current;
+  }
+  const prev = prevTickPositions.get(competitorId);
+  if (!prev) return current;
+  const dx = wrapDelta(current.x, prev.x, WORLD_SPAN_X);
+  const dy = wrapDelta(current.y, prev.y, WORLD_SPAN_Y);
+  if (Math.abs(dx) > LANE_CORRECTION_MAX || Math.abs(dy) > LANE_CORRECTION_MAX) {
+    return current;
+  }
+  return { x: prev.x + dx * tickBlendAlpha, y: prev.y + dy * tickBlendAlpha };
+}
+
+/**
  * Run one bot decision and dispatch its ordinary commands, immediately before a
  * kernel tick advances. Deterministic: same snapshot + seed + memory yields the
  * same commands. No-op unless P2 is bot-controlled and play is live.
@@ -2272,14 +2588,30 @@ function dispatchBotCommandsForTick(): void {
 }
 
 function frame(nowMs: number): void {
-  accumulatorMs += Math.min(MAX_FRAME_DELTA_MS, Math.max(0, nowMs - previousFrameMs));
+  const delta = Math.min(MAX_FRAME_DELTA_MS, Math.max(0, nowMs - previousFrameMs));
   previousFrameMs = nowMs;
+  if (!matchStarted || selectScreen.classList.contains("is-open")) {
+    // Freeze sim during character select; still paint the idle arena.
+    render(game.snapshot(), nowMs);
+    animationFrame = window.requestAnimationFrame(frame);
+    return;
+  }
+  accumulatorMs += delta;
   const events: GameEvent[] = [];
+  let preTickPositions: Map<CompetitorId, WorldPositionLike> | null = null;
   while (accumulatorMs >= TICK_DURATION_MS) {
+    // Pose before THIS tick: on the last loop iteration it becomes the
+    // interpolation origin, so multi-tick frames never fast-forward.
+    preTickPositions = captureTickPositions(game.snapshot());
     dispatchBotCommandsForTick();
     events.push(...game.dispatch({ type: "advance", deltaMs: TICK_DURATION_MS }));
     accumulatorMs -= TICK_DURATION_MS;
   }
+  if (preTickPositions) {
+    prevTickPositions = preTickPositions;
+    currTickPositions = captureTickPositions(game.snapshot());
+  }
+  tickBlendAlpha = Math.min(1, accumulatorMs / TICK_DURATION_MS);
   if (events.length > 0) appendEvents(events);
   render(game.snapshot(), nowMs);
   animationFrame = window.requestAnimationFrame(frame);
