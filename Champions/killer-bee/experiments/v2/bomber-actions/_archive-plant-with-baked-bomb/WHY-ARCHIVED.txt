@@ -1,2 +1,0 @@
-Archived incorrect bomb-plant pack that baked a bomb into the character frames.
-Reason: bomb is a separate physical world entity; character anim must be body-only plant gesture.

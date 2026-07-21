@@ -46,13 +46,7 @@ describe("champion animation selection", () => {
         runtimeIntegration: true,
         runtimeAction: "idle",
         runtimeDirection: "south",
-        champion: { slug: "madara" },
-      },
-      {
-        runtimeIntegration: true,
-        runtimeAction: "ultimate",
-        runtimeDirection: "south",
-        champion: { slug: "madara" },
+        champion: { slug: "crocodilo-arcano" },
       },
       {
         runtimeIntegration: false,
@@ -62,9 +56,8 @@ describe("champion animation selection", () => {
       },
     ]);
 
-    expect(overrides.get("madara")).toEqual({
+    expect(overrides.get("crocodilo-arcano")).toEqual({
       idle: "south",
-      ultimate: "south",
     });
     expect(overrides.has("discarded")).toBe(false);
   });

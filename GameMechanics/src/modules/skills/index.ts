@@ -9,14 +9,7 @@ import type {
 import {
   CROCODILO_EMERALD_SURGE_SKILL_ID,
   isSkillId,
-  KATARINA_BOUNCING_BLADE_SKILL_ID,
   KILLER_BEE_WING_DASH_SKILL_ID,
-  LEE_SIN_DRAGON_RAGE_SKILL_ID,
-  MADARA_FIREBALL_JUTSU_SKILL_ID,
-  MIRELLE_TIDE_SWAP_SKILL_ID,
-  NICO_ARCANE_BEAM_SKILL_ID,
-  NIX_EMBER_VAULT_SKILL_ID,
-  PENDULA_COMMAND_SHOCKWAVE_SKILL_ID,
   RANNI_ICE_BLINK_SKILL_ID,
   THRESH_DEATH_SENTENCE_SKILL_ID,
   TICK_DURATION_MS,
@@ -65,50 +58,16 @@ export const KILLER_BEE_CHANNEL_MS = 240 as const;
 export const KILLER_BEE_COOLDOWN_MS = 4_000 as const;
 export const KILLER_BEE_DASH_TILES = 3 as const;
 
-export const NIX_EMBER_CHANNEL_MS = 280 as const;
-export const NIX_EMBER_COOLDOWN_MS = 7_000 as const;
-export const NIX_EMBER_VAULT_TILES = 2 as const;
-
-export const LEE_SIN_CHANNEL_MS = 260 as const;
-export const LEE_SIN_COOLDOWN_MS = 6_500 as const;
-export const LEE_SIN_DASH_TILES = 3 as const;
-export const LEE_SIN_KNOCKBACK_TILES = 3 as const;
-
-export const NICO_CHANNEL_MS = 2_000 as const;
-export const NICO_COOLDOWN_MS = 8_000 as const;
-export const NICO_BEAM_RANGE = 8 as const;
-
 export const CROCODILO_CHANNEL_MS = 1_600 as const;
 export const CROCODILO_COOLDOWN_MS = 6_000 as const;
 export const CROCODILO_SURGE_RANGE = 2 as const;
-
-export const PENDULA_CHANNEL_MS = 300 as const;
-export const PENDULA_COOLDOWN_MS = 7_500 as const;
-export const PENDULA_PULL_RANGE = 4 as const;
-
-/** Tick-aligned (multiple of 20 ms). Original fantasy is ~450 ms. */
-export const MIRELLE_CHANNEL_MS = 440 as const;
-export const MIRELLE_COOLDOWN_MS = 8_000 as const;
-export const MIRELLE_SWAP_RANGE = 4 as const;
 
 export const THRESH_CHANNEL_MS = 300 as const;
 export const THRESH_COOLDOWN_MS = 8_000 as const;
 export const THRESH_HOOK_RANGE = 4 as const;
 export const THRESH_MISS_COOLDOWN_MS = 4_000 as const;
 
-export const KATARINA_THROW_CHANNEL_MS = 180 as const;
-export const KATARINA_BLADE_ARMED_MS = 5_000 as const;
-export const KATARINA_COOLDOWN_MS = 8_000 as const;
-export const KATARINA_EXPIRE_COOLDOWN_MS = 4_000 as const;
-export const KATARINA_BLADE_RANGE = 4 as const;
-export const KATARINA_SLASH_RADIUS = 1 as const;
-
-export const MADARA_CHANNEL_MS = 220 as const;
-export const MADARA_COOLDOWN_MS = 8_000 as const;
-export const MADARA_FIREBALL_RANGE = 4 as const;
-export const MADARA_MAX_BURNED_BOXES = 3 as const;
-
-const MODULE_VERSION = "2.0.0"; // multi-skill roster
+const MODULE_VERSION = "2.1.0";
 const DIRECTIONS = new Set<Direction>(["up", "down", "left", "right"]);
 const PHASES = new Set<SkillEntry["phase"]>(["idle", "channeling", "cooldown"]);
 
@@ -116,28 +75,14 @@ const COOLDOWN_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
   [RANNI_ICE_BLINK_SKILL_ID]: RANNI_COOLDOWN_MS,
   [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_COOLDOWN_MS,
   [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_COOLDOWN_MS,
-  [NICO_ARCANE_BEAM_SKILL_ID]: NICO_COOLDOWN_MS,
-  [NIX_EMBER_VAULT_SKILL_ID]: NIX_EMBER_COOLDOWN_MS,
-  [PENDULA_COMMAND_SHOCKWAVE_SKILL_ID]: PENDULA_COOLDOWN_MS,
-  [MIRELLE_TIDE_SWAP_SKILL_ID]: MIRELLE_COOLDOWN_MS,
-  [LEE_SIN_DRAGON_RAGE_SKILL_ID]: LEE_SIN_COOLDOWN_MS,
   [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_COOLDOWN_MS,
-  [KATARINA_BOUNCING_BLADE_SKILL_ID]: KATARINA_COOLDOWN_MS,
-  [MADARA_FIREBALL_JUTSU_SKILL_ID]: MADARA_COOLDOWN_MS,
 });
 
 const CHANNEL_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
   [RANNI_ICE_BLINK_SKILL_ID]: RANNI_CHANNEL_MS,
   [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_CHANNEL_MS,
   [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_CHANNEL_MS,
-  [NICO_ARCANE_BEAM_SKILL_ID]: NICO_CHANNEL_MS,
-  [NIX_EMBER_VAULT_SKILL_ID]: NIX_EMBER_CHANNEL_MS,
-  [PENDULA_COMMAND_SHOCKWAVE_SKILL_ID]: PENDULA_CHANNEL_MS,
-  [MIRELLE_TIDE_SWAP_SKILL_ID]: MIRELLE_CHANNEL_MS,
-  [LEE_SIN_DRAGON_RAGE_SKILL_ID]: LEE_SIN_CHANNEL_MS,
   [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_CHANNEL_MS,
-  [KATARINA_BOUNCING_BLADE_SKILL_ID]: KATARINA_BLADE_ARMED_MS,
-  [MADARA_FIREBALL_JUTSU_SKILL_ID]: MADARA_CHANNEL_MS,
 });
 
 export function skillCooldownMs(skillId: SkillId): number {
@@ -268,35 +213,6 @@ function rayFreeTiles(
   return path;
 }
 
-/** Ray that can include crates (for fireball burn) until solid wall or max crates. */
-function fireballTiles(
-  origin: TileCoord,
-  dir: Direction,
-  maxRange: number,
-  solid: ReadonlySet<string>,
-  crates: ReadonlySet<string>,
-  maxCrates: number,
-): { path: TileCoord[]; burned: TileCoord[] } {
-  const path: TileCoord[] = [];
-  const burned: TileCoord[] = [];
-  let tile = origin;
-  for (let step = 0; step < maxRange; step += 1) {
-    const next = wrapTile({
-      x: tile.x + DIRECTION_DELTA[dir].x,
-      y: tile.y + DIRECTION_DELTA[dir].y,
-    });
-    const key = tileKey(next);
-    if (solid.has(key)) break;
-    path.push(freezeTile(next));
-    if (crates.has(key)) {
-      burned.push(freezeTile(next));
-      if (burned.length >= maxCrates) break;
-    }
-    tile = next;
-  }
-  return { path, burned };
-}
-
 function competitorsOnTiles(
   ctx: SystemRunContext,
   tiles: readonly TileCoord[],
@@ -397,29 +313,6 @@ function pullLanding(
   return freezeTile(victim);
 }
 
-function knockbackLanding(
-  from: TileCoord,
-  dir: Direction,
-  maxTiles: number,
-  solid: ReadonlySet<string>,
-  crates: ReadonlySet<string>,
-  bombs: readonly BombEntry[],
-): TileCoord {
-  let tile = from;
-  let last = from;
-  for (let step = 0; step < maxTiles; step += 1) {
-    const next = wrapTile({
-      x: tile.x + DIRECTION_DELTA[dir].x,
-      y: tile.y + DIRECTION_DELTA[dir].y,
-    });
-    const key = tileKey(next);
-    if (solid.has(key) || crates.has(key) || bombAt(next, bombs)) break;
-    last = next;
-    tile = next;
-  }
-  return freezeTile(last);
-}
-
 function projectionCanFinish(
   ctx: SystemRunContext,
   projection: WorldPosition,
@@ -513,37 +406,6 @@ function beginSkill(
         rejections,
       };
     }
-    case NIX_EMBER_VAULT_SKILL_ID: {
-      const landing = computeDashLanding(
-        loco.position, aim, NIX_EMBER_VAULT_TILES, solid, crates, bombs,
-        { passBombs: true },
-      );
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, NIX_EMBER_CHANNEL_MS, aim, landing),
-        facts,
-        rejections,
-      };
-    }
-    case LEE_SIN_DRAGON_RAGE_SKILL_ID: {
-      const landing = computeDashLanding(
-        loco.position, aim, LEE_SIN_DASH_TILES, solid, crates, bombs,
-      );
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, LEE_SIN_CHANNEL_MS, aim, landing),
-        facts,
-        rejections,
-      };
-    }
-    case NICO_ARCANE_BEAM_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, NICO_CHANNEL_MS, aim, null),
-        facts,
-        rejections,
-      };
-    }
     case CROCODILO_EMERALD_SURGE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
       return {
@@ -552,53 +414,10 @@ function beginSkill(
         rejections,
       };
     }
-    case PENDULA_COMMAND_SHOCKWAVE_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, PENDULA_CHANNEL_MS, aim, null),
-        facts,
-        rejections,
-      };
-    }
-    case MIRELLE_TIDE_SWAP_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, MIRELLE_CHANNEL_MS, aim, null),
-        facts,
-        rejections,
-      };
-    }
     case THRESH_DEATH_SENTENCE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
       return {
         entry: startChannel(entry, THRESH_CHANNEL_MS, aim, null),
-        facts,
-        rejections,
-      };
-    }
-    case MADARA_FIREBALL_JUTSU_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      return {
-        entry: startChannel(entry, MADARA_CHANNEL_MS, aim, null),
-        facts,
-        rejections,
-      };
-    }
-    case KATARINA_BOUNCING_BLADE_SKILL_ID: {
-      // Throw: short channel then arm blade on projection.
-      facts.push(movementFact(entry.competitorId, true, null));
-      const origin = tileOf(loco.position);
-      const path = rayFreeTiles(
-        origin, aim, KATARINA_BLADE_RANGE, solid, crates, bombs, { stopOnBomb: true },
-      );
-      const bladeTile = path[path.length - 1] ?? origin;
-      return {
-        entry: startChannel(
-          entry,
-          KATARINA_THROW_CHANNEL_MS,
-          aim,
-          tileCenter(bladeTile),
-        ),
         facts,
         rejections,
       };
@@ -635,39 +454,8 @@ function completeSkill(
       ));
       return { entry: cooldown(entry), facts, rejections: [] };
     }
-    case KILLER_BEE_WING_DASH_SKILL_ID:
-    case NIX_EMBER_VAULT_SKILL_ID: {
+    case KILLER_BEE_WING_DASH_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, projection));
-      return { entry: cooldown(entry), facts, rejections: [] };
-    }
-    case LEE_SIN_DRAGON_RAGE_SKILL_ID: {
-      const landing = projection ?? (loco ? loco.position : tileCenter(origin));
-      facts.push(movementFact(entry.competitorId, true, landing));
-      // Kick first enemy along dash ray (origin → landing + 1).
-      const path = rayFreeTiles(
-        origin, aim, LEE_SIN_DASH_TILES + 1, solid, crates, bombs,
-      );
-      const victims = competitorsOnTiles(ctx, path, entry.competitorId);
-      const victimId = victims[0];
-      if (victimId) {
-        const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
-        if (victimLoco) {
-          const from = tileOf(victimLoco.position);
-          const kb = knockbackLanding(
-            from, aim, LEE_SIN_KNOCKBACK_TILES, solid, crates, bombs,
-          );
-          facts.push(movementFact(victimId, false, tileCenter(kb)));
-        }
-      }
-      return { entry: cooldown(entry), facts, rejections: [] };
-    }
-    case NICO_ARCANE_BEAM_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      const path = rayFreeTiles(
-        origin, aim, NICO_BEAM_RANGE, solid, crates, bombs, { stopOnBomb: false },
-      );
-      const hits = competitorsOnTiles(ctx, path, entry.competitorId);
-      facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
       return { entry: cooldown(entry), facts, rejections: [] };
     }
     case CROCODILO_EMERALD_SURGE_SKILL_ID: {
@@ -676,47 +464,6 @@ function completeSkill(
         ctx, origin, CROCODILO_SURGE_RANGE, entry.competitorId,
       );
       facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
-      return { entry: cooldown(entry), facts, rejections: [] };
-    }
-    case PENDULA_COMMAND_SHOCKWAVE_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      const victims = competitorsInChebyshev(
-        ctx, origin, PENDULA_PULL_RANGE, entry.competitorId,
-      );
-      const reserved = new Set<string>([tileKey(origin)]);
-      for (const victimId of victims) {
-        const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
-        if (!victimLoco) continue;
-        const landing = pullLanding(
-          origin, tileOf(victimLoco.position), solid, crates, bombs, reserved,
-        );
-        reserved.add(tileKey(landing));
-        facts.push(movementFact(victimId, false, tileCenter(landing)));
-      }
-      return { entry: cooldown(entry), facts, rejections: [] };
-    }
-    case MIRELLE_TIDE_SWAP_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      // Nearest living rival in Chebyshev range.
-      let bestId: CompetitorId | null = null;
-      let bestDist = Infinity;
-      for (const other of ctx.read("locomotion").entries) {
-        if (other.competitorId === entry.competitorId) continue;
-        if (findVitals(ctx.read("vitals"), other.competitorId)?.alive !== true) continue;
-        const dist = chebyshev(origin, tileOf(other.position));
-        if (dist < 1 || dist > MIRELLE_SWAP_RANGE) continue;
-        if (dist < bestDist || (dist === bestDist && bestId !== null && other.competitorId < bestId)) {
-          bestId = other.competitorId;
-          bestDist = dist;
-        }
-      }
-      if (bestId && loco) {
-        const otherLoco = findLocomotion(ctx.read("locomotion"), bestId);
-        if (otherLoco) {
-          facts.push(movementFact(entry.competitorId, true, otherLoco.position));
-          facts.push(movementFact(bestId, false, loco.position));
-        }
-      }
       return { entry: cooldown(entry), facts, rejections: [] };
     }
     case THRESH_DEATH_SENTENCE_SKILL_ID: {
@@ -743,61 +490,9 @@ function completeSkill(
       }
       return { entry: cooldown(entry), facts, rejections: [] };
     }
-    case MADARA_FIREBALL_JUTSU_SKILL_ID: {
-      facts.push(movementFact(entry.competitorId, true, null));
-      const { path, burned } = fireballTiles(
-        origin, aim, MADARA_FIREBALL_RANGE, solid, crates, MADARA_MAX_BURNED_BOXES,
-      );
-      if (burned.length > 0) {
-        facts.push(Object.freeze({
-          kind: "crates-destroyed" as const,
-          tiles: Object.freeze(burned.map(freezeTile)),
-        }));
-      }
-      const hits = competitorsOnTiles(ctx, path, entry.competitorId);
-      facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
-      return { entry: cooldown(entry), facts, rejections: [] };
-    }
-    case KATARINA_BOUNCING_BLADE_SKILL_ID: {
-      // Throw channel finished → arm blade (stay channeling with long timer).
-      if (entry.channelRemainingMs > KATARINA_THROW_CHANNEL_MS) {
-        // Already armed path handled in tickChannel.
-      }
-      // Completing throw channel: re-enter armed channeling with blade projection.
-      if (projection) {
-        return {
-          entry: freezeEntry({
-            ...entry,
-            phase: "channeling",
-            channelRemainingMs: KATARINA_BLADE_ARMED_MS,
-            cooldownRemainingMs: 0,
-            projection: freezePosition(projection),
-            bombEgressKeys: Object.freeze([]),
-            aimDirection: aim,
-          }),
-          facts: [movementFact(entry.competitorId, false, null)],
-          rejections: [],
-        };
-      }
-      return { entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS), facts, rejections: [] };
-    }
     default:
       return { entry: cooldown(entry), facts, rejections: [] };
   }
-}
-
-function shunpoKatarina(ctx: SystemRunContext, entry: SkillEntry): TickWork {
-  const facts: TickFact[] = [];
-  if (!entry.projection) {
-    return { entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS), facts, rejections: [] };
-  }
-  const bladeTile = tileOf(entry.projection);
-  facts.push(movementFact(entry.competitorId, true, entry.projection));
-  const hits = competitorsInChebyshev(
-    ctx, bladeTile, KATARINA_SLASH_RADIUS, entry.competitorId,
-  );
-  facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, bladeTile));
-  return { entry: cooldown(entry), facts, rejections: [] };
 }
 
 function tickChannel(
@@ -810,31 +505,6 @@ function tickChannel(
   const command = ownCommands[0];
   for (const duplicate of ownCommands.slice(1)) {
     rejections.push(reject(duplicate, "skill-unavailable"));
-  }
-
-  // Katarina armed blade: long channel with projection set after throw.
-  if (
-    entry.skillId === KATARINA_BOUNCING_BLADE_SKILL_ID
-    && entry.projection
-    && entry.channelRemainingMs > KATARINA_THROW_CHANNEL_MS
-  ) {
-    if (command) {
-      const work = shunpoKatarina(ctx, entry);
-      return { ...work, rejections: [...rejections, ...work.rejections] };
-    }
-    const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
-    if (remaining === 0) {
-      return {
-        entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS),
-        facts: [movementFact(entry.competitorId, false, null)],
-        rejections,
-      };
-    }
-    return {
-      entry: freezeEntry({ ...entry, channelRemainingMs: remaining }),
-      facts: [],
-      rejections,
-    };
   }
 
   // Ranni: steer projection while channeling.
@@ -884,39 +554,21 @@ function tickChannel(
     };
   }
 
-  // Early release for channel-then-fire skills (nico, crocodilo, madara, thresh, pendula, mirelle).
+  // Early release for the surviving channel-then-fire skills.
   const earlyReleaseSkills = new Set<SkillId>([
-    NICO_ARCANE_BEAM_SKILL_ID,
     CROCODILO_EMERALD_SURGE_SKILL_ID,
-    MADARA_FIREBALL_JUTSU_SKILL_ID,
     THRESH_DEATH_SENTENCE_SKILL_ID,
-    PENDULA_COMMAND_SHOCKWAVE_SKILL_ID,
-    MIRELLE_TIDE_SWAP_SKILL_ID,
   ]);
   const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
   const early = Boolean(command) && earlyReleaseSkills.has(entry.skillId)
     && entry.channelRemainingMs < skillChannelMs(entry.skillId);
-  if (command && !early && entry.skillId !== KATARINA_BOUNCING_BLADE_SKILL_ID) {
+  if (command && !early) {
     // During first tick of channel, reject extra presses (dash family).
     if (!earlyReleaseSkills.has(entry.skillId)) {
       rejections.push(reject(command, "skill-unavailable"));
     } else if (entry.channelRemainingMs >= skillChannelMs(entry.skillId)) {
       rejections.push(reject(command, "skill-unavailable"));
     }
-  }
-
-  // Katarina throw short channel → arm blade on complete.
-  if (entry.skillId === KATARINA_BOUNCING_BLADE_SKILL_ID) {
-    facts.push(movementFact(entry.competitorId, true, null));
-    if (remaining === 0) {
-      const work = completeSkill(ctx, entry, entry.projection);
-      return { ...work, rejections: [...rejections, ...work.rejections] };
-    }
-    return {
-      entry: freezeEntry({ ...entry, channelRemainingMs: remaining }),
-      facts,
-      rejections,
-    };
   }
 
   if (early || remaining === 0) {
@@ -928,9 +580,7 @@ function tickChannel(
   // Allow re-aim while channeling for beam-like skills.
   let aimDirection = entry.aimDirection;
   if (
-    entry.skillId === NICO_ARCANE_BEAM_SKILL_ID
-    || entry.skillId === MADARA_FIREBALL_JUTSU_SKILL_ID
-    || entry.skillId === THRESH_DEATH_SENTENCE_SKILL_ID
+    entry.skillId === THRESH_DEATH_SENTENCE_SKILL_ID
   ) {
     const intentEntry = findIntent(ctx.read("intent"), entry.competitorId);
     const dir = intentEntry ? activeDirection(intentEntry) : null;

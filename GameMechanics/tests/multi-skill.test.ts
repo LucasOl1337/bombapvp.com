@@ -82,11 +82,7 @@ describe("multi-skill roster (all ultimate IDs)", () => {
 
   it("dash skills teleport the caster forward", () => {
     const program = createDefaultMechanicsProgram();
-    for (const skillId of [
-      "killer-bee-wing-dash",
-      "nix-ember-vault",
-      "lee-sin-dragon-rage",
-    ] as const) {
+    for (const skillId of ["killer-bee-wing-dash"] as const) {
       const config = skillDuel(skillId, `dash-${skillId}`);
       let state = enterPlaying(program, program.initial(config));
       // Clear crates so dash path is open.
@@ -110,45 +106,5 @@ describe("multi-skill roster (all ultimate IDs)", () => {
       expect(after.x, skillId).toBeGreaterThan(before.x);
       expect(state.slices.skills.entries[0]!.phase).toBe("cooldown");
     }
-  });
-
-  it("madara fireball can destroy crates on the aim line", () => {
-    const program = createDefaultMechanicsProgram();
-    const config = skillDuel("madara-fireball-jutsu", "madara-burn");
-    let state = enterPlaying(program, program.initial(config));
-    const alpha = config.seats[0]!.competitorId;
-    // Place crates two tiles to the right of P1 spawn (1,1) → (3,1)/(4,1)
-    const raw = JSON.parse(JSON.stringify(state)) as {
-      slices: {
-        arena: Record<string, unknown>;
-        locomotion: { entries: Array<Record<string, unknown>> };
-      };
-    };
-    raw.slices.arena = {
-      ...raw.slices.arena,
-      crates: [{ x: 3, y: 1 }, { x: 4, y: 1 }],
-    };
-    raw.slices.locomotion.entries = raw.slices.locomotion.entries.map((entry) =>
-      entry.competitorId === alpha
-        ? {
-            ...entry,
-            position: { x: 1 * 1024 + 512, y: 1 * 1024 + 512 },
-            lastDirection: "right",
-          }
-        : entry,
-    );
-    state = program.restore(raw as unknown as WorldState);
-    state = program.step(state, { commands: [press(state, config, "right", 0)] }).state;
-    state = program.step(state, { commands: [useSkill(state, config, 1)] }).state;
-    const events: { type: string }[] = [];
-    for (let i = 0; i < 30; i += 1) {
-      const step = program.step(state, { commands: [] });
-      state = step.state;
-      events.push(...step.events);
-      if (state.slices.skills.entries[0]!.phase === "cooldown") break;
-    }
-    expect(state.slices.skills.entries[0]!.phase).toBe("cooldown");
-    const burned = events.filter((e) => e.type === "crate-destroyed");
-    expect(burned.length).toBeGreaterThan(0);
   });
 });

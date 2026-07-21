@@ -33,7 +33,7 @@ const manifestModules = import.meta.glob(
 ) as Record<string, RawAnimationLabManifest>;
 
 const atlasModules = import.meta.glob(
-  "../../assets/animation-lab/2026-07-21/*/spritesheet-runtime-4x4-256*.png",
+  "../../assets/animation-lab/2026-07-21/*/spritesheet-runtime-4x4-256*.webp",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 
@@ -42,7 +42,7 @@ function directoryOf(path: string): string {
 }
 
 function variantPriority(path: string): number {
-  const version = path.match(/-v(\d+)\.png$/)?.[1];
+  const version = path.match(/-v(\d+)\.webp$/)?.[1];
   return version ? Number(version) : 0;
 }
 
@@ -77,7 +77,7 @@ const packs = Object.entries(manifestModules)
   .map(([manifestPath, manifest]) => {
     const category = normalizedCategory(manifest.category);
     const atlasUrl = atlasByDirectory.get(directoryOf(manifestPath));
-    if (!category || !atlasUrl || (manifest.status !== "Candidato" && manifest.status !== "Integrado")) {
+    if (!category || !atlasUrl || manifest.status !== "Integrado") {
       return null;
     }
     const frameCount = Math.max(1, manifest.animation?.frameCount ?? 16);

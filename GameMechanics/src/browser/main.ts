@@ -62,6 +62,10 @@ import {
   type AnimationLabCategory,
   type AnimationLabPackId,
 } from "./animation-lab-packs.ts";
+import {
+  animationLabDestinationRect,
+  animationLabSizeTiles,
+} from "./animation-lab-presentation.ts";
 
 import { createGameMechanics } from "../game-mechanics.ts";
 import { createLocalDuel1v1MatchConfig, createMatchConfig } from "../match-config.ts";
@@ -453,7 +457,7 @@ function buildMatchConfig(p1Slug: string, p2Slug: string) {
   });
 }
 
-// Seed selection from URL (?p1=ranni&p2=nico) so deep-links skip re-picking.
+// Seed selection from URL (?p1=ranni&p2=thresh) so deep-links skip re-picking.
 try {
   const params = new URLSearchParams(window.location.search);
   selectedP1 = resolveChampionSlug(params.get("p1") ?? params.get("character") ?? params.get("char1"), DEFAULT_P1_SLUG);
@@ -625,6 +629,10 @@ root.removeAttribute("aria-live");
 let game = createGameMechanics(matchConfig);
 const imageCache = new Map<string, HTMLImageElement>();
 const spriteTrimCache = new WeakMap<HTMLImageElement, SpriteTrimBounds | null>();
+const atlasFrameTrimCache = new WeakMap<
+  HTMLImageElement,
+  Map<string, SpriteTrimBounds | null>
+>();
 let trimProbeCanvas: HTMLCanvasElement | null = null;
 let trimProbeContext: CanvasRenderingContext2D | null = null;
 const pressedMovementCodes = new Set<string>();
@@ -1370,6 +1378,67 @@ function tileKeyOf(tile: TileCoord): string {
   return `${tile.x},${tile.y}`;
 }
 
+/** Opaque content rect for one atlas cell; generated VFX contain large transparent gutters. */
+function getAtlasFrameTrimBounds(
+  image: HTMLImageElement,
+  sourceX: number,
+  sourceY: number,
+  frameSize: number,
+): SpriteTrimBounds | null {
+  let imageCache = atlasFrameTrimCache.get(image);
+  if (!imageCache) {
+    imageCache = new Map();
+    atlasFrameTrimCache.set(image, imageCache);
+  }
+  const key = `${sourceX},${sourceY},${frameSize}`;
+  if (imageCache.has(key)) return imageCache.get(key) ?? null;
+  const context = ensureTrimProbe();
+  if (!trimProbeCanvas || !context) return null;
+  if (trimProbeCanvas.width !== frameSize) trimProbeCanvas.width = frameSize;
+  if (trimProbeCanvas.height !== frameSize) trimProbeCanvas.height = frameSize;
+  context.clearRect(0, 0, frameSize, frameSize);
+  try {
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      frameSize,
+      frameSize,
+      0,
+      0,
+      frameSize,
+      frameSize,
+    );
+    const data = context.getImageData(0, 0, frameSize, frameSize).data;
+    let minX = frameSize;
+    let minY = frameSize;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < frameSize; y += 1) {
+      for (let x = 0; x < frameSize; x += 1) {
+        if ((data[(y * frameSize + x) * 4 + 3] ?? 0) <= SPRITE_ALPHA_THRESHOLD) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    const bounds = maxX < minX || maxY < minY
+      ? null
+      : Object.freeze({
+          x: minX,
+          y: minY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+        });
+    imageCache.set(key, bounds);
+    return bounds;
+  } catch {
+    imageCache.set(key, null);
+    return null;
+  }
+}
+
 function queueAnimationLabFx(
   category: AnimationLabCategory,
   anchor: AnimationLabFx["anchor"],
@@ -1718,7 +1787,6 @@ function drawAnimationLabFx(animMs: number): void {
     if (!image.complete || image.naturalWidth <= 0) continue;
 
     const isHud = fx.anchor === "hud";
-    const size = isHud ? TILE_SIZE * 1.1 : TILE_SIZE * 1.3;
     const centerX = isHud
       ? LOGICAL_WIDTH / 2
       : fx.anchor.tileX * TILE_SIZE + TILE_SIZE / 2;
@@ -1727,19 +1795,29 @@ function drawAnimationLabFx(animMs: number): void {
       : fx.anchor.tileY * TILE_SIZE + TILE_SIZE / 2;
     const progress = age / pack.durationMs;
     const alpha = Math.min(1, (age / 80) * 1.5) * Math.min(1, (1 - progress) * 1.8);
+    const trim = getAtlasFrameTrimBounds(image, sourceX, sourceY, pack.frameSize)
+      ?? { x: 0, y: 0, width: pack.frameSize, height: pack.frameSize };
+    const destination = animationLabDestinationRect(trim, {
+      centerX,
+      centerY,
+      tileSize: TILE_SIZE,
+      sizeTiles: animationLabSizeTiles(pack.category),
+    });
     context.save();
     context.globalAlpha = alpha;
-    context.globalCompositeOperation = "lighter";
+    context.globalCompositeOperation = "source-over";
+    context.shadowColor = "rgba(0, 0, 0, 0.42)";
+    context.shadowBlur = 4;
     context.drawImage(
       image,
-      sourceX,
-      sourceY,
-      pack.frameSize,
-      pack.frameSize,
-      centerX - size / 2,
-      centerY - size / 2,
-      size,
-      size,
+      sourceX + trim.x,
+      sourceY + trim.y,
+      trim.width,
+      trim.height,
+      destination.x,
+      destination.y,
+      destination.width,
+      destination.height,
     );
     context.restore();
   }
@@ -2342,7 +2420,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     }
 
     if (entry.channeling) {
-      // Soft accent aura while the skill channels (Thresh green, Madara orange, …).
+      // Soft accent aura while the skill channels (for example, Thresh green).
       context.save();
       context.globalCompositeOperation = "lighter";
       const aura = context.createRadialGradient(cx, cy, 4, cx, cy, TILE_SIZE * 0.72);

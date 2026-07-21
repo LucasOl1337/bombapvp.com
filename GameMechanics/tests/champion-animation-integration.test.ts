@@ -40,6 +40,20 @@ function labManifests(): readonly LabManifest[] {
 }
 
 describe("integrated animation lab assets", () => {
+  it("keeps the published checkout limited to one approved pack per effect family", () => {
+    const manifests = labManifests();
+
+    expect(manifests).toHaveLength(5);
+    expect(manifests.every((manifest) => manifest.status === "Integrado")).toBe(true);
+    expect(ANIMATION_LAB_PACKS.map((pack) => pack.category).sort()).toEqual([
+      "arena",
+      "bomb",
+      "hit",
+      "hud",
+      "power-up",
+    ]);
+  });
+
   it("installs every runtime-integrated Champion sequence in its presentation pack", () => {
     const integrated = labManifests().filter(
       (manifest) => manifest.runtimeIntegration === true && manifest.champion?.slug,
@@ -58,12 +72,12 @@ describe("integrated animation lab assets", () => {
     }
   });
 
-  it("publishes every eligible non-Champion lab pack through the event rotation", () => {
+  it("publishes only approved non-Champion lab packs through the event rotation", () => {
     const expectedIds = labManifests()
       .filter(
         (manifest) =>
           !manifest.champion
-          && (manifest.status === "Candidato" || manifest.status === "Integrado"),
+          && manifest.status === "Integrado",
       )
       .map((manifest) => manifest.id)
       .sort();

@@ -6,8 +6,8 @@ Pipeline per action/dir:
 
 Usage examples:
   python Champions/_tools/install-anim-frames.py \\
-    --raw Champions/mirelle/rebuild/v2/raw/walk-south \\
-    --out Champions/mirelle/assets/animations --action walk --dir south --count 8
+    --raw Champions/ranni/rebuild/v2/raw/walk-south \\
+    --out Champions/ranni/assets/animations --action walk --dir south --count 8
 
   python Champions/_tools/install-anim-frames.py --still still.jpg --out ... --dir south
 """
@@ -71,7 +71,7 @@ def fit_square(
 ) -> Image.Image:
     """Fit full-body subject into size×size with transparent pad.
 
-    Leaves EXTRA empty space below the feet (like Ranni/Pendula) so the
+    Leaves EXTRA empty space below the feet (like Ranni) so the
     selection card vignette never crops ankles/feet. Subject is scaled to
     fit height with bottom_extra reserved.
     """

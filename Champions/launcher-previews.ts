@@ -49,11 +49,7 @@ const PRESENTATION_BY_SLUG: Partial<Record<ChampionSlug, LauncherPresentation>> 
   ranni: Object.freeze({ scale: 1.42, offsetXPercent: 0, offsetYPercent: 3 }),
   "killer-bee": Object.freeze({ scale: 1.38, offsetXPercent: 0, offsetYPercent: 4 }),
   "crocodilo-arcano": Object.freeze({ scale: 1.3, offsetXPercent: 0, offsetYPercent: 2 }),
-  nico: Object.freeze({ scale: 1.47, offsetXPercent: 0, offsetYPercent: 4 }),
-  "nix-ember": Object.freeze({ scale: 0.82, offsetXPercent: 0, offsetYPercent: 1 }),
-  pendula: Object.freeze({ scale: 0.74, offsetXPercent: 0, offsetYPercent: -1 }),
-  mirelle: Object.freeze({ scale: 0.85, offsetXPercent: 0, offsetYPercent: 1 }),
-  "lee-sin": Object.freeze({ scale: 0.86, offsetXPercent: 0, offsetYPercent: -1 }),
+  thresh: Object.freeze({ scale: 0.86, offsetXPercent: 0, offsetYPercent: -1 }),
 };
 
 // Vite requires static glob strings (no runtime template interpolation).

@@ -10,7 +10,7 @@ export const THRESH_SKILL_COOLDOWN_MS = 8_000;
 export const THRESH_DEFINITION = deepFreeze({
   id: THRESH_CHARACTER_ID,
   name: "Thresh",
-  roster: { order: 8 },
+  roster: { order: 3 },
   presentation: {
     portraitPath: portraitUrl,
     accent: "green",

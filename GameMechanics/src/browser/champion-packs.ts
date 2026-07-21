@@ -65,7 +65,7 @@ export type ChampPresentation = Readonly<{
   /** Kernel skill id when the seat is assigned this champion. */
   kernelSkillId: SkillId | undefined;
   /**
-   * Arena draw scale vs classic padded packs (Ranni/Nico/Bee ≈ 1).
+   * Arena draw scale vs classic padded packs (Ranni/Bee ≈ 1).
    * Dense 160px packs fill ~0.75–0.90 of the cell; after height-normalize they
    * read oversized. This compensates presentation only — hitbox is unchanged.
    */
@@ -90,14 +90,7 @@ const INTEGRATED_ANIMATIONS = collectIntegratedAnimationOverrides(
 const ARENA_OPTICAL_SCALE: Readonly<Record<ChampionSlug, number>> = Object.freeze({
   ranni: 1,
   "killer-bee": 1,
-  nico: 1,
   "crocodilo-arcano": 0.96,
-  mirelle: 0.9,
-  "nix-ember": 0.86,
-  madara: 0.86,
-  pendula: 0.84,
-  "lee-sin": 0.84,
-  katarina: 0.82,
   thresh: 0.78,
 });
 
@@ -232,7 +225,7 @@ const BY_SLUG = new Map(PRESENTATIONS.map((entry) => [entry.slug, entry]));
 const BY_ID = new Map(PRESENTATIONS.map((entry) => [entry.characterId, entry]));
 
 export const DEFAULT_P1_SLUG: ChampionSlug = "ranni";
-export const DEFAULT_P2_SLUG: ChampionSlug = "nico";
+export const DEFAULT_P2_SLUG: ChampionSlug = "killer-bee";
 
 export function listChampionPresentations(): readonly ChampPresentation[] {
   return PRESENTATIONS;
