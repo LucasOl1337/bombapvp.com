@@ -1,11 +1,34 @@
 import type { GameSnapshot } from "../contracts.ts";
 import type { BotProfileId } from "../bots/index.ts";
+import type { BrowserBotDriver } from "./bot-drivers.ts";
 import { botProfileForPlayer, type BrowserMatchConfiguration } from "./match-mode.ts";
 
 export type BotLabObservation = Readonly<{
   competitors: readonly [
-    Readonly<{ championName: string; profileId: BotProfileId; profileLabel: string; wins: number }>,
-    Readonly<{ championName: string; profileId: BotProfileId; profileLabel: string; wins: number }>,
+    Readonly<{
+      championName: string;
+      profileId: BotProfileId;
+      profileLabel: string;
+      wins: number;
+      modelVersion: string;
+      masteryBasisPoints: number;
+      activeTechniqueIds: readonly string[];
+      lastTechniqueId: string | null;
+      experienceEvents: number;
+      compatibilityWarnings: readonly string[];
+    }>,
+    Readonly<{
+      championName: string;
+      profileId: BotProfileId;
+      profileLabel: string;
+      wins: number;
+      modelVersion: string;
+      masteryBasisPoints: number;
+      activeTechniqueIds: readonly string[];
+      lastTechniqueId: string | null;
+      experienceEvents: number;
+      compatibilityWarnings: readonly string[];
+    }>,
   ];
   roundNumber: number;
   phase: GameSnapshot["phase"];
@@ -40,6 +63,7 @@ export function createBotLabObservation(
   championNames: readonly [string, string],
   locale: "pt-BR" | "en",
   matchNumber = 1,
+  drivers: readonly BrowserBotDriver[] = Object.freeze([]),
 ): BotLabObservation | null {
   if (configuration.mode !== "bot-lab") return null;
   const profiles = [
@@ -49,11 +73,20 @@ export function createBotLabObservation(
   const competitor = (index: 0 | 1) => {
     const seat = snapshot.config.seats[index]!;
     const profile = profiles[index]!;
+    const driver = drivers.find(({ playerIndex }) => playerIndex === index);
     return Object.freeze({
       championName: championNames[index]!,
       profileId: profile.id,
       profileLabel: profile.label,
       wins: snapshot.scores.find(({ competitorId }) => competitorId === seat.competitorId)?.wins ?? 0,
+      modelVersion: driver?.modelVersion ?? "unobserved",
+      masteryBasisPoints: driver?.masteryBasisPoints ?? 0,
+      activeTechniqueIds: Object.freeze(
+        driver?.techniques.filter(({ status }) => status === "active").map(({ id }) => id) ?? [],
+      ),
+      lastTechniqueId: driver?.lastTechniqueId ?? null,
+      experienceEvents: driver?.experienceEvents ?? 0,
+      compatibilityWarnings: driver?.compatibilityWarnings ?? Object.freeze([]),
     });
   };
   const competitors: BotLabObservation["competitors"] = Object.freeze([
