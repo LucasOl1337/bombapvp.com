@@ -4,6 +4,9 @@ SOMENTE ao criar ou integrar assets de Champion.
 
 Guarde finais em `Champions/<slug>/assets/`.
 
+Antes de gerar ou regenerar qualquer sprite com IA, siga obrigatoriamente
+`docs/sprite-generation.md`.
+
 Animacoes usam:
 
 ```text

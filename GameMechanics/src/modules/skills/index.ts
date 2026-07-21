@@ -26,6 +26,7 @@ import {
   activeDirection,
   assertInteger,
   assertPosition,
+  BASE_SPEED_UNITS_PER_TICK,
   DIRECTION_DELTA,
   effectiveSolidKeySet,
   findIntent,
@@ -51,7 +52,12 @@ import {
 
 // ── Timing / range constants (aligned with roster skill fantasy) ────────────
 
-export const RANNI_CHANNEL_MS = 1_500 as const;
+/**
+ * Ice Blink leaves enough time to read the frozen body, steer the spirit
+ * through terrain, and choose a valid landing point. A second cast still
+ * completes immediately.
+ */
+export const RANNI_CHANNEL_MS = 2_500 as const;
 export const RANNI_COOLDOWN_MS = 8_000 as const;
 
 export const KILLER_BEE_CHANNEL_MS = 240 as const;
@@ -516,22 +522,13 @@ function tickChannel(
     if (command && !canCompleteManually) {
       rejections.push(reject(command, "skill-unavailable"));
     }
-    const arena = ctx.read("arena");
-    const pressure = ctx.read("pressure");
-    const bombs = ctx.read("bombs").items;
-    const solid = effectiveSolidKeySet(arena, pressure);
-    const crates = new Set(arena.crates.map(tileKey));
     const intentEntry = findIntent(ctx.read("intent"), entry.competitorId);
     const direction = intentEntry ? activeDirection(intentEntry) : null;
     const attempted = direction
-      ? attemptDirection(
-          projection,
-          direction,
-          solid,
-          crates,
-          bombs,
-          new Set(entry.bombEgressKeys),
-        )
+      ? wrapPosition({
+          x: projection.x + DIRECTION_DELTA[direction].x * (BASE_SPEED_UNITS_PER_TICK / 2),
+          y: projection.y + DIRECTION_DELTA[direction].y * (BASE_SPEED_UNITS_PER_TICK / 2),
+        })
       : projection;
     const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
     const completes = completionRequested || remaining === 0;
@@ -545,9 +542,6 @@ function tickChannel(
         ...entry,
         channelRemainingMs: remaining,
         projection: attempted,
-        bombEgressKeys: Object.freeze(
-          [...preOverlappingBombKeys(attempted, bombs)].sort(),
-        ),
       }),
       facts,
       rejections,

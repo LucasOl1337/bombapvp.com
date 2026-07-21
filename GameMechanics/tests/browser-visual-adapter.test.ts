@@ -8,6 +8,14 @@ const BROWSER_STYLES = join(ROOT, "src", "browser", "styles.css");
 const BROWSER_PACKS = join(ROOT, "src", "browser", "champion-packs.ts");
 const INDEX_HTML = join(ROOT, "index.html");
 const ASSETS_DIR = join(ROOT, "assets");
+const RANNI_SPIRIT_WISP = join(
+  process.cwd(),
+  "Champions",
+  "ranni",
+  "assets",
+  "animations",
+  "spirit-wisp-strip.png",
+);
 
 // Case-sensitive: local arena copies live under assets/ (lowercase).
 // Character sprites may come from Champions/ (mode-4 roster).
@@ -152,6 +160,7 @@ describe("browser visual adapter (product arena)", () => {
     // Controls preserved
     expect(main).toContain("KeyW");
     expect(main).toContain("KeyQ");
+    expect(main).toContain("KeyR");
     expect(main).toContain("KeyE");
     expect(main).toContain("ArrowUp");
     expect(main).toContain("KeyO");
@@ -250,6 +259,21 @@ describe("browser visual adapter (product arena)", () => {
     // Movement release when leaving playable phase.
     expect(main).toContain("releaseMovement");
     expect(main).toMatch(/!acceptsGameplayInput\(snapshot\.phase\)[\s\S]{0,80}releaseMovement/);
+  });
+
+  it("presents Ice Blink as a frozen body plus a wall-phasing spirit", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+
+    expect(main).toContain("RANNI_FROZEN_ULTIMATE_FRAME");
+    expect(main).toContain("ranniProjectionPose");
+    expect(main).toContain("spectral: true");
+    expect(main).toContain("Spectral projection");
+    expect(main).not.toContain("Ice Blink soul tether");
+    expect(main).toContain("RANNI_SPIRIT_PRIMARY_ALPHA");
+    expect(existsSync(RANNI_SPIRIT_WISP)).toBe(true);
+    expect(main).toContain("RANNI_FREEZE_BUILD_MS");
+    expect(main).toMatch(/Math\.floor\(age \/ \(timed\.buildMs \/ frames\.length\)\)/);
+    expect(main).not.toContain("holdFrameIndex");
   });
 
   it("does not tree-walk into legacy original-game asset roots", () => {

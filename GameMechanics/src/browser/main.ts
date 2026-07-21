@@ -48,6 +48,7 @@ import {
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
+  timedAnimationFrameIndex,
   type ChampionAnimationAction,
   type SkillAnimationAction,
 } from "./champion-animation-selection.ts";
@@ -67,6 +68,7 @@ import {
 import { createGameMechanics } from "../game-mechanics.ts";
 import { createLocalDuel1v1MatchConfig, createMatchConfig } from "../match-config.ts";
 import {
+  RANNI_CHANNEL_MS,
   RANNI_COOLDOWN_MS,
   THRESH_CHANNEL_MS,
   THRESH_HOOK_RANGE,
@@ -79,6 +81,7 @@ import {
 } from "./audio.ts";
 import {
   GAME_MECHANICS_VERSION,
+  RANNI_ICE_BLINK_SKILL_ID,
   THRESH_DEATH_SENTENCE_SKILL_ID,
   TICK_DURATION_MS,
   type CompetitorId,
@@ -155,6 +158,13 @@ const IDLE_FRAME_MS = 180;
 const WALK_FRAME_MS = 90;
 const DEATH_FRAME_MS = 90;
 const CAST_FRAME_MS = 100;
+/** Full ice-prison frame held for Ranni's physical body during Ice Blink. */
+const RANNI_FROZEN_ULTIMATE_FRAME = 3;
+/** Fast six-frame build-up before the full prison is held. */
+const RANNI_FREEZE_BUILD_MS = 240;
+/** Dark enough to remain legible over the arena's pale floor. */
+const RANNI_SPIRIT_PRIMARY_ALPHA = 0.5;
+const RANNI_SPIRIT_WISP_FRAME_MS = 120;
 const POWER_FX_MS = 720;
 const SUDDEN_DEATH_FLASH_MS = 1400;
 /** Combat presentation timing (adapter-only, never kernel state). */
@@ -252,6 +262,10 @@ type DeathAnim = {
 type TimedChampionAction = Readonly<{
   action: SkillAnimationAction;
   startMs: number;
+  /** Optional kernel-owned duration used to keep presentation in lockstep. */
+  durationMs?: number;
+  /** Optional entrance animation duration before holding the action's last frame. */
+  buildMs?: number;
 }>;
 
 /** Thresh Death Sentence hook projectile visual state. */
@@ -344,7 +358,7 @@ const PT_COPY: BrowserCopy = Object.freeze({
   getReady: "Prepare-se",
   go: "Vai!",
   doubleKo: "Double KO",
-  controlsHint: "P1 WASD+Q+Espaço · P2 ←↑↓→+O+I · Esc pausa · T reinicia · M som",
+  controlsHint: "P1 WASD+Q+Espaço/R · P2 ←↑↓→+O+I · Esc pausa · T reinicia · M som",
   devShow: "Dev",
   devHide: "Fechar",
   devTitle: "Diagnóstico",
@@ -382,7 +396,7 @@ const EN_COPY: BrowserCopy = Object.freeze({
   getReady: "Get ready",
   go: "Go!",
   doubleKo: "Double KO",
-  controlsHint: "P1 WASD+Q+Space · P2 ←↑↓→+O+I · Esc pause · T restart · M sound",
+  controlsHint: "P1 WASD+Q+Space/R · P2 ←↑↓→+O+I · Esc pause · T restart · M sound",
   devShow: "Dev",
   devHide: "Close",
   devTitle: "Diagnostics",
@@ -641,6 +655,13 @@ const deathAnims = new Map<CompetitorId, DeathAnim>();
 const championActionAnims = new Map<CompetitorId, TimedChampionAction>();
 /** Previous skill phase for detecting a new skill presentation sequence. */
 const prevChampionSkillPhase = new Map<CompetitorId, string>();
+/** Previous Ice Blink projection pose, used to animate the wall-phasing spirit. */
+const ranniProjectionPose = new Map<CompetitorId, {
+  x: number;
+  y: number;
+  facing: Facing;
+  lastMoveMs: number;
+}>();
 /** Thresh hook projectile FX (visual only, kernel logic is authoritative). */
 const hookProjectileFx: HookProjectileFx[] = [];
 /** Thresh hook victim pull animations. */
@@ -1531,7 +1552,7 @@ const devNote = element(
   document,
   "p",
   "arena-dev__note",
-  `${GAME_MECHANICS_VERSION} · local assets only · WASD+Q+Space / arrows+O+I / Esc / T / M`,
+  `${GAME_MECHANICS_VERSION} · local assets only · WASD+Q+Space/R / arrows+O+I / Esc / T / M`,
 );
 devPanel.append(devTitle, devMeta, devLog, devNote);
 
@@ -1689,6 +1710,7 @@ function clearCombatPresentation(): void {
   bombPlaceFx.clear();
   powerUpRevealFx.clear();
   lastCompetitorPose.clear();
+  ranniProjectionPose.clear();
   prevSkillPhase.clear();
   lastChannelAim.clear();
   lastChannelOrigin.clear();
@@ -1963,12 +1985,19 @@ function timedChampionFrameUrl(
   if (!timed) return null;
   const frames = animationFrames(slot, timed.action, facing);
   const age = animMs - timed.startMs;
-  const durationMs = frames.length * CAST_FRAME_MS;
-  if (frames.length === 0 || age < 0 || age >= durationMs) {
+  const durationMs = timed.durationMs ?? frames.length * CAST_FRAME_MS;
+  const lifecycleFrame = timedAnimationFrameIndex(frames.length, age, durationMs);
+  if (lifecycleFrame === null) {
     championActionAnims.delete(competitorId);
     return null;
   }
-  return frames[Math.min(frames.length - 1, Math.floor(age / CAST_FRAME_MS))] ?? null;
+  const frameIndex = timed.buildMs
+    ? Math.min(
+        frames.length - 1,
+        Math.floor(age / (timed.buildMs / frames.length)),
+      )
+    : lifecycleFrame;
+  return frames[frameIndex] ?? null;
 }
 
 function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): void {
@@ -1976,9 +2005,28 @@ function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): v
     const phase = competitor.skill?.phase ?? "none";
     const previous = prevChampionSkillPhase.get(competitor.id);
     prevChampionSkillPhase.set(competitor.id, phase);
+    if (
+      competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
+      && previous === "channeling"
+      && phase !== "channeling"
+    ) {
+      championActionAnims.delete(competitor.id);
+      continue;
+    }
     if (phase !== "channeling" || previous === "channeling") continue;
     const action = skillAnimationAction(slotForCompetitor(competitor.id));
-    if (action) championActionAnims.set(competitor.id, { action, startMs: nowMs });
+    if (action) {
+      championActionAnims.set(competitor.id, {
+        action,
+        startMs: nowMs,
+        ...(competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
+          ? {
+              durationMs: RANNI_CHANNEL_MS,
+              buildMs: RANNI_FREEZE_BUILD_MS,
+            }
+          : {}),
+      });
+    }
   }
 }
 
@@ -2453,11 +2501,15 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     alive: boolean;
     spawnProtectionRemainingMs: number;
     channeling: boolean;
+    spectral: boolean;
   };
   const renderables: Renderable[] = [];
 
   for (const competitor of snapshot.competitors) {
-    if (!competitor.alive) continue;
+    if (!competitor.alive) {
+      ranniProjectionPose.delete(competitor.id);
+      continue;
+    }
     const slot = slotForCompetitor(competitor.id);
     const facing = facingFromVelocity(
       competitor.velocity.x,
@@ -2533,7 +2585,53 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       alive: true,
       spawnProtectionRemainingMs: competitor.spawnProtectionRemainingMs,
       channeling,
+      spectral: false,
     });
+
+    const projection = competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
+      && competitor.skill.phase === "channeling"
+      ? competitor.skill.projection
+      : null;
+    if (projection) {
+      const previousProjection = ranniProjectionPose.get(competitor.id);
+      const projectionDx = previousProjection
+        ? wrapDelta(projection.x, previousProjection.x, WORLD_SPAN_X)
+        : 0;
+      const projectionDy = previousProjection
+        ? wrapDelta(projection.y, previousProjection.y, WORLD_SPAN_Y)
+        : 0;
+      const projectionFacing = facingFromVelocity(
+        projectionDx,
+        projectionDy,
+        previousProjection?.facing ?? facing,
+      );
+      const projectionMoved = Math.abs(projectionDx) >= MOVE_SPEED_THRESHOLD
+        || Math.abs(projectionDy) >= MOVE_SPEED_THRESHOLD;
+      const lastProjectionMoveMs = projectionMoved
+        ? animMs
+        : previousProjection?.lastMoveMs ?? Number.NEGATIVE_INFINITY;
+      // Keep the walk cycle alive between 50 Hz kernel ticks.
+      const projectionMoving = animMs - lastProjectionMoveMs < TICK_DURATION_MS * 2;
+      ranniProjectionPose.set(competitor.id, {
+        x: projection.x,
+        y: projection.y,
+        facing: projectionFacing,
+        lastMoveMs: lastProjectionMoveMs,
+      });
+      renderables.push({
+        id: competitor.id,
+        slot,
+        position: projection,
+        facing: projectionFacing,
+        frameUrl: championFrameUrl(slot, projectionFacing, projectionMoving, animMs),
+        alive: true,
+        spawnProtectionRemainingMs: 0,
+        channeling: false,
+        spectral: true,
+      });
+    } else {
+      ranniProjectionPose.delete(competitor.id);
+    }
   }
 
   // Eliminated competitors keep a held-pose death animation until the round resets.
@@ -2552,6 +2650,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       alive: false,
       spawnProtectionRemainingMs: 0,
       channeling: false,
+      spectral: false,
     });
   }
 
@@ -2570,7 +2669,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     // Seat ownership (P1/P2) stays cyan/orange; accent drives champion magic color.
     const identity = entry.slot === "control-a" ? "56, 217, 245" : "255, 120, 50";
     const accent = accentRgb(champ.accent);
-    const aliveAlpha = entry.alive ? 1 : 0.45;
+    const aliveAlpha = entry.spectral ? 0.42 : entry.alive ? 1 : 0.45;
     // Subtle breathe so idle units feel alive (presentation-only).
     const pulse = entry.alive ? 0.5 + 0.5 * Math.sin(animMs / 420) : 0;
 
@@ -2614,7 +2713,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
 
     // 3) Identity ownership ring (P1 cyan / P2 orange) — crisp seat marker.
     context.save();
-    context.fillStyle = `rgb(${identity} / ${entry.alive ? 0.1 + 0.04 * pulse : 0.04})`;
+    context.fillStyle = `rgb(${identity} / ${entry.spectral ? 0.04 : entry.alive ? 0.1 + 0.04 * pulse : 0.04})`;
     context.beginPath();
     context.ellipse(
       cx,
@@ -2626,7 +2725,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       Math.PI * 2,
     );
     context.fill();
-    context.strokeStyle = `rgb(${identity} / ${entry.alive ? 0.72 + 0.14 * pulse : 0.28})`;
+    context.strokeStyle = `rgb(${identity} / ${entry.spectral ? 0.3 : entry.alive ? 0.72 + 0.14 * pulse : 0.28})`;
     context.lineWidth = 2;
     context.stroke();
     context.restore();
@@ -2667,9 +2766,60 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const spriteX = cx - spriteWidth * 0.5;
       const spriteY = bodyBottom - spriteHeight + 1;
 
+      if (entry.spectral) {
+        const wispImage = champ.pack.effects["spirit-wisp"]
+          ? imageCache.get(champ.pack.effects["spirit-wisp"]!)
+          : undefined;
+        if (wispImage?.complete && wispImage.naturalWidth > 0) {
+          const wispFrame = Math.floor(animMs / RANNI_SPIRIT_WISP_FRAME_MS) % 4;
+          const wispSize = TILE_SIZE * 1.15;
+          context.save();
+          context.globalAlpha = 0.3;
+          context.globalCompositeOperation = "source-over";
+          context.drawImage(
+            wispImage,
+            wispFrame * 128,
+            0,
+            128,
+            128,
+            cx - wispSize / 2,
+            bodyBottom - wispSize * 0.78,
+            wispSize,
+            wispSize,
+          );
+          context.restore();
+        }
+      }
+
       // Soft accent silhouette glow — pops spectral sprites on light stone.
       context.save();
-      if (entry.alive) {
+      if (entry.spectral) {
+        // Spectral projection: the original directional walk cycle becomes
+        // Ranni's wall-phasing spirit without duplicating identity assets.
+        context.globalCompositeOperation = "lighter";
+        context.filter = "brightness(0.95) saturate(1.15) hue-rotate(8deg)";
+        context.shadowColor = "rgb(100 220 245 / 0.48)";
+        context.shadowBlur = 8 + 3 * pulse;
+        for (const offset of [-7, -3]) {
+          context.globalAlpha = offset === -7 ? 0.05 : 0.08;
+          context.drawImage(
+            image,
+            srcX,
+            srcY,
+            srcW,
+            srcH,
+            spriteX + offset,
+            spriteY + Math.abs(offset) * 0.2,
+            spriteWidth,
+            spriteHeight,
+          );
+        }
+        context.globalCompositeOperation = "source-over";
+        context.globalAlpha = RANNI_SPIRIT_PRIMARY_ALPHA;
+        context.filter = "brightness(0.8) contrast(1.18) saturate(1.35) hue-rotate(8deg)";
+        context.shadowColor = "rgb(80 205 235 / 0.6)";
+        context.shadowBlur = 7 + 2 * pulse;
+      } else if (entry.alive) {
         context.shadowColor = `rgb(${accent} / ${0.42 + 0.12 * pulse})`;
         context.shadowBlur = 11 + 5 * pulse;
       } else {
@@ -2680,7 +2830,9 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       context.shadowBlur = 0;
       context.shadowColor = "transparent";
       // Crisp second pass so glow does not soften pixel edges.
-      context.drawImage(image, srcX, srcY, srcW, srcH, spriteX, spriteY, spriteWidth, spriteHeight);
+      if (!entry.spectral) {
+        context.drawImage(image, srcX, srcY, srcW, srcH, spriteX, spriteY, spriteWidth, spriteHeight);
+      }
       context.restore();
     } else {
       context.fillStyle = entry.slot === "control-a" ? "#38d9f5" : "#ff5a1f";
@@ -2690,7 +2842,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     }
 
     // Name pill above the head for living players.
-    if (entry.alive) {
+    if (entry.alive && !entry.spectral) {
       const label = `${entry.slot === "control-a" ? "P1" : "P2"} · ${copy.controlName(entry.slot)}`;
       context.save();
       context.font = "600 10px Inter, system-ui, sans-serif";
@@ -3326,11 +3478,11 @@ function onKeyDown(event: KeyboardEvent): void {
     dispatchAndRender({ type: "place-bomb", competitorId });
     return;
   }
-  if (event.code === "Space" || event.code === "KeyI" || event.code === "KeyE" || event.code === "KeyP") {
+  if (["KeyR", "Space", "KeyI", "KeyE", "KeyP"].includes(event.code)) {
     event.preventDefault();
     if (!acceptsGameplayInput()) return;
-    // Product bindings: P1 Space, P2 KeyI. E/P kept as legacy alternates.
-    const competitorId = event.code === "Space" || event.code === "KeyE"
+    // Product bindings: P1 KeyR/Space, P2 KeyI. E/P remain legacy alternates.
+    const competitorId = event.code === "KeyR" || event.code === "Space" || event.code === "KeyE"
       ? localCompetitorBySlot["control-a"]
       : localCompetitorBySlot["control-b"];
     if (competitorIsBot(competitorId)) return;

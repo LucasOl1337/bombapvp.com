@@ -5,6 +5,7 @@ import {
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
+  timedAnimationFrameIndex,
 } from "../src/browser/champion-animation-selection.ts";
 
 describe("champion animation selection", () => {
@@ -60,5 +61,13 @@ describe("champion animation selection", () => {
       idle: "south",
     });
     expect(overrides.has("discarded")).toBe(false);
+  });
+
+  it("spreads a finite sequence over the kernel-owned skill duration", () => {
+    expect(timedAnimationFrameIndex(6, 0, 1_500)).toBe(0);
+    expect(timedAnimationFrameIndex(6, 249, 1_500)).toBe(0);
+    expect(timedAnimationFrameIndex(6, 250, 1_500)).toBe(1);
+    expect(timedAnimationFrameIndex(6, 1_499, 1_500)).toBe(5);
+    expect(timedAnimationFrameIndex(6, 1_500, 1_500)).toBeNull();
   });
 });

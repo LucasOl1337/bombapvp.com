@@ -1,4 +1,5 @@
 import portraitUrl from "./assets/portrait.png?url";
+import spiritWispStripUrl from "./assets/animations/spirit-wisp-strip.png?url";
 import { createChampionAssets } from "../assets";
 import { RANNI_CHARACTER_ID } from "./definition";
 export const RANNI_ASSETS = createChampionAssets(
@@ -9,6 +10,8 @@ export const RANNI_ASSETS = createChampionAssets(
     import: "default",
     query: "?url",
   }) as Record<string, string>,
+  [],
+  { "spirit-wisp": spiritWispStripUrl },
 );
 export const CHAMPION_ASSET_ENTRY = Object.freeze({
   characterId: RANNI_CHARACTER_ID,

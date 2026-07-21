@@ -72,6 +72,18 @@ export function selectBombAnimationAction(
   return available.cast ? "cast" : null;
 }
 
+/** Maps an elapsed presentation clock onto a finite, non-looping sequence. */
+export function timedAnimationFrameIndex(
+  frameCount: number,
+  ageMs: number,
+  durationMs: number,
+): number | null {
+  if (frameCount <= 0 || durationMs <= 0 || ageMs < 0 || ageMs >= durationMs) {
+    return null;
+  }
+  return Math.min(frameCount - 1, Math.floor((ageMs / durationMs) * frameCount));
+}
+
 export function collectIntegratedAnimationOverrides(
   manifests: readonly IntegratedAnimationManifest[],
 ): ReadonlyMap<string, IntegratedAnimationOverrides> {
