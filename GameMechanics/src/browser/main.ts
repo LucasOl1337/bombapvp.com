@@ -48,6 +48,13 @@ import {
   type Facing,
 } from "./champion-packs.ts";
 import {
+  selectBombAnimationAction,
+  selectFacingFrames,
+  selectSkillAnimationAction,
+  type ChampionAnimationAction,
+  type SkillAnimationAction,
+} from "./champion-animation-selection.ts";
+import {
   ANIMATION_LAB_PACKS,
   getAnimationLabPack,
   nextAnimationLabPack,
@@ -59,9 +66,7 @@ import {
 import { createGameMechanics } from "../game-mechanics.ts";
 import { createLocalDuel1v1MatchConfig, createMatchConfig } from "../match-config.ts";
 import {
-  RANNI_CHANNEL_MS,
   RANNI_COOLDOWN_MS,
-  skillChannelMs,
   THRESH_CHANNEL_MS,
   THRESH_HOOK_RANGE,
 } from "../modules/skills/index.ts";
@@ -230,6 +235,11 @@ type DeathAnim = {
   facing: Facing;
   startMs: number;
 };
+
+type TimedChampionAction = Readonly<{
+  action: SkillAnimationAction;
+  startMs: number;
+}>;
 
 /** Thresh Death Sentence hook projectile visual state. */
 type HookProjectileFx = {
@@ -628,6 +638,10 @@ const chainSparkFx: ChainSparkFx[] = [];
 const blinkTrailFx: BlinkTrailFx[] = [];
 const pressureWarnFx: PressureWarnFx[] = [];
 const deathAnims = new Map<CompetitorId, DeathAnim>();
+/** Full presentation sequences started by skills or bomb placement. */
+const championActionAnims = new Map<CompetitorId, TimedChampionAction>();
+/** Previous skill phase for detecting a new skill presentation sequence. */
+const prevChampionSkillPhase = new Map<CompetitorId, string>();
 /** Thresh hook projectile FX (visual only, kernel logic is authoritative). */
 const hookProjectileFx: HookProjectileFx[] = [];
 /** Thresh hook victim pull animations. */
@@ -1145,6 +1159,8 @@ function applyRosterAndRestart(p1Slug: string, p2Slug: string, restartMatch = tr
   paintPickColumn(colP2, pickP2, "p2");
   clearCombatPresentation();
   deathAnims.clear();
+  championActionAnims.clear();
+  prevChampionSkillPhase.clear();
   lastFacing.set(localCompetitorBySlot["control-a"], "south");
   lastFacing.set(localCompetitorBySlot["control-b"], "north");
   eventMessages.length = 0;
@@ -1416,6 +1432,11 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
       queueAnimationLabFx("hud", "hud", nowMs);
     } else if (event.type === "bomb-placed") {
       bombPlaceFx.set(event.bombId, nowMs);
+      const slot = slotForCompetitor(event.competitorId);
+      const action = bombAnimationAction(slot);
+      if (action) {
+        championActionAnims.set(event.competitorId, { action, startMs: nowMs });
+      }
     } else if (event.type === "bomb-exploded") {
       // Screen shake stacks while a previous one is still decaying.
       if (!prefersReducedMotion) {
@@ -1572,12 +1593,102 @@ function championFrameUrl(
   moving: boolean,
   animMs: number,
 ): string {
-  const pack = activePack(slot);
-  const frames = moving ? pack.walk[facing] : pack.idle[facing];
+  const presentation = presentationFor(slot);
+  const pack = presentation.pack;
+  const action: ChampionAnimationAction = moving
+    ? presentation.integratedAnimations.run
+      ? "run"
+      : hasAnimationFrames(pack.walk)
+        ? "walk"
+        : "run"
+    : "idle";
+  const frames = animationFrames(slot, action, facing);
   if (frames.length === 0) return pack.static[facing];
   const frameMs = moving ? WALK_FRAME_MS : IDLE_FRAME_MS;
   const index = Math.floor(animMs / frameMs) % frames.length;
   return frames[index] ?? pack.static[facing];
+}
+
+function hasAnimationFrames(
+  frames: Readonly<Record<Facing, readonly string[]>>,
+): boolean {
+  return Object.values(frames).some((directionFrames) => directionFrames.length > 0);
+}
+
+function animationFrames(
+  slot: LocalControlSlot,
+  action: ChampionAnimationAction,
+  facing: Facing,
+): readonly string[] {
+  const presentation = presentationFor(slot);
+  return selectFacingFrames(
+    presentation.pack[action],
+    facing,
+    presentation.integratedAnimations[action],
+  );
+}
+
+function skillAnimationAction(slot: LocalControlSlot): SkillAnimationAction | null {
+  const presentation = presentationFor(slot);
+  const pack = presentation.pack;
+  const integratedActions = Object.keys(presentation.integratedAnimations).filter(
+    (action): action is SkillAnimationAction =>
+      action === "attack" || action === "cast" || action === "ultimate",
+  );
+  return selectSkillAnimationAction(
+    {
+      attack: hasAnimationFrames(pack.attack),
+      cast: hasAnimationFrames(pack.cast),
+      ultimate: hasAnimationFrames(pack.ultimate),
+    },
+    integratedActions,
+  );
+}
+
+function bombAnimationAction(slot: LocalControlSlot): SkillAnimationAction | null {
+  const presentation = presentationFor(slot);
+  const pack = presentation.pack;
+  const integratedActions = Object.keys(presentation.integratedAnimations).filter(
+    (action): action is SkillAnimationAction =>
+      action === "attack" || action === "cast" || action === "ultimate",
+  );
+  return selectBombAnimationAction(
+    {
+      attack: hasAnimationFrames(pack.attack),
+      cast: hasAnimationFrames(pack.cast),
+      ultimate: hasAnimationFrames(pack.ultimate),
+    },
+    integratedActions,
+  );
+}
+
+function timedChampionFrameUrl(
+  competitorId: CompetitorId,
+  slot: LocalControlSlot,
+  facing: Facing,
+  animMs: number,
+): string | null {
+  const timed = championActionAnims.get(competitorId);
+  if (!timed) return null;
+  const frames = animationFrames(slot, timed.action, facing);
+  const age = animMs - timed.startMs;
+  const durationMs = frames.length * CAST_FRAME_MS;
+  if (frames.length === 0 || age < 0 || age >= durationMs) {
+    championActionAnims.delete(competitorId);
+    return null;
+  }
+  return frames[Math.min(frames.length - 1, Math.floor(age / CAST_FRAME_MS))] ?? null;
+}
+
+function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): void {
+  for (const competitor of snapshot.competitors) {
+    const phase = competitor.skill?.phase ?? "none";
+    const previous = prevChampionSkillPhase.get(competitor.id);
+    prevChampionSkillPhase.set(competitor.id, phase);
+    if (phase !== "channeling" || previous === "channeling") continue;
+    const action = skillAnimationAction(slotForCompetitor(competitor.id));
+    if (action) championActionAnims.set(competitor.id, { action, startMs: nowMs });
+  }
 }
 
 function screenShakeOffset(animMs: number): { x: number; y: number } {
@@ -2086,24 +2197,8 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       y: competitor.position.y,
       facing,
     });
-    let frameUrl: string;
-    if (channeling) {
-      const pack = activePack(slot);
-      const frames = pack.cast[facing];
-      // Play the cast cycle once from channel start, then hold the last
-      // frame — looping the cycle reads as a buggy strobe on long channels.
-      // Use the skill's actual channel duration (not a hardcoded champion's).
-      const skillId = competitor.skill?.id;
-      const channelMs = skillId ? skillChannelMs(skillId) : RANNI_CHANNEL_MS;
-      const channelElapsedMs = Math.max(
-        0,
-        channelMs - (competitor.skill?.channelRemainingMs ?? 0),
-      );
-      const castIndex = Math.min(frames.length - 1, Math.floor(channelElapsedMs / CAST_FRAME_MS));
-      frameUrl = frames[castIndex] ?? pack.static[facing];
-    } else {
-      frameUrl = championFrameUrl(slot, facing, moving, animMs);
-    }
+    const actionFrame = timedChampionFrameUrl(competitor.id, slot, facing, animMs);
+    const frameUrl = actionFrame ?? championFrameUrl(slot, facing, moving, animMs);
     // If this competitor is being pulled by Thresh hook, interpolate position.
     let renderPos = renderPositionFor(competitor.id, competitor.position);
     const pullFx = hookPullFx.find(
@@ -2145,7 +2240,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
   for (const [id, death] of deathAnims) {
     const slot = slotForCompetitor(id);
     const pack = activePack(slot);
-    const frames = pack.death[death.facing];
+    const frames = animationFrames(slot, "death", death.facing);
     const age = Math.max(0, animMs - death.startMs);
     const index = Math.min(frames.length - 1, Math.floor(age / DEATH_FRAME_MS));
     renderables.push({
@@ -2816,6 +2911,7 @@ function render(snapshot = game.snapshot(), animMs = performance.now()): void {
   }
   lastKnownPhase = snapshot.phase;
 
+  detectChampionAnimationStarts(snapshot, animMs);
   detectHookLaunches(snapshot, animMs);
   renderCanvas(snapshot, animMs);
   renderHud(snapshot);

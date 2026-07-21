@@ -19,6 +19,12 @@ import {
 } from "../../../Champions/membership.ts";
 import type { CharacterDefinition } from "../../../Champions/contracts.ts";
 import { isSkillId, type SkillId } from "../contracts.ts";
+import {
+  collectIntegratedAnimationOverrides,
+  type ChampionAnimationAction,
+  type IntegratedAnimationManifest,
+  type IntegratedAnimationOverrides,
+} from "./champion-animation-selection.ts";
 
 export type Facing = "south" | "north" | "east" | "west";
 
@@ -34,7 +40,10 @@ export type ChampPack = Readonly<{
   static: Readonly<Record<Facing, string>>;
   idle: Readonly<Record<Facing, readonly string[]>>;
   walk: Readonly<Record<Facing, readonly string[]>>;
+  run: Readonly<Record<Facing, readonly string[]>>;
   cast: Readonly<Record<Facing, readonly string[]>>;
+  attack: Readonly<Record<Facing, readonly string[]>>;
+  ultimate: Readonly<Record<Facing, readonly string[]>>;
   death: Readonly<Record<Facing, readonly string[]>>;
   hookProjectile?: HookProjectileAssets;
 }>;
@@ -62,7 +71,17 @@ export type ChampPresentation = Readonly<{
    */
   arenaScale: number;
   pack: ChampPack;
+  integratedAnimations: IntegratedAnimationOverrides;
 }>;
+
+const integratedManifestModules = import.meta.glob(
+  "../../assets/animation-lab/2026-07-21/*/manifest.json",
+  { eager: true, import: "default" },
+) as Record<string, IntegratedAnimationManifest>;
+
+const INTEGRATED_ANIMATIONS = collectIntegratedAnimationOverrides(
+  Object.values(integratedManifestModules),
+);
 
 /**
  * Optical arena scale. Classic padded sprites stay at 1; dense full-cell packs
@@ -114,22 +133,31 @@ function mapFacingFrames(
 function packFromAssets(
   assets: ReturnType<typeof getChampionAssets>,
 ): ChampPack {
-  const walkSource =
-    assets.animations.walk.down.length > 0
-      ? assets.animations.walk
-      : assets.animations.run;
   return Object.freeze({
     portrait: assets.portraitUrl,
     static: mapFacingRecord(assets.staticSprites),
     idle: mapFacingFrames(assets.animations.idle),
-    walk: mapFacingFrames(walkSource),
-    cast: mapFacingFrames(
-      assets.animations.ultimate.down.length > 0
-        ? assets.animations.ultimate
-        : assets.animations.cast,
-    ),
+    walk: mapFacingFrames(assets.animations.walk),
+    run: mapFacingFrames(assets.animations.run),
+    cast: mapFacingFrames(assets.animations.cast),
+    attack: mapFacingFrames(assets.animations.attack),
+    ultimate: mapFacingFrames(assets.animations.ultimate),
     death: mapFacingFrames(assets.animations.death),
   });
+}
+
+function assertIntegratedAnimationsInstalled(
+  slug: ChampionSlug,
+  pack: ChampPack,
+  overrides: IntegratedAnimationOverrides,
+): void {
+  for (const [action, direction] of Object.entries(overrides) as Array<
+    [ChampionAnimationAction, Facing]
+  >) {
+    if (pack[action][direction].length === 0) {
+      throw new Error(`Integrated animation is missing: ${slug}/${action}-${direction}`);
+    }
+  }
 }
 
 /** Load Thresh hook projectile sprites from the champion's hook asset folder. */
@@ -173,6 +201,8 @@ const PRESENTATIONS: readonly ChampPresentation[] = Object.freeze(
     const assets = getChampionAssets(characterId);
     const locale = definition.presentation.localized["pt-BR"];
     const pack = packFromAssets(assets);
+    const integratedAnimations = INTEGRATED_ANIMATIONS.get(slug) ?? Object.freeze({});
+    assertIntegratedAnimationsInstalled(slug, pack, integratedAnimations);
     // Thresh gets hook projectile sprites loaded from its champion folder.
     const hookProjectile = slug === "thresh" ? loadThreshHookAssets() : undefined;
     const fullPack = hookProjectile
@@ -193,6 +223,7 @@ const PRESENTATIONS: readonly ChampPresentation[] = Object.freeze(
       kernelSkillId: kernelSkillFor(slug),
       arenaScale: ARENA_OPTICAL_SCALE[slug] ?? 1,
       pack: fullPack,
+      integratedAnimations,
     });
   }),
 );
@@ -237,7 +268,10 @@ export function collectChampionAssetUrls(
       urls.add(pack.static[facing]);
       for (const frame of pack.idle[facing]) urls.add(frame);
       for (const frame of pack.walk[facing]) urls.add(frame);
+      for (const frame of pack.run[facing]) urls.add(frame);
       for (const frame of pack.cast[facing]) urls.add(frame);
+      for (const frame of pack.attack[facing]) urls.add(frame);
+      for (const frame of pack.ultimate[facing]) urls.add(frame);
       for (const frame of pack.death[facing]) urls.add(frame);
     }
     // Preload hook projectile sprites when present.
