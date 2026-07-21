@@ -570,6 +570,10 @@ const deathAnims = new Map<CompetitorId, DeathAnim>();
 const hookProjectileFx: HookProjectileFx[] = [];
 /** Track previous skill phase per competitor to detect channel→cooldown transitions. */
 const prevSkillPhase = new Map<CompetitorId, string>();
+/** Last known aim direction while channeling (kernel clears it on cooldown). */
+const lastChannelAim = new Map<CompetitorId, Direction>();
+/** Last known origin tile while channeling. */
+const lastChannelOrigin = new Map<CompetitorId, TileCoord>();
 /** Bomb tile by id from the latest snapshot (chain-spark origin lookup). */
 const bombTilesById = new Map<number, TileCoord>();
 /** Pop-in clock for freshly placed bombs. */
@@ -1299,6 +1303,8 @@ function clearCombatPresentation(): void {
   powerUpRevealFx.clear();
   lastCompetitorPose.clear();
   prevSkillPhase.clear();
+  lastChannelAim.clear();
+  lastChannelOrigin.clear();
   screenShakeUntilMs = 0;
   screenShakeAmplitudePx = 0;
 }
@@ -1401,27 +1407,37 @@ function detectHookLaunches(snapshot: GameSnapshot, nowMs: number): void {
     const prevPhase = prevSkillPhase.get(competitor.id);
     const currentPhase = skill.phase;
     prevSkillPhase.set(competitor.id, currentPhase);
+
+    // While channeling, continuously capture aim + origin (kernel clears on cooldown).
+    if (currentPhase === "channeling") {
+      if (skill.aimDirection) lastChannelAim.set(competitor.id, skill.aimDirection);
+      lastChannelOrigin.set(competitor.id, {
+        x: Math.floor(competitor.position.x / UNITS_PER_TILE),
+        y: Math.floor(competitor.position.y / UNITS_PER_TILE),
+      });
+      continue;
+    }
+
     // Transition from channeling to cooldown = hook was fired.
     if (prevPhase !== "channeling" || currentPhase !== "cooldown") continue;
-    const originTile = {
+    const originTile = lastChannelOrigin.get(competitor.id) ?? {
       x: Math.floor(competitor.position.x / UNITS_PER_TILE),
       y: Math.floor(competitor.position.y / UNITS_PER_TILE),
     };
-    const aim = skill.aimDirection ?? "down";
-    // Detect hit: check if any other competitor was teleported this tick
-    // (a skill-movement fact with teleport != null for someone other than the caster).
-    // For presentation purposes, we approximate by checking if cooldown is full
-    // (hit = THRESH_COOLDOWN_MS) or reduced (miss = THRESH_MISS_COOLDOWN_MS).
-    const hit = skill.cooldownRemainingMs > 5000; // full cooldown = hit
-    const reachTiles = hit ? THRESH_HOOK_RANGE : THRESH_HOOK_RANGE;
+    const aim = lastChannelAim.get(competitor.id) ?? "down";
+    // Full cooldown = hit, reduced = miss.
+    const hit = skill.cooldownRemainingMs > 5000;
     hookProjectileFx.push({
       ownerId: competitor.id,
       originTile,
       direction: aim,
-      reachTiles,
+      reachTiles: THRESH_HOOK_RANGE,
       hit,
       startMs: nowMs,
     });
+    // Clean up captured state.
+    lastChannelAim.delete(competitor.id);
+    lastChannelOrigin.delete(competitor.id);
   }
 }
 
