@@ -2,7 +2,7 @@
 
 Inventário dos manifests presentes nesta rodada. As categorias abaixo normalizam nomes que vieram de sessões diferentes; cada pasta continua sendo a fonte de verdade do asset e do seu `manifest.json`.
 
-Resumo: **70 manifests** — 59 Candidato, 5 Descartado, 6 Integrado.
+Resumo atual: **70 manifests** — 49 Candidato, 5 Descartado, 16 Integrado.
 
 ## Bombas, explosões e pavio — 10
 
@@ -75,24 +75,24 @@ Resumo: **70 manifests** — 59 Candidato, 5 Descartado, 6 Integrado.
 
 WIP desta sessão separada; não entram na integração VFX desta rodada.
 
-- `0435-nix-ember-ember-vault` — habilidade especial — Candidato
+- `0435-nix-ember-ember-vault` — habilidade especial — Integrado
 - `0445-lee-sin-hit-reaction` — hit reaction — Descartado
 - `0500-ranni-victory-emote` — vitória/derrota — Candidato
 - `0510-katarina-attack-windup` — ataque — Descartado
-- `0520-katarina-attack-cyan-key` — ataque — Candidato
-- `0540-madara-idle-ritual` — idle — Candidato
+- `0520-katarina-attack-cyan-key` — ataque — Integrado
+- `0540-madara-idle-ritual` — idle — Integrado
 - `0550-killer-bee-run-jetstep` — walk/run — Descartado
-- `0600-killer-bee-run-cyan-key` — walk/run — Candidato
+- `0600-killer-bee-run-cyan-key` — walk/run — Integrado
 - `0610-thresh-cast-chain-recall` — cast — Descartado
-- `0620-nico-cast-grimoire-safe` — cast — Candidato
-- `0630-madara-ultimate-fireball` — ultimate — Candidato
+- `0620-nico-cast-grimoire-safe` — cast — Integrado
+- `0630-madara-ultimate-fireball` — ultimate — Integrado
 - `0640-lee-sin-death-fall` — death — Descartado
-- `0650-mirelle-death-safety` — death — Candidato
-- `0700-pendula-emote-orbit` — emote — Candidato
-- `0710-crocodilo-idle-tidal` — idle alternativo — Candidato
-- `0720-pendula-attack-gear-swish` — attack alternativo — Candidato
+- `0650-mirelle-death-safety` — death — Integrado
+- `0700-pendula-emote-orbit` — emote — Integrado
+- `0710-crocodilo-idle-tidal` — idle alternativo — Integrado
+- `0720-pendula-attack-gear-swish` — attack alternativo — Integrado
 - `0730-pendula-death-clockfall` — death alternativo — Integrado
-- `0750-nico-ultimate-shadow-grimoire` — ultimate alternativo — Candidato
+- `0750-nico-ultimate-shadow-grimoire` — ultimate alternativo — Integrado
 
 ## Integração global VFX
 

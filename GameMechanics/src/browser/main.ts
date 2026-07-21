@@ -2609,6 +2609,9 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     context.restore();
   }
 
+  // Optional lab demo: one validated VFX at a time, cycling through all packs.
+  maybeQueueAnimationLabDemo(animMs);
+
   // Animation-lab VFX stays presentation-only and is painted above world FX.
   drawAnimationLabFx(animMs);
 
