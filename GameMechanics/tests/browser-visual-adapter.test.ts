@@ -272,6 +272,8 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("RANNI_SPIRIT_PRIMARY_ALPHA");
     expect(existsSync(RANNI_SPIRIT_WISP)).toBe(true);
     expect(main).toContain("RANNI_FREEZE_BUILD_MS");
+    expect(main).toMatch(/Math\.floor\(age \/ \(timed\.buildMs \/ frames\.length\)\)/);
+    expect(main).not.toContain("holdFrameIndex");
   });
 
   it("does not tree-walk into legacy original-game asset roots", () => {

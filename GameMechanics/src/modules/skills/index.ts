@@ -522,7 +522,6 @@ function tickChannel(
     if (command && !canCompleteManually) {
       rejections.push(reject(command, "skill-unavailable"));
     }
-    const bombs = ctx.read("bombs").items;
     const intentEntry = findIntent(ctx.read("intent"), entry.competitorId);
     const direction = intentEntry ? activeDirection(intentEntry) : null;
     const attempted = direction
@@ -543,9 +542,6 @@ function tickChannel(
         ...entry,
         channelRemainingMs: remaining,
         projection: attempted,
-        bombEgressKeys: Object.freeze(
-          [...preOverlappingBombKeys(attempted, bombs)].sort(),
-        ),
       }),
       facts,
       rejections,

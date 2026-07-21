@@ -5245,6 +5245,47 @@ describe("Ranni Ice Blink", () => {
     expect(teleported.state.slices.skills.entries[0]!.phase).toBe("cooldown");
   });
 
+  it("rejects a bomb crossed by the projection as a landing destination", () => {
+    const config = ranniDuel("skill-bomb-landing");
+    const program = createDefaultMechanicsProgram();
+    const base = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const body = findLocomotion(base.slices.locomotion, alpha)!.position;
+    const bombTile = { x: tileOf(body).x + 1, y: tileOf(body).y };
+    const bombPosition = tileCenter(bombTile);
+    const draft = cloneDraft(base);
+    draft.slices.bombs = {
+      nextId: 2,
+      items: [{
+        id: 1,
+        ownerId: beta,
+        tile: bombTile,
+        fuseMs: 5_000,
+        flameRange: 2,
+      }],
+    };
+    draft.slices.skills.entries[0] = {
+      competitorId: alpha,
+      skillId: RANNI_ICE_BLINK_SKILL_ID,
+      phase: "channeling",
+      channelRemainingMs: TICK_DURATION_MS * 2,
+      cooldownRemainingMs: 0,
+      projection: { ...bombPosition },
+      bombEgressKeys: [],
+      aimDirection: "right",
+    };
+    let state = program.restore(draft);
+
+    state = program.step(state, { commands: [] }).state;
+    expect(state.slices.skills.entries[0]!.bombEgressKeys).toEqual([]);
+    expect(state.slices.skills.entries[0]!.projection).toEqual(bombPosition);
+
+    const completed = program.step(state, { commands: [] }).state;
+    expect(findLocomotion(completed.slices.locomotion, alpha)!.position).toEqual(body);
+    expect(completed.slices.skills.entries[0]!.phase).toBe("cooldown");
+  });
+
   it("is immune while channeling, vulnerable on completion, and places bombs at the physical body", () => {
     const config = ranniDuel("skill-immunity");
     const program = createDefaultMechanicsProgram();

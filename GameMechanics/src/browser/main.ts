@@ -160,7 +160,7 @@ const DEATH_FRAME_MS = 90;
 const CAST_FRAME_MS = 100;
 /** Full ice-prison frame held for Ranni's physical body during Ice Blink. */
 const RANNI_FROZEN_ULTIMATE_FRAME = 3;
-/** Fast four-frame build-up before the full prison is held. */
+/** Fast six-frame build-up before the full prison is held. */
 const RANNI_FREEZE_BUILD_MS = 240;
 /** Dark enough to remain legible over the arena's pale floor. */
 const RANNI_SPIRIT_PRIMARY_ALPHA = 0.5;
@@ -264,9 +264,7 @@ type TimedChampionAction = Readonly<{
   startMs: number;
   /** Optional kernel-owned duration used to keep presentation in lockstep. */
   durationMs?: number;
-  /** Optional fixed pose held for the whole action instead of cycling frames. */
-  holdFrameIndex?: number;
-  /** Optional entrance animation duration before holding the fixed pose. */
+  /** Optional entrance animation duration before holding the action's last frame. */
   buildMs?: number;
 }>;
 
@@ -1993,14 +1991,12 @@ function timedChampionFrameUrl(
     championActionAnims.delete(competitorId);
     return null;
   }
-  const frameIndex = timed.holdFrameIndex === undefined
-    ? lifecycleFrame
-    : timed.buildMs && age < timed.buildMs
-      ? Math.min(
-          timed.holdFrameIndex,
-          Math.floor(age / (timed.buildMs / (timed.holdFrameIndex + 1))),
-        )
-      : Math.min(frames.length - 1, Math.max(0, timed.holdFrameIndex));
+  const frameIndex = timed.buildMs
+    ? Math.min(
+        frames.length - 1,
+        Math.floor(age / (timed.buildMs / frames.length)),
+      )
+    : lifecycleFrame;
   return frames[frameIndex] ?? null;
 }
 
@@ -2026,7 +2022,6 @@ function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): v
         ...(competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
           ? {
               durationMs: RANNI_CHANNEL_MS,
-              holdFrameIndex: RANNI_FROZEN_ULTIMATE_FRAME,
               buildMs: RANNI_FREEZE_BUILD_MS,
             }
           : {}),
