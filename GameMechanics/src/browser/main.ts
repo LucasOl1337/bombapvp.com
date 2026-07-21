@@ -42,6 +42,7 @@ import {
   getChampionPresentation,
   listChampionPresentations,
   resolveChampionSlug,
+  type ChampAccent,
   type ChampPack,
   type ChampPresentation,
   type Facing,
@@ -154,6 +155,22 @@ const HOOK_PULL_SNARE_MS = 100;
 const HOOK_PULL_DRAG_MS = 250;
 const HOOK_PULL_RELEASE_MS = 50;
 const HOOK_PULL_TOTAL_MS = HOOK_PULL_SNARE_MS + HOOK_PULL_DRAG_MS + HOOK_PULL_RELEASE_MS;
+
+/**
+ * Champion accent → RGB for arena floor plate + sprite glow.
+ * Tuned to pop on light stone tiles (product arena) without washing the sprite.
+ */
+const ACCENT_RGB: Readonly<Record<ChampAccent, string>> = Object.freeze({
+  blue: "56, 217, 245",
+  gold: "232, 188, 72",
+  green: "57, 255, 136",
+  red: "255, 96, 88",
+  orange: "255, 140, 48",
+});
+
+function accentRgb(accent: ChampAccent): string {
+  return ACCENT_RGB[accent];
+}
 
 type SpriteTrimBounds = Readonly<{
   x: number;
@@ -2042,27 +2059,71 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     // Feet sit on body bottom (body center + half extent), matching product anchor.
     // Hitbox is always BODY_HALF_EXTENT — arenaScale is presentation-only.
     const bodyBottom = cy + (BODY_HALF_EXTENT / UNITS_PER_TILE) * TILE_SIZE;
-    const arenaScale = presentationFor(entry.slot).arenaScale;
+    const champ = presentationFor(entry.slot);
+    const arenaScale = champ.arenaScale;
     const spriteHeight = TILE_SIZE * CHAMPION_HEIGHT_TILES * arenaScale;
     const maxSpriteWidth = TILE_SIZE * CHAMPION_MAX_WIDTH_TILES * arenaScale;
+    // Seat ownership (P1/P2) stays cyan/orange; accent drives champion magic color.
     const identity = entry.slot === "control-a" ? "56, 217, 245" : "255, 120, 50";
+    const accent = accentRgb(champ.accent);
+    const aliveAlpha = entry.alive ? 1 : 0.45;
+    // Subtle breathe so idle units feel alive (presentation-only).
+    const pulse = entry.alive ? 0.5 + 0.5 * Math.sin(animMs / 420) : 0;
 
-    // Soft ground contact shadow under feet.
+    // 1) Contact shadow — darker ellipse so feet anchor on light stone.
     context.save();
-    context.fillStyle = "rgba(8, 6, 5, 0.34)";
+    context.fillStyle = `rgba(6, 5, 4, ${0.46 * aliveAlpha})`;
     context.beginPath();
-    context.ellipse(cx, bodyBottom - 1, TILE_SIZE * 0.34, TILE_SIZE * 0.14, 0, 0, Math.PI * 2);
+    context.ellipse(cx, bodyBottom - 1, TILE_SIZE * 0.38, TILE_SIZE * 0.16, 0, 0, Math.PI * 2);
     context.fill();
     context.restore();
 
-    // Identity ring: color-coded filled ellipse marking P1/P2 ownership.
+    // 2) Accent ground plate — spectral platform read (borrowed from dark-arena polish).
+    const plateRx = TILE_SIZE * (0.42 + 0.03 * pulse);
+    const plateRy = TILE_SIZE * (0.18 + 0.012 * pulse);
     context.save();
-    context.fillStyle = `rgb(${identity} / ${entry.alive ? 0.14 : 0.06})`;
+    const plate = context.createRadialGradient(cx, bodyBottom - 1, 1, cx, bodyBottom - 1, plateRx);
+    plate.addColorStop(0, `rgb(${accent} / ${0.32 * aliveAlpha})`);
+    plate.addColorStop(0.55, `rgb(${accent} / ${0.14 * aliveAlpha})`);
+    plate.addColorStop(1, `rgb(${accent} / 0)`);
+    context.fillStyle = plate;
     context.beginPath();
-    context.ellipse(cx, bodyBottom - 1, TILE_SIZE * 0.42, TILE_SIZE * 0.18, 0, 0, Math.PI * 2);
+    context.ellipse(cx, bodyBottom - 1, plateRx, plateRy, 0, 0, Math.PI * 2);
     context.fill();
-    context.strokeStyle = `rgb(${identity} / ${entry.alive ? 0.5 : 0.22})`;
-    context.lineWidth = 1.5;
+    // Additive outer glow so accent plate survives light floor tiles.
+    context.globalCompositeOperation = "lighter";
+    const plateGlow = context.createRadialGradient(
+      cx,
+      bodyBottom - 1,
+      2,
+      cx,
+      bodyBottom - 1,
+      plateRx * 1.2,
+    );
+    plateGlow.addColorStop(0, `rgb(${accent} / ${0.2 * aliveAlpha})`);
+    plateGlow.addColorStop(1, `rgb(${accent} / 0)`);
+    context.fillStyle = plateGlow;
+    context.beginPath();
+    context.ellipse(cx, bodyBottom - 1, plateRx * 1.12, plateRy * 1.3, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+
+    // 3) Identity ownership ring (P1 cyan / P2 orange) — crisp seat marker.
+    context.save();
+    context.fillStyle = `rgb(${identity} / ${entry.alive ? 0.1 + 0.04 * pulse : 0.04})`;
+    context.beginPath();
+    context.ellipse(
+      cx,
+      bodyBottom - 1,
+      TILE_SIZE * (0.44 + 0.02 * pulse),
+      TILE_SIZE * (0.19 + 0.01 * pulse),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+    context.strokeStyle = `rgb(${identity} / ${entry.alive ? 0.72 + 0.14 * pulse : 0.28})`;
+    context.lineWidth = 2;
     context.stroke();
     context.restore();
 
@@ -2077,12 +2138,13 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     }
 
     if (entry.channeling) {
-      // Soft cyan aura while the skill channels.
+      // Soft accent aura while the skill channels (Thresh green, Madara orange, …).
       context.save();
       context.globalCompositeOperation = "lighter";
-      const aura = context.createRadialGradient(cx, cy, 4, cx, cy, TILE_SIZE * 0.7);
-      aura.addColorStop(0, "rgba(120, 220, 255, 0.22)");
-      aura.addColorStop(1, "rgba(120, 220, 255, 0)");
+      const aura = context.createRadialGradient(cx, cy, 4, cx, cy, TILE_SIZE * 0.72);
+      aura.addColorStop(0, `rgb(${accent} / 0.28)`);
+      aura.addColorStop(0.55, `rgb(${accent} / 0.1)`);
+      aura.addColorStop(1, `rgb(${accent} / 0)`);
       context.fillStyle = aura;
       context.fillRect(cx - TILE_SIZE, cy - TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 2);
       context.restore();
@@ -2100,7 +2162,22 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const spriteWidth = Math.min(maxSpriteWidth, spriteHeight * (srcW / srcH));
       const spriteX = cx - spriteWidth * 0.5;
       const spriteY = bodyBottom - spriteHeight + 1;
+
+      // Soft accent silhouette glow — pops spectral sprites on light stone.
+      context.save();
+      if (entry.alive) {
+        context.shadowColor = `rgb(${accent} / ${0.42 + 0.12 * pulse})`;
+        context.shadowBlur = 11 + 5 * pulse;
+      } else {
+        context.shadowColor = "rgba(0, 0, 0, 0.25)";
+        context.shadowBlur = 4;
+      }
       context.drawImage(image, srcX, srcY, srcW, srcH, spriteX, spriteY, spriteWidth, spriteHeight);
+      context.shadowBlur = 0;
+      context.shadowColor = "transparent";
+      // Crisp second pass so glow does not soften pixel edges.
+      context.drawImage(image, srcX, srcY, srcW, srcH, spriteX, spriteY, spriteWidth, spriteHeight);
+      context.restore();
     } else {
       context.fillStyle = entry.slot === "control-a" ? "#38d9f5" : "#ff5a1f";
       context.beginPath();
@@ -2117,13 +2194,16 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const pillHeight = 15;
       const pillX = cx - pillWidth / 2;
       const pillY = bodyBottom - spriteHeight - pillHeight - 3;
-      context.fillStyle = "rgba(10, 12, 18, 0.62)";
+      context.fillStyle = "rgba(8, 10, 16, 0.72)";
       context.beginPath();
       context.roundRect(pillX, pillY, pillWidth, pillHeight, 7);
       context.fill();
-      context.fillStyle = `rgb(${identity} / 0.9)`;
+      // Seat bar + thin accent hairline for champion identity.
+      context.fillStyle = `rgb(${identity} / 0.95)`;
       context.fillRect(pillX + 4, pillY + 3, 2, pillHeight - 6);
-      context.fillStyle = "rgba(240, 244, 252, 0.92)";
+      context.fillStyle = `rgb(${accent} / 0.75)`;
+      context.fillRect(pillX + 7, pillY + 5, 2, pillHeight - 10);
+      context.fillStyle = "rgba(245, 248, 255, 0.95)";
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(label, cx + 2, pillY + pillHeight / 2 + 0.5);

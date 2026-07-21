@@ -552,7 +552,7 @@ button {
   filter: grayscale(0.35);
 }
 
-/* Accent tints from character presentation */
+/* Accent tints from character presentation (matches ACCENT_RGB in main.ts) */
 .lol-hud[data-accent="blue"] .lol-hud__portrait {
   box-shadow: 0 0 0 1px rgb(56 217 245 / 45%), 0 0 14px rgb(56 217 245 / 25%);
 }
@@ -563,7 +563,10 @@ button {
   box-shadow: 0 0 0 1px rgb(212 168 75 / 55%), 0 0 14px rgb(212 168 75 / 22%);
 }
 .lol-hud[data-accent="green"] .lol-hud__portrait {
-  box-shadow: 0 0 0 1px rgb(125 255 168 / 45%), 0 0 14px rgb(34 197 94 / 22%);
+  box-shadow: 0 0 0 1px rgb(57 255 136 / 50%), 0 0 16px rgb(57 255 136 / 28%);
+}
+.lol-hud[data-accent="orange"] .lol-hud__portrait {
+  box-shadow: 0 0 0 1px rgb(255 140 48 / 50%), 0 0 14px rgb(255 140 48 / 24%);
 }
 
 /* ── Character select overlay ──────────────────────────────── */

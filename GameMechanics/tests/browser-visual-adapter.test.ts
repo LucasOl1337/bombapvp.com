@@ -175,6 +175,13 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("BODY_HALF_EXTENT");
     expect(main).toMatch(/drawImage\(\s*image\s*,\s*srcX\s*,\s*srcY\s*,\s*srcW\s*,\s*srcH/);
 
+    // Character presentation polish: accent plate + silhouette glow on light stone.
+    expect(main).toContain("ACCENT_RGB");
+    expect(main).toContain("accentRgb");
+    expect(main).toContain("Accent ground plate");
+    expect(main).toContain("Soft accent silhouette glow");
+    expect(main).toMatch(/shadowBlur/);
+
     // Presentation-only feedback for power-ups and sudden death.
     expect(main).toContain("power-up-revealed");
     expect(main).toContain("power-up-collected");
