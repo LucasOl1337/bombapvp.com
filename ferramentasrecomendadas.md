@@ -2,7 +2,7 @@
 
 Lista de ferramentas e recursos **úteis ao Bomba PvP** que o projeto **ainda não usa** (ou usa só de forma residual). Escrita para orientar prioridade sem obrigar adoção.
 
-**Princípio:** custom = regra de jogo + feeling de champion.  
+**Princípio:** custom = regra de jogo + feeling de champion.
 **Reuso** = conteúdo genérico, pipeline, apresentação, online de transporte, QA e ops.
 
 **Não é objetivo desta lista** substituir o kernel determinístico (`GameMechanics`) por Phaser/Unity/Godot.
@@ -183,16 +183,16 @@ NÃO TOCAR    → GameMechanics kernel (só adaptadores consomem libs)
 
 ## Top 10 de adoção sugerida
 
-1. Pack SFX + Howler — feeling imediato  
-2. Atlas de sprites (TexturePacker ou script Sharp) — performance e sanidade  
-3. Kenney/itch para arena/UI placeholders unificados  
-4. GitHub Actions = `npm run check`  
-5. Playwright smoke da arena  
-6. zod/valibot no `restore` / match config  
-7. Durable Object + WebSocket (PartyKit se quiserem DX)  
-8. msgpack nos frames de rede  
-9. Joystick mobile (nipplejs)  
-10. Sentry + analytics leve  
+1. Pack SFX + Howler — feeling imediato
+2. Atlas de sprites (TexturePacker ou script Sharp) — performance e sanidade
+3. Kenney/itch para arena/UI placeholders unificados
+4. GitHub Actions = `npm run check`
+5. Playwright smoke da arena
+6. zod/valibot no `restore` / match config
+7. Durable Object + WebSocket (PartyKit se quiserem DX)
+8. msgpack nos frames de rede
+9. Joystick mobile (nipplejs)
+10. Sentry + analytics leve
 
 ---
 
