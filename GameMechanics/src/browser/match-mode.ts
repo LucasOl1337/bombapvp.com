@@ -14,7 +14,7 @@ export const BROWSER_GAME_MODES = ["local-duel", "bot-training", "bot-lab"] as c
 export type BrowserGameMode = (typeof BROWSER_GAME_MODES)[number];
 
 export const DEFAULT_P1_SLUG: ChampionSlug = "ranni";
-export const DEFAULT_P2_SLUG: ChampionSlug = "nico";
+export const DEFAULT_P2_SLUG: ChampionSlug = "killer-bee";
 export const DEFAULT_LAB_BOT_PROFILE_IDS = Object.freeze([
   "bomb",
   "pingo",

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { ChampionSlug } from "../../Champions/membership.ts";
 import {
   botProfileForPlayer,
   createBrowserMatchConfiguration,
@@ -9,14 +10,15 @@ import {
 } from "../src/browser/match-mode.ts";
 
 describe("browser match mode boundary", () => {
-  it("keeps the existing local duel as the default landing mode", () => {
-    const launch = parseBrowserLaunchState("?p1=katarina&p2=thresh");
+  it("keeps the existing local duel and canonical roster defaults", () => {
+    const launch = parseBrowserLaunchState("");
+    const expectedSlugs = ["ranni", "killer-bee"] satisfies readonly ChampionSlug[];
 
     expect(launch.configuration).toEqual({
       mode: "local-duel",
       players: [
-        { control: "human", championSlug: "katarina" },
-        { control: "human", championSlug: "thresh" },
+        { control: "human", championSlug: expectedSlugs[0] },
+        { control: "human", championSlug: expectedSlugs[1] },
       ],
     });
     expect(launch.skipSelection).toBe(false);
@@ -25,16 +27,16 @@ describe("browser match mode boundary", () => {
   it.each(["bomb", "pingo", "v1", "v2", "v3"])(
     "turns the documented bot=%s link into typed training and applies that profile",
     (profileId) => {
-      const launch = parseBrowserLaunchState(`?p1=nico&p2=madara&bot=${profileId}`);
+      const launch = parseBrowserLaunchState(`?p1=ranni&p2=thresh&bot=${profileId}`);
 
       expect(launch.configuration.mode).toBe("bot-training");
       expect(launch.configuration.players[0]).toEqual({
         control: "human",
-        championSlug: "nico",
+        championSlug: "ranni",
       });
       expect(launch.configuration.players[1]).toEqual({
         control: "bot",
-        championSlug: "madara",
+        championSlug: "thresh",
         profileId,
       });
       expect(botProfileForPlayer(launch.configuration, 1)?.id).toBe(profileId);
@@ -72,8 +74,8 @@ describe("browser match mode boundary", () => {
   it("round-trips typed mode configuration while preserving unrelated diagnostics", () => {
     const configuration = createBrowserMatchConfiguration({
       mode: "bot-lab",
-      champion1: "nico",
-      champion2: "mirelle",
+      champion1: "crocodilo-arcano",
+      champion2: "thresh",
       bot1: "v1",
       bot2: "v2",
     });
