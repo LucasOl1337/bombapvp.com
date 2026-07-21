@@ -18,7 +18,8 @@
     "@types/node": "^22.20.1",
     "typescript": "5.9.2",
     "vite": "7.3.6",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "wrangler": "4.111.0"
   },
   "dependencies": {
     "@fontsource/inter": "5.2.8",
