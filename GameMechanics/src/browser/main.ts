@@ -1457,6 +1457,29 @@ function detectHookLaunches(snapshot: GameSnapshot, nowMs: number): void {
       hit,
       startMs: nowMs,
     });
+
+    // On hit, find the victim who was teleported and create a pull animation.
+    if (hit) {
+      for (const other of snapshot.competitors) {
+        if (other.id === competitor.id || !other.alive) continue;
+        const prevPose = lastCompetitorPose.get(other.id);
+        if (!prevPose) continue;
+        const jumpTiles = Math.hypot(
+          other.position.x - prevPose.x,
+          other.position.y - prevPose.y,
+        ) / UNITS_PER_TILE;
+        if (jumpTiles >= BLINK_JUMP_TILES) {
+          hookPullFx.push({
+            victimId: other.id,
+            fromPos: { x: prevPose.x, y: prevPose.y },
+            toPos: { x: other.position.x, y: other.position.y },
+            threshTile: originTile,
+            startMs: nowMs,
+          });
+        }
+      }
+    }
+
     // Clean up captured state.
     lastChannelAim.delete(competitor.id);
     lastChannelOrigin.delete(competitor.id);
@@ -1917,21 +1940,13 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
         competitor.position.y - previousPose.y,
       ) / UNITS_PER_TILE;
       if (jumpTiles >= BLINK_JUMP_TILES) {
-        // Check if this teleport was caused by a Thresh hook hit.
-        const hookFx = hookProjectileFx.find(
-          (fx) => fx.hit && fx.ownerId !== competitor.id
-            && animMs - fx.startMs < HOOK_TOTAL_MS,
+        // Skip if this teleport is already handled by a Thresh hook pull
+        // (detected in detectHookLaunches to avoid double-firing).
+        const alreadyPulled = hookPullFx.some(
+          (fx) => fx.victimId === competitor.id
+            && animMs - fx.startMs < HOOK_PULL_TOTAL_MS,
         );
-        if (hookFx) {
-          // Thresh hook pull — animate victim sliding along the chain.
-          hookPullFx.push({
-            victimId: competitor.id,
-            fromPos: { x: previousPose.x, y: previousPose.y },
-            toPos: { x: competitor.position.x, y: competitor.position.y },
-            threshTile: hookFx.originTile,
-            startMs: animMs,
-          });
-        } else {
+        if (!alreadyPulled) {
           blinkTrailFx.push({
             from: { x: previousPose.x, y: previousPose.y },
             to: { x: competitor.position.x, y: competitor.position.y },
@@ -1971,16 +1986,19 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     if (pullFx) {
       const pullAge = animMs - pullFx.startMs;
       if (pullAge < HOOK_PULL_SNARE_MS) {
-        // Snare phase: victim stays at origin.
+        // Snare phase: victim stays at origin (LoL snare hold).
         renderPos = pullFx.fromPos;
       } else if (pullAge < HOOK_PULL_SNARE_MS + HOOK_PULL_DRAG_MS) {
-        // Drag phase: interpolate from origin to destination.
-        const dragT = (pullAge - HOOK_PULL_SNARE_MS) / HOOK_PULL_DRAG_MS;
+        // Drag phase: ease-out cubic with slight overshoot (LoL pull bounce).
+        const t = (pullAge - HOOK_PULL_SNARE_MS) / HOOK_PULL_DRAG_MS;
+        const eased = 1 - Math.pow(1 - t, 3);
+        const overshoot = t > 0.8 ? Math.sin((t - 0.8) / 0.2 * Math.PI) * 0.06 : 0;
+        const finalT = Math.min(1.05, eased + overshoot);
         const dx = wrapDelta(pullFx.toPos.x, pullFx.fromPos.x, ARENA_WIDTH * UNITS_PER_TILE);
         const dy = wrapDelta(pullFx.toPos.y, pullFx.fromPos.y, ARENA_HEIGHT * UNITS_PER_TILE);
         renderPos = {
-          x: pullFx.fromPos.x + dx * dragT,
-          y: pullFx.fromPos.y + dy * dragT,
+          x: pullFx.fromPos.x + dx * finalT,
+          y: pullFx.fromPos.y + dy * finalT,
         };
       }
       // Release phase: use snapshot position (already at destination).
@@ -2237,7 +2255,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       hookPullFx.splice(i, 1);
       continue;
     }
-    // Find the Thresh who owns this pull (any living Thresh works for visuals).
+    // Find the Thresh who owns this pull.
     const threshSlot = slotForCompetitor(
       hookProjectileFx.find((h) => h.hit && animMs - h.startMs < HOOK_TOTAL_MS + HOOK_PULL_TOTAL_MS)?.ownerId
         ?? fx.victimId,
@@ -2250,42 +2268,74 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     const ox = fx.threshTile.x * TILE_SIZE + TILE_SIZE / 2;
     const oy = fx.threshTile.y * TILE_SIZE + TILE_SIZE / 2;
 
-    // Victim position: interpolated during snare+drag, final during release.
+    // ── Victim position with LoL-style easing ──
+    const fromPx = (fx.fromPos.x / UNITS_PER_TILE) * TILE_SIZE;
+    const fromPy = (fx.fromPos.y / UNITS_PER_TILE) * TILE_SIZE;
+    const toPx = (fx.toPos.x / UNITS_PER_TILE) * TILE_SIZE;
+    const toPy = (fx.toPos.y / UNITS_PER_TILE) * TILE_SIZE;
+    const spanX = ARENA_WIDTH * UNITS_PER_TILE;
+    const spanY = ARENA_HEIGHT * UNITS_PER_TILE;
+    const rawDx = wrapDelta(fx.toPos.x, fx.fromPos.x, spanX);
+    const rawDy = wrapDelta(fx.toPos.y, fx.fromPos.y, spanY);
+
     let vx: number, vy: number;
     if (age < HOOK_PULL_SNARE_MS) {
-      vx = (fx.fromPos.x / UNITS_PER_TILE) * TILE_SIZE;
-      vy = (fx.fromPos.y / UNITS_PER_TILE) * TILE_SIZE;
+      // Snare: victim trembles in place (LoL snare shake).
+      const tremble = Math.sin(animMs / 30) * 2.5;
+      vx = fromPx + tremble;
+      vy = fromPy + tremble * 0.5;
     } else if (age < HOOK_PULL_SNARE_MS + HOOK_PULL_DRAG_MS) {
-      const dragT = (age - HOOK_PULL_SNARE_MS) / HOOK_PULL_DRAG_MS;
-      const dx = wrapDelta(fx.toPos.x, fx.fromPos.x, ARENA_WIDTH * UNITS_PER_TILE);
-      const dy = wrapDelta(fx.toPos.y, fx.fromPos.y, ARENA_HEIGHT * UNITS_PER_TILE);
-      vx = ((fx.fromPos.x + dx * dragT) / UNITS_PER_TILE) * TILE_SIZE;
-      vy = ((fx.fromPos.y + dy * dragT) / UNITS_PER_TILE) * TILE_SIZE;
+      // Drag: ease-out cubic with slight overshoot at the end (LoL pull bounce).
+      const t = (age - HOOK_PULL_SNARE_MS) / HOOK_PULL_DRAG_MS;
+      const eased = 1 - Math.pow(1 - t, 3);
+      const overshoot = t > 0.8 ? Math.sin((t - 0.8) / 0.2 * Math.PI) * 0.06 : 0;
+      const finalT = Math.min(1.05, eased + overshoot);
+      vx = fromPx + (rawDx / UNITS_PER_TILE) * TILE_SIZE * finalT;
+      vy = fromPy + (rawDy / UNITS_PER_TILE) * TILE_SIZE * finalT;
     } else {
-      vx = (fx.toPos.x / UNITS_PER_TILE) * TILE_SIZE;
-      vy = (fx.toPos.y / UNITS_PER_TILE) * TILE_SIZE;
+      vx = toPx;
+      vy = toPy;
     }
 
     // Fade out during release.
     const releaseT = Math.max(0, (age - HOOK_PULL_SNARE_MS - HOOK_PULL_DRAG_MS) / HOOK_PULL_RELEASE_MS);
     const alpha = releaseT > 0 ? 1 - releaseT : 1;
 
-    // Draw chain links from Thresh to victim.
+    // ── Draw spectral chain (LoL style: bright core + links) ──
     const chainDx = vx - ox;
     const chainDy = vy - oy;
     const chainDist = Math.hypot(chainDx, chainDy);
     if (chainDist > 4) {
-      const linkSpacing = TILE_SIZE * 0.35;
-      const numLinks = Math.max(2, Math.floor(chainDist / linkSpacing));
-      const linkSize = TILE_SIZE * 0.5;
       const chainAngle = Math.atan2(chainDy, chainDx);
+
+      // Layer 1: glowing green energy line (additive, LoL spectral glow).
+      context.save();
+      context.globalAlpha = alpha * 0.6;
+      context.globalCompositeOperation = "lighter";
+      context.strokeStyle = "rgba(57, 255, 136, 0.7)";
+      context.lineWidth = 3.5;
+      context.lineCap = "round";
+      context.shadowColor = "rgba(57, 255, 136, 0.8)";
+      context.shadowBlur = 8;
+      context.beginPath();
+      context.moveTo(ox, oy);
+      context.lineTo(vx, vy);
+      context.stroke();
+      context.restore();
+
+      // Layer 2: chain link sprites along the line.
+      const linkSpacing = TILE_SIZE * 0.32;
+      const numLinks = Math.max(2, Math.floor(chainDist / linkSpacing));
+      const linkSize = TILE_SIZE * 0.55;
       context.save();
       context.globalAlpha = alpha;
       for (let li = 1; li <= numLinks; li += 1) {
         const lt = li / (numLinks + 1);
         const lx = ox + chainDx * lt;
         const ly = oy + chainDy * lt;
-        const pulse = 0.85 + 0.15 * Math.sin(animMs / 80 + li * 1.2);
+        // Links pulse outward from Thresh (LoL chain energy flow).
+        const pulsePhase = (animMs / 100 + li * 0.8) % (Math.PI * 2);
+        const pulse = 0.8 + 0.2 * Math.sin(pulsePhase);
         const ls = linkSize * pulse;
         context.save();
         context.translate(lx, ly);
@@ -2296,17 +2346,39 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       context.restore();
     }
 
-    // Snare aura around victim during pull.
+    // ── Snare effect on victim (LoL: green flash + chains wrapping) ──
     if (age < HOOK_PULL_SNARE_MS + HOOK_PULL_DRAG_MS) {
+      // Bright flash during snare phase.
+      const snareIntensity = age < HOOK_PULL_SNARE_MS
+        ? 1 - (age / HOOK_PULL_SNARE_MS) * 0.3
+        : 0.7 - ((age - HOOK_PULL_SNARE_MS) / HOOK_PULL_DRAG_MS) * 0.5;
       context.save();
-      context.globalAlpha = alpha * 0.35;
+      context.globalAlpha = alpha * snareIntensity * 0.5;
       context.globalCompositeOperation = "lighter";
-      const auraR = TILE_SIZE * (0.4 + 0.1 * Math.sin(animMs / 100));
-      const aura = context.createRadialGradient(vx, vy, 2, vx, vy, auraR);
-      aura.addColorStop(0, "rgba(57, 255, 136, 0.5)");
-      aura.addColorStop(1, "rgba(57, 255, 136, 0)");
-      context.fillStyle = aura;
-      context.fillRect(vx - auraR, vy - auraR, auraR * 2, auraR * 2);
+      const flashR = TILE_SIZE * (0.5 + 0.15 * Math.sin(animMs / 60));
+      const flash = context.createRadialGradient(vx, vy, 2, vx, vy, flashR);
+      flash.addColorStop(0, "rgba(180, 255, 210, 0.8)");
+      flash.addColorStop(0.4, "rgba(57, 255, 136, 0.4)");
+      flash.addColorStop(1, "rgba(57, 255, 136, 0)");
+      context.fillStyle = flash;
+      context.fillRect(vx - flashR, vy - flashR, flashR * 2, flashR * 2);
+      context.restore();
+
+      // Chain wrap rings around victim (2 orbiting links).
+      context.save();
+      context.globalAlpha = alpha * snareIntensity * 0.7;
+      const wrapR = TILE_SIZE * 0.45;
+      for (let w = 0; w < 2; w += 1) {
+        const wAngle = animMs / 150 + w * Math.PI;
+        const wx = vx + Math.cos(wAngle) * wrapR;
+        const wy = vy + Math.sin(wAngle) * wrapR;
+        const wSize = TILE_SIZE * 0.35;
+        context.save();
+        context.translate(wx, wy);
+        context.rotate(wAngle + Math.PI / 2);
+        drawImageUrl(context, hookAssets.chainLink, -wSize / 2, -wSize / 2, wSize, wSize);
+        context.restore();
+      }
       context.restore();
     }
   }
