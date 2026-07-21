@@ -4,31 +4,24 @@
 
 | Caminho | Conteudo |
 | --- | --- |
-| `src/app/` | Launcher: estado, catalogo e UI. |
-| `src/launcher.css` | Design system responsivo e componentes visuais exclusivos da pagina inicial. |
-| `src/styles.css` | Estilos compartilhados das telas internas e primitives gerais. |
-| `src/matches/` | Contrato de launch request e adaptador de URL. |
-| `src/lab/` | Cliente, runtime e telemetria do Laboratorio. |
-| `src/original-game/` | Motor, bots e regras genericas da arena. |
-| `GameMechanics/` | Reconstrucao paralela isolada: simulacao, browser adapter, assets, testes e plano de migracao. |
-| `Champions/` | Modulos verticais e assets privados dos personagens. |
-| `game-assets/` | Assets compartilhados tipados (nao pertencem a um Champion). |
-| `public/Assets/Characters/Animations/default-players/` | Sprites genericos de fallback do engine. |
-| `arena/` | HTML isolado da gameplay. |
-| `lab-broker/` | Broker Node local do Lab (chaves ficam aqui, nunca no browser). |
-| `worker/` | Worker Cloudflare que faz proxy do Lab. |
-| `tests/` | Contratos, UI e gates (ver `vitest.config.ts`). |
-| `vite.config.ts`, `wrangler.jsonc` | Build multipagina e publicacao Cloudflare. |
+| `GameMechanics/src/` | Unica engine executavel: contratos, kernel, regras, skills, bots e adaptador de browser. |
+| `GameMechanics/content/` | Ponte explicita entre a engine e o conteudo canonico preservado. |
+| `GameMechanics/assets/` | Assets compartilhados da arena, gameplay, HUD, marca e audio. |
+| `GameMechanics/tests/` | Contratos e testes deterministas da engine. |
+| `Champions/` | Elenco canonico, identidades estaveis, definicoes, apresentacao, perfis de bots e assets finais. |
+| `index.html` | Entrada principal que carrega diretamente a GameMechanics. |
+| `GameMechanics/index.html` | Entrada multipagina equivalente para desenvolvimento e compatibilidade. |
+| `public/` | Favicons e metadados estaticos do site. |
+
+Nao existe segunda engine, launcher legado, Lab, runtime online ou Worker neste tree.
 
 ## Quando ler
 
 | Documento | Condicao |
 | --- | --- |
-| `README.md` | SOMENTE ao chegar sem contexto do produto ou da stack. |
-| `docs/gameplay.md` | SOMENTE ao alterar launcher, arena, bots, Lab ou contrato de URL. |
-| `docs/sprites.md` | SOMENTE ao criar, regenerar ou plugar personagem (sprites, alpha, plant, roster). |
-| `docs/release.md` | SOMENTE ao alterar build, dominios ou publicacao. |
-| `Champions/README.md` | SOMENTE ao mexer no modulo vertical de personagem. |
-| `game-assets/README.md` | SOMENTE ao adicionar asset compartilhado. |
-| `DocsDev/` | SOMENTE consulta historica pontual; nao e fonte de verdade. |
-| `DocsDev/arquivados/` | NUNCA leia. |
+| `README.md` | Ao chegar sem contexto do produto ou da stack. |
+| `docs/gameplay.md` | Ao alterar arena, bots, controles ou contrato de URL. |
+| `docs/sprites.md` | Ao criar, regenerar ou plugar Champion. |
+| `docs/release.md` | Ao alterar build, dominios ou publicacao. |
+| `Champions/README.md` | Ao alterar o conteudo canonico de Champion. |
+| `GameMechanics/ARCHITECTURE.md` | Ao alterar ownership, kernel ou fronteiras da engine. |

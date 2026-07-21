@@ -7,6 +7,7 @@ export const CHAMPION_ANIMATIONS = [
   "cast",
   "attack",
   "death",
+  "ultimate",
 ] as const;
 export type ChampionDirection = (typeof CHAMPION_DIRECTIONS)[number];
 export type ChampionAnimation = (typeof CHAMPION_ANIMATIONS)[number];
@@ -60,7 +61,7 @@ export function createChampionAssets(
       continue;
     }
     const m =
-      /^(idle|walk|run|cast|attack|death)-(north|south|west|east)-(\d+)\.png$/.exec(
+      /^(idle|walk|run|cast|attack|death|ultimate)-(north|south|west|east)-(\d+)\.png$/.exec(
         f,
       );
     if (m && !disabledAnimations.includes(m[1] as ChampionAnimation)) {

@@ -15,5 +15,10 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["src/app", "src/main.ts", "GameMechanics", "tests"]
+  "include": [
+    "GameMechanics/src",
+    "GameMechanics/content",
+    "GameMechanics/tests",
+    "Champions"
+  ]
 }

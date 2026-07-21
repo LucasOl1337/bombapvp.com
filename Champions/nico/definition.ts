@@ -1,6 +1,6 @@
 import type { CharacterDefinition } from "../contracts";
 import { CHAMPION_MEMBERSHIP } from "../membership";
-import { deepFreeze } from "../../src/shared/deep-freeze";
+import { deepFreeze } from "../deep-freeze.ts";
 import portraitUrl from "./assets/portrait.png?url";
 export const NICO_CHARACTER_ID = CHAMPION_MEMBERSHIP.nico.characterId,
   NICO_SKILL_ID = CHAMPION_MEMBERSHIP.nico.skillId,

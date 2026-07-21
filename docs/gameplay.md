@@ -1,42 +1,41 @@
-# Gameplay e Lab
+# Gameplay
 
-SOMENTE ao alterar launcher, arena, bots, Lab ou contrato de URL.
+SOMENTE ao alterar arena, bots, controles ou contrato de URL.
 
 ## Entrada e URL
 
-- `src/main.ts` monta o launcher. Em `/arena/`, faca navegacao de documento completo (isola o ciclo de vida do jogo).
-- `arena/index.html` carrega `src/original-game/main.ts` → resolve `LaunchRequest` → `GameApp`.
-- `/GameMechanics/` carrega o quarto modo isolado. Ele nao usa `LaunchRequest`, `GameApp`, `Champions` nem assets compartilhados.
-- Contrato: `/arena/?mode=<modo>&character=<uuid>`.
-  - `training` → 1 bot, modo `classic`.
-  - `continuous` → 3 bots, modo `endless`.
-  - `lab` → 2 a 4 competidores contiguos (`model1`…`model4`).
-- Offline: `bot=bomb|pingo|v1|v2|v3`. Defaults se omitido: Bomb no treino, V1 na sala continua (codec omite o param nesses defaults). Lab local: `bot-bomb`, `bot-pingo`, `bot-v1`…`bot-v3`.
+A raiz (`index.html`) e `/GameMechanics/` carregam `GameMechanics/src/browser/main.ts`. Nao existe launcher ou segunda engine.
 
-## Ownership de codigo
+Parametros aceitos:
+
+- `p1=<slug|uuid>` — Champion do P1.
+- `p2=<slug|uuid>` — Champion do P2.
+- `char1=<slug|uuid>` e `char2=<slug|uuid>` — aliases de compatibilidade.
+- `bot=bomb|pingo|v1|v2|v3` — ativa P2 bot e escolhe o perfil canonico; o Champion associado e selecionado quando P2 nao foi informado explicitamente.
+- `control2=bot` — ativa P2 bot com o perfil padrao.
+- `p2=bot` e `bot=1` — aliases legados; resolvem para o perfil padrao.
+- `skipSelect=1` — inicia sem abrir a selecao de Champions.
+- `dev=1` — abre diagnosticos do adaptador.
+
+Os perfis preservados sao Bomb, Pingo, V1, V2 e V3. Sua identidade e associacao com Champion usam slug, UUID e skill ID estaveis em `Champions/bots.ts`, nunca indice numerico de roster.
+
+## Ownership
 
 | Area | Onde |
 | --- | --- |
-| Ciclo de rodada / placar / termino | `src/original-game/Engine/match-cycle.ts` |
-| Topologia de explosao | `src/original-game/Engine/bomb-explosions.ts` |
-| Power-ups | `src/original-game/Gameplay/powerups.ts` |
-| Policies de bot | `bot-contracts.ts` / `bot-runtime.ts` + catalogs |
-| Reconstrucao paralela / quarto modo | `GameMechanics/` — ver `GameMechanics/ARCHITECTURE.md` |
-| Personagens | modulo vertical em `Champions/<slug>/` — ver `Champions/README.md` |
-| Assets compartilhados | `game-assets/` via `game-assets/index.ts` |
-| Fallback generico de sprite | `public/Assets/Characters/Animations/default-players/` |
+| Ciclo competitivo, explosoes, locomocao, power-ups e pressao | `GameMechanics/src/` |
+| Skills executaveis | `GameMechanics/src/modules/skills/` |
+| Bot deterministico e adaptacao para comandos | `GameMechanics/src/bots/` |
+| Identidade canonica dos bots | `Champions/bots.ts` |
+| Elenco, definicoes e apresentacao | `Champions/` |
+| Assets compartilhados | `GameMechanics/assets/` |
+| Adaptador jogavel | `GameMechanics/src/browser/` |
+| Testes | `GameMechanics/tests/` |
 
-Nao mantenha segunda implementacao de regras para testes, bots ou Lab: `GameApp` projeta o autoritativo.
+## Controles locais
 
-## Laboratorio
+- P1: `WASD`, `Q` para bomba e `Espaco`/`R` para skill.
+- P2 humano: setas, `O` para bomba e `I` para skill.
+- `Esc`: pausa; `T`: reinicia; `M`: som.
 
-- Browser so fala com `/api/lab/models` e `/api/lab/decision` (Worker → broker Node local → 9Router). Chaves e segredo interno nunca no navegador.
-- Local: `npm run lab:broker` e `npm run lab:tunnel`.
-- Durante partida lab: `window.get_lab_telemetry()` devolve snapshot JSON de leitura.
-- 1 request em voo por competidor remoto; lane libera ao abortar/encerrar rodada; respostas obsoletas descartadas. Reflexo local de fuga nao cria bomba/detonacao/skill.
-- Cada decisao carrega `requestId` ecoado; cliente rejeita eco errado. Erros publicos: `status`, `code`, `requestId`, `Retry-After` (teto local 30s).
-
-## Gates de bot (promocao)
-
-- V3: gate documentado no teste exige 10 vitorias exclusivas consecutivas em arena simetrica (V1+V2+V3 mesma personagem). Floor de compatibilidade no teste pode ser menor — promocao e o gate de 10, nao o floor.
-- V2: gate headless de melhoria estrita vs V1; nao promova sem reconquistar o criterio no motor atual.
+A simulacao avanca em ticks fixos de 20 ms. Bots observam somente o snapshot congelado e produzem `GameCommand[]`; nao recebem acesso privilegiado ao kernel.

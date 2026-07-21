@@ -1,4 +1,9 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["GameMechanics/src", "GameMechanics/tests"]
+  "include": [
+    "GameMechanics/src",
+    "GameMechanics/content",
+    "GameMechanics/tests",
+    "Champions"
+  ]
 }

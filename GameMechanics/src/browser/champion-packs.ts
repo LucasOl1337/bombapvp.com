@@ -123,7 +123,11 @@ function packFromAssets(
     static: mapFacingRecord(assets.staticSprites),
     idle: mapFacingFrames(assets.animations.idle),
     walk: mapFacingFrames(walkSource),
-    cast: mapFacingFrames(assets.animations.cast),
+    cast: mapFacingFrames(
+      assets.animations.ultimate.down.length > 0
+        ? assets.animations.ultimate
+        : assets.animations.cast,
+    ),
     death: mapFacingFrames(assets.animations.death),
   });
 }

@@ -1,19 +1,23 @@
 # Bomba PvP
 
-Jogo de arena para navegador (plant-and-blast), reconstrucao ativa sobre a gameplay original.
+Jogo competitivo de arena para navegador, com simulacao deterministica em TypeScript.
 
-**Status:** produto vivo em producao no Cloudflare.
+`GameMechanics/` e a unica engine executavel do repositorio. `Champions/` mantem o elenco canonico, identidades, metadados de apresentacao, perfis de bots e assets finais.
 
-**Stack:** TypeScript, Vite, Vitest, Cloudflare Workers (Static Assets + Worker para o Lab).
+**Stack:** TypeScript, Vite e Vitest.
 
-**Dominios:** `bombapvp.com` (PT-BR) e `bombpvp.com` (EN) — mesmo deploy.
+**Dominios:** `bombapvp.com` e `bombpvp.com` — mesmo build.
 
-Comandos do dia a dia:
+## Comandos
 
 ```text
-npm run dev          # Vite local
-npm run check        # typecheck + testes + build
-npm run lab:broker   # broker local do Laboratorio
+npm run dev        # Vite local
+npm run typecheck  # contratos TypeScript
+npm test           # testes da GameMechanics
+npm run build      # build de producao
+npm run check      # typecheck + testes + build
 ```
+
+A entrada raiz e `index.html`; o adaptador jogavel esta em `GameMechanics/src/browser/main.ts`.
 
 Roteamento de leitura: `INDEX.md`.

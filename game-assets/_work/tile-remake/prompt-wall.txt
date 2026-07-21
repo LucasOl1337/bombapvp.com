@@ -1,8 +1,0 @@
-You have an `image_gen` tool. If a `game-tilesets` skill doc is readable in your environment, read it first and follow its guidance.
-
-Generate ONE image with image_gen and save it as PNG to C:/projetos/bombpvp/game-assets/_work/tile-remake/src-wall.png (convert the session JPG to PNG with Pillow, keep full resolution).
-
-Image prompt to use (1:1):
-"Top-down orthographic view of a SINGLE square dark stone block for a 2D Bomberman-like arena, hand-painted stylized game art: dark charcoal basalt stone with subtle blue-gray painterly highlights, a softly beveled raised edge around the block (about 8 percent of the width), slightly lighter bevel catch-light on the top and left edges, slightly darker bevel shadow on the bottom and right edges, the flat center face has subtle chiseled stone texture and a few fine cracks, the block fills the ENTIRE frame edge to edge, centered, square, NO background visible, NO floor around it, NO perspective tilt, NO vignette, crisp painterly detail, premium mobile game asset."
-
-Rules: exactly ONE block filling the whole frame; dark charcoal family (#2a3038 base, lighter bevels); keep lighting subtle. Report the final file path and dimensions.

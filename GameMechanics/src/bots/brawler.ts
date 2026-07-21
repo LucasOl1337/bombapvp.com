@@ -38,8 +38,9 @@ import type {
   TileCoord,
 } from "../contracts.ts";
 import type { BotPrng } from "./prng.ts";
+import type { BotProfile } from "./catalog.ts";
 
-const BOMB_COOLDOWN_TICKS = 12;
+const DEFAULT_BOMB_COOLDOWN_TICKS = 12;
 
 export type BotIntent =
   | Readonly<{ kind: "idle" }>
@@ -55,10 +56,17 @@ export type BotMemory = {
   cooldownTicks: number;
   retreat: Direction | null;
   roundNumber: number;
+  liveTicks: number;
 };
 
 export function createBotMemory(): BotMemory {
-  return { pressed: null, cooldownTicks: 0, retreat: null, roundNumber: 0 };
+  return {
+    pressed: null,
+    cooldownTicks: 0,
+    retreat: null,
+    roundNumber: 0,
+    liveTicks: 0,
+  };
 }
 
 type DangerWindow = Readonly<{ startsMs: number; endsMs: number }>;
@@ -475,13 +483,16 @@ export function decideBot(
   seatId: SeatId,
   prng: BotPrng,
   memory: BotMemory,
+  profile?: BotProfile,
 ): BotDecision {
   if (memory.roundNumber !== snapshot.roundNumber) {
     memory.roundNumber = snapshot.roundNumber;
     memory.pressed = null;
     memory.retreat = null;
     memory.cooldownTicks = 0;
+    memory.liveTicks = 0;
   }
+  memory.liveTicks += 1;
   if (memory.cooldownTicks > 0) memory.cooldownTicks -= 1;
 
   const self = snapshot.competitors.find((c) => c.seatId === seatId);
@@ -561,7 +572,8 @@ export function decideBot(
       // next kernel tick, so wait for observed zero velocity before committing.
       if (self.velocity.x !== 0 || self.velocity.y !== 0) return IDLE_DECISION;
       if (!retreat) return IDLE_DECISION;
-      memory.cooldownTicks = BOMB_COOLDOWN_TICKS;
+      memory.cooldownTicks =
+        profile?.tuning.bombCooldownTicks ?? DEFAULT_BOMB_COOLDOWN_TICKS;
       memory.retreat = retreat;
       return Object.freeze({
         intent: { kind: "move" as const, direction: retreat },
@@ -579,8 +591,10 @@ export function decideBot(
     if (approach) return jitteredMove(grid, here, approach, prng);
   }
 
-  const toCrate = bfsStep(grid, here, (tile) => adjacentCrate(grid, tile), false);
-  if (toCrate) return jitteredMove(grid, here, toCrate, prng);
+  if (profile?.tuning.pursueCrates ?? true) {
+    const toCrate = bfsStep(grid, here, (tile) => adjacentCrate(grid, tile), false);
+    if (toCrate) return jitteredMove(grid, here, toCrate, prng);
+  }
 
   return IDLE_DECISION;
 }
@@ -625,6 +639,25 @@ export function driveBot(
   competitorId: CompetitorId,
   prng: BotPrng,
   memory: BotMemory,
+  profile?: BotProfile,
 ): readonly GameCommand[] {
-  return translateDecision(decideBot(snapshot, seatId, prng, memory), competitorId, memory);
+  const commands = [
+    ...translateDecision(
+      decideBot(snapshot, seatId, prng, memory, profile),
+      competitorId,
+      memory,
+    ),
+  ];
+  const cadence = profile?.tuning.useSkillEveryTicks ?? 0;
+  const self = snapshot.competitors.find(
+    (competitor) => competitor.id === competitorId,
+  );
+  if (
+    cadence > 0
+    && memory.liveTicks % cadence === 0
+    && self?.skill?.phase === "idle"
+  ) {
+    commands.push({ type: "use-skill", competitorId });
+  }
+  return Object.freeze(commands);
 }

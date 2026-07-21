@@ -1,8 +1,0 @@
-You have an `image_gen` tool. If a `game-tilesets` skill doc is readable in your environment, read it first and follow its guidance.
-
-Generate ONE image with image_gen and save it as PNG to C:/projetos/bombpvp/game-assets/_work/tile-remake/src-floor.png (convert the session JPG to PNG with Pillow, keep full resolution).
-
-Image prompt to use (1:1, texture):
-"Seamless tileable game texture, top-down orthographic view, hand-painted stylized 2D game art in the style of a premium mobile Bomberman-like arena: warm light limestone cobblestone floor, LARGE rounded irregular cobblestones (about 5 to 6 stones across the full width), soft hand-painted shading on each stone, thin warm taupe grout lines, muted warm beige-cream palette centered on #d8d0c2, gentle variation between stones, perfectly even ambient lighting, NO directional shadows, NO objects, NO vignette, NO border or frame, flat edge-to-edge texture only, crisp painterly detail."
-
-Rules: texture must fill the whole frame edge to edge; stones must be large (NOT small pebbles); keep the palette warm cream, not pink. Report the final file path and dimensions.

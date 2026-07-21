@@ -26,7 +26,7 @@ export type CharacterDefinition = Readonly<{
   roster: Readonly<{ order: number; defaultSlot?: CharacterDefaultSlot }>;
   presentation: Readonly<{
     portraitPath: string;
-    accent: "blue" | "gold" | "green" | "red";
+    accent: "blue" | "gold" | "green" | "red" | "orange";
     localized: Readonly<Record<CharacterLocale, CharacterLocalizedCopy>>;
   }>;
   skill: Readonly<{ id: CharacterSkillId; cooldownMs: number }>;

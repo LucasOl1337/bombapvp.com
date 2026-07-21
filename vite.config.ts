@@ -5,8 +5,7 @@ export default defineConfig({
     assetsDir: "_app",
     rollupOptions: {
       input: {
-        main: "index.html",
-        arena: "arena/index.html",
+        arena: "index.html",
         mechanics: "GameMechanics/index.html",
       },
     },
