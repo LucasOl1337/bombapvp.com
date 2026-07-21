@@ -44,6 +44,7 @@ import type { MechanicsProgram } from "../src/kernel/program.ts";
 import {
   BASE_SPEED_UNITS_PER_TICK,
   BODY_HALF_EXTENT,
+  BOMB_FUSE_MS,
   bodiesOverlap,
   bodyOverlapsTile,
   bodyTileOverlapArea,
@@ -5263,7 +5264,8 @@ describe("Ranni Ice Blink", () => {
         id: 1,
         ownerId: beta,
         tile: bombTile,
-        fuseMs: 5_000,
+        // Restored active bombs have already consumed the activation tick.
+        fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
         flameRange: 2,
       }],
     };
@@ -6113,4 +6115,3 @@ describe("bot acceptance — a complete bot-vs-bot match reaches match-over", ()
 // Slice 4A focused suite (Decision 009) — co-located for `test:mechanics` filter.
 import "./slice-4a-powerups.test.ts";
 import "./browser-visual-adapter.test.ts";
-

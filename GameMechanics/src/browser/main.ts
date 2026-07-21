@@ -111,8 +111,15 @@ import {
   browserBotDriverForPlayer,
   createBrowserBotDrivers,
   driveBrowserBotsForTick,
+  recordBrowserBotTickOutcome,
+  setBrowserBotExperienceRecording,
   type BrowserBotDriver,
 } from "./bot-drivers.ts";
+import {
+  createInMemoryExperienceSink,
+  type BotExperienceEvent,
+  type InMemoryExperienceSink,
+} from "./bot-mastery/index.ts";
 import {
   botProfileForPlayer,
   createBrowserMatchConfiguration,
@@ -129,6 +136,7 @@ declare global {
   interface Window {
     get_game_mechanics_snapshot?: () => GameSnapshot;
     advance_game_mechanics?: (milliseconds: number) => GameSnapshot;
+    get_bot_lab_experience?: () => readonly BotExperienceEvent[];
   }
 }
 
@@ -502,9 +510,18 @@ const localSlotByCompetitor: ReadonlyMap<CompetitorId, LocalControlSlot> = new M
  * match and passed into driveBot on every decision; the kernel only sees the
  * resulting ordinary GameCommands.
  */
-let botDrivers: BrowserBotDriver[] = createBrowserBotDrivers(activeConfiguration, matchConfig);
+let labExperienceRecording = false;
+let labExperienceSink: InMemoryExperienceSink = createInMemoryExperienceSink();
+let botDrivers: BrowserBotDriver[] = createBrowserBotDrivers(activeConfiguration, matchConfig, {
+  experienceSink: labExperienceSink,
+  recordExperience: labExperienceRecording,
+});
 function resetBots(): void {
-  botDrivers = createBrowserBotDrivers(activeConfiguration, matchConfig);
+  labExperienceSink = createInMemoryExperienceSink();
+  botDrivers = createBrowserBotDrivers(activeConfiguration, matchConfig, {
+    experienceSink: labExperienceSink,
+    recordExperience: labExperienceRecording,
+  });
 }
 function playerIndexForSlot(slot: LocalControlSlot): 0 | 1 {
   return slot === "control-a" ? 0 : 1;
@@ -1440,7 +1457,17 @@ newMatchButton.type = "button";
 const speedButton = element(document, "button", "arena-button arena-button--lab", "1×") as HTMLButtonElement;
 speedButton.type = "button";
 speedButton.title = isEnglish ? "AI lab playback speed" : "Velocidade do laboratório de IA";
-actions.append(pauseButton, restartButton, newMatchButton, speedButton);
+const recordExperienceButton = element(
+  document,
+  "button",
+  "arena-button arena-button--lab",
+  isEnglish ? "Record off" : "Gravação off",
+) as HTMLButtonElement;
+recordExperienceButton.type = "button";
+recordExperienceButton.title = isEnglish
+  ? "Record deterministic structured bot experience in memory"
+  : "Gravar experiência estruturada e determinística dos bots em memória";
+actions.append(pauseButton, restartButton, newMatchButton, speedButton, recordExperienceButton);
 
 const devToggle = element(document, "button", "arena-dev-toggle", copy.devShow);
 devToggle.type = "button";
@@ -1466,6 +1493,7 @@ function syncP2ModeButton(): void {
   p2ModeButton.disabled = isLab;
   newMatchButton.hidden = !isLab;
   speedButton.hidden = !isLab;
+  recordExperienceButton.hidden = !isLab;
   overlayNewMatchBtn.hidden = !isLab;
 }
 
@@ -1538,6 +1566,15 @@ speedButton.addEventListener("click", () => {
   const index = LAB_PLAYBACK_SPEEDS.indexOf(labPlaybackSpeed);
   labPlaybackSpeed = LAB_PLAYBACK_SPEEDS[(index + 1) % LAB_PLAYBACK_SPEEDS.length]!;
   speedButton.textContent = `${labPlaybackSpeed}×`;
+  render();
+});
+recordExperienceButton.addEventListener("click", () => {
+  if (activeConfiguration.mode !== "bot-lab") return;
+  labExperienceRecording = !labExperienceRecording;
+  setBrowserBotExperienceRecording(botDrivers, labExperienceRecording);
+  recordExperienceButton.textContent = labExperienceRecording
+    ? (isEnglish ? "Record on" : "Gravação on")
+    : (isEnglish ? "Record off" : "Gravação off");
   render();
 });
 
@@ -3191,6 +3228,7 @@ function renderOverlay(snapshot: GameSnapshot): void {
     [championName("control-a"), championName("control-b")],
     isEnglish ? "en" : "pt-BR",
     activeMatchNumber,
+    botDrivers,
   );
   const show =
     snapshot.phase === "paused"
@@ -3341,6 +3379,7 @@ function renderHud(snapshot: GameSnapshot): void {
     [championName("control-a"), championName("control-b")],
     isEnglish ? "en" : "pt-BR",
     activeMatchNumber,
+    botDrivers,
   );
   const displayMs = timerDisplayMs(snapshot);
   timeValue.textContent = formatTime(displayMs);
@@ -3370,12 +3409,19 @@ function renderHud(snapshot: GameSnapshot): void {
     const driver = browserBotDriverForPlayer(botDrivers, playerIndex);
     const profile = botProfileForPlayer(activeConfiguration, playerIndex);
     panel.controller.textContent = profile
-      ? `${isEnglish ? "AI" : "IA"} · ${profile.label} · D${driver?.decisions ?? 0}`
+      ? `${isEnglish ? "AI" : "IA"} · ${profile.label} · M${Math.trunc((driver?.masteryBasisPoints ?? 0) / 100)} · D${driver?.decisions ?? 0}`
       : (isEnglish ? "HUMAN" : "HUMANO");
   }
 
   if (labObservation) {
-    hint.textContent = `${labObservation.summary} · ${labPlaybackSpeed}×`;
+    const mastery = labObservation.competitors
+      .map(({ masteryBasisPoints }) => `M${Math.trunc(masteryBasisPoints / 100)}`)
+      .join("/");
+    const experienceEvents = labObservation.competitors.reduce(
+      (sum, competitor) => sum + competitor.experienceEvents,
+      0,
+    );
+    hint.textContent = `${labObservation.summary} · ${labPlaybackSpeed}× · ${mastery} · E${experienceEvents} · ${labExperienceRecording ? "REC" : "OBS"}`;
   } else {
     hint.innerHTML = `<kbd>WASD</kbd>+<kbd>Q</kbd>+<kbd>␣</kbd> · <kbd>↑←↓→</kbd>+<kbd>O</kbd>+<kbd>I</kbd> · <kbd>Esc</kbd> · <kbd>T</kbd> · <kbd>M</kbd>`;
   }
@@ -3386,7 +3432,9 @@ function renderHud(snapshot: GameSnapshot): void {
       + `K=${snapshot.targetRoundWins} bombs=${snapshot.bombs.length} flames=${snapshot.flames.length} `
       + `powerups=${snapshot.powerUps.length} pressure=${snapshot.pressure.closing ? "closing" : "—"} `
       + `mode=${activeConfiguration.mode} p1=${selectedP1} p2=${selectedP2} `
-      + `bots=${botDrivers.map(({ profile }) => profile.id).join(",") || "none"}`;
+      + `bots=${botDrivers.map(({ profile, modelVersion }) => `${profile.id}@${modelVersion}`).join(",") || "none"} `
+      + `techniques=${botDrivers.map(({ lastTechniqueId }) => lastTechniqueId ?? "—").join(",")} `
+      + `experience=${labExperienceSink.events().length}`;
   }
 }
 
@@ -3613,7 +3661,9 @@ function frame(nowMs: number): void {
     // interpolation origin, so multi-tick frames never fast-forward.
     preTickPositions = captureTickPositions(game.snapshot());
     dispatchBotCommandsForTick();
-    events.push(...game.dispatch({ type: "advance", deltaMs: TICK_DURATION_MS }));
+    const tickEvents = game.dispatch({ type: "advance", deltaMs: TICK_DURATION_MS });
+    recordBrowserBotTickOutcome(game.snapshot(), botDrivers, tickEvents, game.rejections());
+    events.push(...tickEvents);
     accumulatorMs -= TICK_DURATION_MS;
   }
   if (preTickPositions) {
@@ -3627,12 +3677,15 @@ function frame(nowMs: number): void {
 }
 
 window.get_game_mechanics_snapshot = () => game.snapshot();
+window.get_bot_lab_experience = () => labExperienceSink.events();
 window.advance_game_mechanics = (milliseconds: number) => {
   const events: GameEvent[] = [];
   let remaining = Math.max(0, milliseconds);
   while (remaining >= TICK_DURATION_MS) {
     dispatchBotCommandsForTick();
-    events.push(...game.dispatch({ type: "advance", deltaMs: TICK_DURATION_MS }));
+    const tickEvents = game.dispatch({ type: "advance", deltaMs: TICK_DURATION_MS });
+    recordBrowserBotTickOutcome(game.snapshot(), botDrivers, tickEvents, game.rejections());
+    events.push(...tickEvents);
     remaining -= TICK_DURATION_MS;
   }
   if (remaining > 0) events.push(...game.dispatch({ type: "advance", deltaMs: remaining }));
@@ -3651,6 +3704,7 @@ window.addEventListener("pagehide", () => {
   document.removeEventListener("visibilitychange", onVisibilityChange);
   delete window.get_game_mechanics_snapshot;
   delete window.advance_game_mechanics;
+  delete window.get_bot_lab_experience;
 }, { once: true });
 
 preloadAll();

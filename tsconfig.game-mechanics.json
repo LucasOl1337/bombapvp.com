@@ -4,6 +4,7 @@
     "GameMechanics/src",
     "GameMechanics/content",
     "GameMechanics/tests",
+    "GameMechanics/scripts",
     "Champions"
   ]
 }

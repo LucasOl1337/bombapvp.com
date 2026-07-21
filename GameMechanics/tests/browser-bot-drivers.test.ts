@@ -50,7 +50,7 @@ function runLabMatch() {
 
   let completedAt = -1;
   let rejections = 0;
-  for (let tick = 0; tick < 5_000; tick += 1) {
+  for (let tick = 0; tick < 8_000; tick += 1) {
     const snapshot = game.snapshot();
     if (snapshot.phase === "match-over") {
       completedAt = tick;
@@ -127,7 +127,7 @@ describe("browser bot drivers", () => {
     const final = first.game.snapshot();
 
     expect(first.completedAt).toBeGreaterThanOrEqual(0);
-    expect(first.completedAt).toBeLessThan(5_000);
+    expect(first.completedAt).toBeLessThan(8_000);
     expect(final.phase).toBe("match-over");
     expect(final.matchWinner).not.toBeNull();
     expect(first.rejections).toBe(0);

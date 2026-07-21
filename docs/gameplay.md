@@ -16,9 +16,15 @@ Use `skipSelect=1` para iniciar a configuracao da URL sem abrir a landing e `dev
 
 ## Bots e laboratorio
 
-Os perfis canonicos Bomb, Pingo, V1, V2 e V3 ficam em `Champions/bots.ts`. Cada slot bot resolve seu perfil pelo resolver canonico e passa esse perfil a `driveBot`; o Champion visual/mecanico continua sendo o Champion escolhido para o slot. Bots observam somente o snapshot congelado e produzem `GameCommand[]` comuns.
+Os perfis canonicos Bomb, Pingo, V1, V2 e V3 ficam em `Champions/bots.ts`. A identidade, personalidade, preferencias e conhecimento privado ficam em pastas versionadas sob `GameMechanics/content/bot-mastery/<bot>/`; o Champion escolhido pelo jogador continua autoritativo e nunca e substituido silenciosamente por uma preferencia. Cada slot resolve perfil e modelo uma vez antes da partida. Bots observam somente o snapshot congelado e produzem `GameCommand[]` comuns.
 
-O laboratorio mostra os dois perfis no HUD, fase/rodada/placar e resultado. Pausa e retomada usam o facade atual; `Reiniciar` repete a mesma seed e zera memoria/PRNG dos bots, enquanto `Nova partida` avanca para uma nova seed deterministica. A velocidade 1x/2x/4x multiplica apenas quantos ticks fixos o adaptador consome por tempo de parede e nunca altera a duracao ou o estado interno de um tick.
+Tecnicas adquiridas sao dados declarativos validados com versoes exatas do schema, jogo, mecanicas, conteudo, Champion UUID e skill. O interpretador fechado pode emitir apenas comandos existentes; nao aceita callback, codigo, expressao, prompt ou import dinamico. Conhecimento stale/invalido fica inelegivel e o bot continua com a politica base. Hipoteses autorais, eventos mecanicamente observados e tecnicas promovidas permanecem separados.
+
+O laboratorio mostra perfil, versao do modelo, maestria, tecnica selecionada, contagem de decisoes/eventos, fase/rodada/placar e resultado. O controle `Gravacao off/on` e explicitamente desligado por padrao; quando ativado, registra eventos estruturados append-only somente em memoria. `window.get_bot_lab_experience()` expoe uma copia readonly para observacao do laboratorio. Producao nao grava rede, banco ou `localStorage`.
+
+Pausa e retomada usam o facade atual; `Reiniciar` repete a mesma seed, recria sink/memoria/PRNG e o transcript volta a ser reproduzivel, enquanto `Nova partida` avanca para uma nova seed deterministica. A velocidade 1x/2x/4x multiplica apenas quantos ticks fixos o adaptador consome por tempo de parede e nunca altera a duracao ou o estado interno de um tick.
+
+Campanhas offline usam `GameMechanics/scripts/run-bot-mastery-campaign.ts`, segmentos JSONL single-writer e o mesmo driver/GameMechanics. O projetor numerico nunca grava o modelo: `project-bot-mastery-campaign.ts` reaplica gates e a curadoria revisada e uma mudanca normal de fonte. O primeiro ciclo esta documentado em `GameMechanics/training/bot-mastery-v1/`; somente `ranni.danger-blink.v1` passou a curadoria causal final.
 
 O hostname mantem o contrato existente: `bombapvp.com` usa PT-BR e `bombpvp.com` usa EN.
 
