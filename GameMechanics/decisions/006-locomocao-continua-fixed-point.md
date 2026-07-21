@@ -17,15 +17,15 @@ Uma direcao perpendicular bloqueada pode continuar a ultima direcao que ainda av
 
 ## Colisao simultanea
 
-Todos os candidatos usam o mesmo pre-state contra bounds, solid, crates e bombas. Candidatos vivos sao resolvidos em lote: overlap final rejeita ambos; invasao de corpo estacionario ou rejeitado elimina o invasor; a resolucao repete ate estabilizar. Rejeitados mantem a posicao anterior e recebem velocidade zero.
+Todos os candidatos usam o mesmo pre-state contra solid, crates e bombas. Corpos vivos NUNCA se bloqueiam (Decision 012, paridade com o jogo original): jogadores se atravessam livremente e todo candidato dentro do passo maximo do contrato e aceito, independente de ordem.
 
 Corpos mortos nao bloqueiam. O resultado nao depende de ordem de roster ou ID.
 
 ## Bombas e hazards
 
-`place-bomb` usa `tileOf(position)` antes da locomocao. Um corpo que ja sobrepoe a bomba pode sair de forma monotona, mas nao se aproximar ou cruzar o centro; depois de sair, reentrada bloqueia.
+`place-bomb` usa `tileOf(position)` antes da locomocao. Um corpo que ja sobrepoe a bomba se move livremente enquanto houver sobreposicao (Decision 012 revogou o egresso monotono, que prendia corpos fora do centro); depois de sair por completo, reentrada bloqueia. Plantar sob um corpo rival e permitido (Decision 012) — o egresso geometrico de pre-overlap cobre a saida.
 
-Dano de chama usa overlap AABB positivo. Locomocao ocorre antes de explosao e dano.
+Dano de chama usa overlap AABB positivo e so dentro da janela letal da chama (Decision 012); a nevoa residual e apenas VFX. Locomocao ocorre antes de explosao e dano.
 
 ## Estado e fronteiras
 

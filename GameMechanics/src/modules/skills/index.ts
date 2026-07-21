@@ -3,10 +3,26 @@ import type {
   Direction,
   MatchConfig,
   SkillId,
+  TileCoord,
   WorldPosition,
 } from "../../contracts.ts";
-import { RANNI_ICE_BLINK_SKILL_ID, TICK_DURATION_MS } from "../../contracts.ts";
+import {
+  CROCODILO_EMERALD_SURGE_SKILL_ID,
+  isSkillId,
+  KATARINA_BOUNCING_BLADE_SKILL_ID,
+  KILLER_BEE_WING_DASH_SKILL_ID,
+  LEE_SIN_DRAGON_RAGE_SKILL_ID,
+  MADARA_FIREBALL_JUTSU_SKILL_ID,
+  MIRELLE_TIDE_SWAP_SKILL_ID,
+  NICO_ARCANE_BEAM_SKILL_ID,
+  NIX_EMBER_VAULT_SKILL_ID,
+  PENDULA_COMMAND_SHOCKWAVE_SKILL_ID,
+  RANNI_ICE_BLINK_SKILL_ID,
+  THRESH_DEATH_SENTENCE_SKILL_ID,
+  TICK_DURATION_MS,
+} from "../../contracts.ts";
 import type { CommandRejection } from "../../kernel/commands.ts";
+import type { TickFact } from "../../kernel/facts.ts";
 import { factsOfKind } from "../../kernel/facts.ts";
 import type {
   ModuleSpec,
@@ -17,14 +33,20 @@ import {
   activeDirection,
   assertInteger,
   assertPosition,
-  bodiesOverlap,
-  crateKeySet,
+  DIRECTION_DELTA,
   effectiveSolidKeySet,
   findIntent,
   findLocomotion,
   findVitals,
   freezePosition,
+  freezeTile,
   isGameplayActive,
+  tileCenter,
+  tileKey,
+  tileOf,
+  wrapPosition,
+  wrapTile,
+  type BombEntry,
   type SkillEntry,
   type SkillsSlice,
 } from "../../kernel/world-state.ts";
@@ -34,12 +56,99 @@ import {
   preOverlappingBombKeys,
 } from "../locomotion/index.ts";
 
+// ── Timing / range constants (aligned with roster skill fantasy) ────────────
+
 export const RANNI_CHANNEL_MS = 1_500 as const;
 export const RANNI_COOLDOWN_MS = 8_000 as const;
 
-const MODULE_VERSION = "1.0.0";
+export const KILLER_BEE_CHANNEL_MS = 240 as const;
+export const KILLER_BEE_COOLDOWN_MS = 4_000 as const;
+export const KILLER_BEE_DASH_TILES = 3 as const;
+
+export const NIX_EMBER_CHANNEL_MS = 280 as const;
+export const NIX_EMBER_COOLDOWN_MS = 7_000 as const;
+export const NIX_EMBER_VAULT_TILES = 2 as const;
+
+export const LEE_SIN_CHANNEL_MS = 260 as const;
+export const LEE_SIN_COOLDOWN_MS = 6_500 as const;
+export const LEE_SIN_DASH_TILES = 3 as const;
+export const LEE_SIN_KNOCKBACK_TILES = 3 as const;
+
+export const NICO_CHANNEL_MS = 2_000 as const;
+export const NICO_COOLDOWN_MS = 8_000 as const;
+export const NICO_BEAM_RANGE = 8 as const;
+
+export const CROCODILO_CHANNEL_MS = 1_600 as const;
+export const CROCODILO_COOLDOWN_MS = 6_000 as const;
+export const CROCODILO_SURGE_RANGE = 2 as const;
+
+export const PENDULA_CHANNEL_MS = 300 as const;
+export const PENDULA_COOLDOWN_MS = 7_500 as const;
+export const PENDULA_PULL_RANGE = 4 as const;
+
+/** Tick-aligned (multiple of 20 ms). Original fantasy is ~450 ms. */
+export const MIRELLE_CHANNEL_MS = 440 as const;
+export const MIRELLE_COOLDOWN_MS = 8_000 as const;
+export const MIRELLE_SWAP_RANGE = 4 as const;
+
+export const THRESH_CHANNEL_MS = 300 as const;
+export const THRESH_COOLDOWN_MS = 8_000 as const;
+export const THRESH_HOOK_RANGE = 4 as const;
+export const THRESH_MISS_COOLDOWN_MS = 4_000 as const;
+
+export const KATARINA_THROW_CHANNEL_MS = 180 as const;
+export const KATARINA_BLADE_ARMED_MS = 5_000 as const;
+export const KATARINA_COOLDOWN_MS = 8_000 as const;
+export const KATARINA_EXPIRE_COOLDOWN_MS = 4_000 as const;
+export const KATARINA_BLADE_RANGE = 4 as const;
+export const KATARINA_SLASH_RADIUS = 1 as const;
+
+export const MADARA_CHANNEL_MS = 220 as const;
+export const MADARA_COOLDOWN_MS = 8_000 as const;
+export const MADARA_FIREBALL_RANGE = 4 as const;
+export const MADARA_MAX_BURNED_BOXES = 3 as const;
+
+const MODULE_VERSION = "2.0.0"; // multi-skill roster
 const DIRECTIONS = new Set<Direction>(["up", "down", "left", "right"]);
 const PHASES = new Set<SkillEntry["phase"]>(["idle", "channeling", "cooldown"]);
+
+const COOLDOWN_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
+  [RANNI_ICE_BLINK_SKILL_ID]: RANNI_COOLDOWN_MS,
+  [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_COOLDOWN_MS,
+  [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_COOLDOWN_MS,
+  [NICO_ARCANE_BEAM_SKILL_ID]: NICO_COOLDOWN_MS,
+  [NIX_EMBER_VAULT_SKILL_ID]: NIX_EMBER_COOLDOWN_MS,
+  [PENDULA_COMMAND_SHOCKWAVE_SKILL_ID]: PENDULA_COOLDOWN_MS,
+  [MIRELLE_TIDE_SWAP_SKILL_ID]: MIRELLE_COOLDOWN_MS,
+  [LEE_SIN_DRAGON_RAGE_SKILL_ID]: LEE_SIN_COOLDOWN_MS,
+  [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_COOLDOWN_MS,
+  [KATARINA_BOUNCING_BLADE_SKILL_ID]: KATARINA_COOLDOWN_MS,
+  [MADARA_FIREBALL_JUTSU_SKILL_ID]: MADARA_COOLDOWN_MS,
+});
+
+const CHANNEL_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
+  [RANNI_ICE_BLINK_SKILL_ID]: RANNI_CHANNEL_MS,
+  [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_CHANNEL_MS,
+  [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_CHANNEL_MS,
+  [NICO_ARCANE_BEAM_SKILL_ID]: NICO_CHANNEL_MS,
+  [NIX_EMBER_VAULT_SKILL_ID]: NIX_EMBER_CHANNEL_MS,
+  [PENDULA_COMMAND_SHOCKWAVE_SKILL_ID]: PENDULA_CHANNEL_MS,
+  [MIRELLE_TIDE_SWAP_SKILL_ID]: MIRELLE_CHANNEL_MS,
+  [LEE_SIN_DRAGON_RAGE_SKILL_ID]: LEE_SIN_CHANNEL_MS,
+  [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_CHANNEL_MS,
+  [KATARINA_BOUNCING_BLADE_SKILL_ID]: KATARINA_BLADE_ARMED_MS,
+  [MADARA_FIREBALL_JUTSU_SKILL_ID]: MADARA_CHANNEL_MS,
+});
+
+export function skillCooldownMs(skillId: SkillId): number {
+  return COOLDOWN_BY_SKILL[skillId];
+}
+
+export function skillChannelMs(skillId: SkillId): number {
+  return CHANNEL_BY_SKILL[skillId];
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function freezeEntry(entry: SkillEntry): SkillEntry {
   return Object.freeze({
@@ -50,26 +159,7 @@ function freezeEntry(entry: SkillEntry): SkillEntry {
     cooldownRemainingMs: entry.cooldownRemainingMs,
     projection: entry.projection ? freezePosition(entry.projection) : null,
     bombEgressKeys: Object.freeze([...entry.bombEgressKeys]),
-  });
-}
-
-function initialSkills(config: MatchConfig): SkillsSlice {
-  return Object.freeze({
-    entries: Object.freeze(
-      config.seats
-        .filter((seat) => seat.skillId === RANNI_ICE_BLINK_SKILL_ID)
-        .map((seat) =>
-          freezeEntry({
-            competitorId: seat.competitorId,
-            skillId: RANNI_ICE_BLINK_SKILL_ID,
-            phase: "idle",
-            channelRemainingMs: 0,
-            cooldownRemainingMs: 0,
-            projection: null,
-            bombEgressKeys: Object.freeze([]),
-          }),
-        ),
-    ),
+    aimDirection: entry.aimDirection,
   });
 }
 
@@ -81,17 +171,19 @@ function idle(entry: SkillEntry): SkillEntry {
     cooldownRemainingMs: 0,
     projection: null,
     bombEgressKeys: Object.freeze([]),
+    aimDirection: null,
   });
 }
 
-function cooldown(entry: SkillEntry): SkillEntry {
+function cooldown(entry: SkillEntry, cooldownMs = skillCooldownMs(entry.skillId)): SkillEntry {
   return freezeEntry({
     ...entry,
     phase: "cooldown",
     channelRemainingMs: 0,
-    cooldownRemainingMs: RANNI_COOLDOWN_MS,
+    cooldownRemainingMs: cooldownMs,
     projection: null,
     bombEgressKeys: Object.freeze([]),
+    aimDirection: null,
   });
 }
 
@@ -106,9 +198,230 @@ function reject(
   });
 }
 
-function projectionCanFinish(
+function chebyshev(a: TileCoord, b: TileCoord): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+function resolveAim(
   ctx: SystemRunContext,
   competitorId: CompetitorId,
+  locoDirection: Direction | null,
+): Direction {
+  const intentEntry = findIntent(ctx.read("intent"), competitorId);
+  const fromIntent = intentEntry ? activeDirection(intentEntry) : null;
+  return fromIntent ?? locoDirection ?? "down";
+}
+
+function bombAt(tile: TileCoord, bombs: readonly BombEntry[]): boolean {
+  return bombs.some((bomb) => bomb.tile.x === tile.x && bomb.tile.y === tile.y);
+}
+
+function computeDashLanding(
+  from: WorldPosition,
+  dir: Direction,
+  maxTiles: number,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+  bombs: readonly BombEntry[],
+  options: Readonly<{ passBombs?: boolean }> = {},
+): WorldPosition {
+  let tile = tileOf(from);
+  let lastGood = tile;
+  for (let step = 0; step < maxTiles; step += 1) {
+    const next = wrapTile({
+      x: tile.x + DIRECTION_DELTA[dir].x,
+      y: tile.y + DIRECTION_DELTA[dir].y,
+    });
+    const key = tileKey(next);
+    if (solid.has(key) || crates.has(key)) break;
+    if (!options.passBombs && bombAt(next, bombs)) break;
+    lastGood = next;
+    tile = next;
+  }
+  return tileCenter(lastGood);
+}
+
+/** Free tiles along a ray until wall/crate (and optional bomb). */
+function rayFreeTiles(
+  origin: TileCoord,
+  dir: Direction,
+  maxRange: number,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+  bombs: readonly BombEntry[],
+  options: Readonly<{ stopOnBomb?: boolean; includeOrigin?: boolean }> = {},
+): TileCoord[] {
+  const path: TileCoord[] = [];
+  if (options.includeOrigin) path.push(freezeTile(origin));
+  let tile = origin;
+  for (let step = 0; step < maxRange; step += 1) {
+    const next = wrapTile({
+      x: tile.x + DIRECTION_DELTA[dir].x,
+      y: tile.y + DIRECTION_DELTA[dir].y,
+    });
+    const key = tileKey(next);
+    if (solid.has(key) || crates.has(key)) break;
+    if (options.stopOnBomb && bombAt(next, bombs)) break;
+    path.push(freezeTile(next));
+    tile = next;
+  }
+  return path;
+}
+
+/** Ray that can include crates (for fireball burn) until solid wall or max crates. */
+function fireballTiles(
+  origin: TileCoord,
+  dir: Direction,
+  maxRange: number,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+  maxCrates: number,
+): { path: TileCoord[]; burned: TileCoord[] } {
+  const path: TileCoord[] = [];
+  const burned: TileCoord[] = [];
+  let tile = origin;
+  for (let step = 0; step < maxRange; step += 1) {
+    const next = wrapTile({
+      x: tile.x + DIRECTION_DELTA[dir].x,
+      y: tile.y + DIRECTION_DELTA[dir].y,
+    });
+    const key = tileKey(next);
+    if (solid.has(key)) break;
+    path.push(freezeTile(next));
+    if (crates.has(key)) {
+      burned.push(freezeTile(next));
+      if (burned.length >= maxCrates) break;
+    }
+    tile = next;
+  }
+  return { path, burned };
+}
+
+function competitorsOnTiles(
+  ctx: SystemRunContext,
+  tiles: readonly TileCoord[],
+  excludeId: CompetitorId,
+): CompetitorId[] {
+  const tileSet = new Set(tiles.map(tileKey));
+  const vitals = ctx.read("vitals");
+  const locomotion = ctx.read("locomotion");
+  const hits: CompetitorId[] = [];
+  for (const loco of locomotion.entries) {
+    if (loco.competitorId === excludeId) continue;
+    if (findVitals(vitals, loco.competitorId)?.alive !== true) continue;
+    const t = tileOf(loco.position);
+    if (tileSet.has(tileKey(t))) hits.push(loco.competitorId);
+  }
+  hits.sort();
+  return hits;
+}
+
+function competitorsInChebyshev(
+  ctx: SystemRunContext,
+  center: TileCoord,
+  radius: number,
+  excludeId: CompetitorId,
+): CompetitorId[] {
+  const vitals = ctx.read("vitals");
+  const locomotion = ctx.read("locomotion");
+  const hits: CompetitorId[] = [];
+  for (const loco of locomotion.entries) {
+    if (loco.competitorId === excludeId) continue;
+    if (findVitals(vitals, loco.competitorId)?.alive !== true) continue;
+    if (chebyshev(center, tileOf(loco.position)) <= radius) {
+      hits.push(loco.competitorId);
+    }
+  }
+  hits.sort();
+  return hits;
+}
+
+function skillHitFacts(
+  skillId: SkillId,
+  ownerId: CompetitorId,
+  targetIds: readonly CompetitorId[],
+  at: TileCoord,
+): TickFact[] {
+  return targetIds.map((targetId) =>
+    Object.freeze({
+      kind: "skill-hit" as const,
+      skillId,
+      ownerId,
+      targetId,
+      at: freezeTile(at),
+    }),
+  );
+}
+
+function movementFact(
+  competitorId: CompetitorId,
+  suppress: boolean,
+  teleport: WorldPosition | null,
+): TickFact {
+  return Object.freeze({
+    kind: "skill-movement" as const,
+    competitorId,
+    suppress,
+    teleport: teleport ? freezePosition(teleport) : null,
+  });
+}
+
+function pullLanding(
+  origin: TileCoord,
+  victim: TileCoord,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+  bombs: readonly BombEntry[],
+  reserved: ReadonlySet<string>,
+): TileCoord {
+  // Prefer adjacent tile toward caster; fallback to current if blocked.
+  const dx = Math.sign(origin.x - victim.x);
+  const dy = Math.sign(origin.y - victim.y);
+  const candidates: TileCoord[] = [];
+  if (dx !== 0 || dy !== 0) {
+    candidates.push(wrapTile({ x: origin.x - dx, y: origin.y - dy }));
+    candidates.push(wrapTile({ x: origin.x - dx, y: origin.y }));
+    candidates.push(wrapTile({ x: origin.x, y: origin.y - dy }));
+  }
+  for (const d of ["up", "down", "left", "right"] as const) {
+    candidates.push(wrapTile({
+      x: origin.x + DIRECTION_DELTA[d].x,
+      y: origin.y + DIRECTION_DELTA[d].y,
+    }));
+  }
+  for (const tile of candidates) {
+    const key = tileKey(tile);
+    if (solid.has(key) || crates.has(key) || reserved.has(key) || bombAt(tile, bombs)) continue;
+    return freezeTile(tile);
+  }
+  return freezeTile(victim);
+}
+
+function knockbackLanding(
+  from: TileCoord,
+  dir: Direction,
+  maxTiles: number,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+  bombs: readonly BombEntry[],
+): TileCoord {
+  let tile = from;
+  let last = from;
+  for (let step = 0; step < maxTiles; step += 1) {
+    const next = wrapTile({
+      x: tile.x + DIRECTION_DELTA[dir].x,
+      y: tile.y + DIRECTION_DELTA[dir].y,
+    });
+    const key = tileKey(next);
+    if (solid.has(key) || crates.has(key) || bombAt(next, bombs)) break;
+    last = next;
+    tile = next;
+  }
+  return freezeTile(last);
+}
+
+function projectionCanFinish(
+  ctx: SystemRunContext,
   projection: WorldPosition,
   bombEgressKeys: readonly string[],
 ): boolean {
@@ -116,24 +429,541 @@ function projectionCanFinish(
   const pressure = ctx.read("pressure");
   const bombs = ctx.read("bombs").items;
   const solid = effectiveSolidKeySet(arena, pressure);
-  const crates = crateKeySet(arena);
-  if (!isStaticallyValid(
-    projection,
+  const crates = new Set(arena.crates.map(tileKey));
+  return isStaticallyValid(
     projection,
     solid,
     crates,
     bombs,
     new Set(bombEgressKeys),
-  )) return false;
+  );
+}
 
-  const locomotion = ctx.read("locomotion");
-  const vitals = ctx.read("vitals");
-  for (const other of locomotion.entries) {
-    if (other.competitorId === competitorId) continue;
-    if (!findVitals(vitals, other.competitorId)?.alive) continue;
-    if (bodiesOverlap(projection, other.position)) return false;
+// ── Skill lifecycle ──────────────────────────────────────────────────────────
+
+type TickWork = {
+  entry: SkillEntry;
+  facts: TickFact[];
+  rejections: CommandRejection[];
+};
+
+function startChannel(
+  entry: SkillEntry,
+  channelMs: number,
+  aim: Direction,
+  projection: WorldPosition | null,
+  bombEgressKeys: readonly string[] = [],
+): SkillEntry {
+  return freezeEntry({
+    ...entry,
+    phase: "channeling",
+    channelRemainingMs: Math.max(0, channelMs - TICK_DURATION_MS),
+    cooldownRemainingMs: 0,
+    projection: projection ? freezePosition(projection) : null,
+    bombEgressKeys: Object.freeze([...bombEgressKeys]),
+    aimDirection: aim,
+  });
+}
+
+function beginSkill(
+  ctx: SystemRunContext,
+  entry: SkillEntry,
+  command: SystemRunContext["commands"][number] | undefined,
+): TickWork {
+  const rejections: CommandRejection[] = [];
+  if (!command) return { entry, facts: [], rejections };
+
+  const loco = findLocomotion(ctx.read("locomotion"), entry.competitorId);
+  if (!loco) {
+    rejections.push(reject(command, "skill-unavailable"));
+    return { entry, facts: [], rejections };
   }
-  return true;
+
+  const arena = ctx.read("arena");
+  const pressure = ctx.read("pressure");
+  const bombs = ctx.read("bombs").items;
+  const solid = effectiveSolidKeySet(arena, pressure);
+  const crates = new Set(arena.crates.map(tileKey));
+  const aim = resolveAim(ctx, entry.competitorId, loco.lastDirection);
+  const facts: TickFact[] = [];
+
+  switch (entry.skillId) {
+    case RANNI_ICE_BLINK_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(
+          entry,
+          RANNI_CHANNEL_MS,
+          aim,
+          loco.position,
+          [...preOverlappingBombKeys(loco.position, bombs)].sort(),
+        ),
+        facts,
+        rejections,
+      };
+    }
+    case KILLER_BEE_WING_DASH_SKILL_ID: {
+      const landing = computeDashLanding(
+        loco.position, aim, KILLER_BEE_DASH_TILES, solid, crates, bombs,
+      );
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, KILLER_BEE_CHANNEL_MS, aim, landing),
+        facts,
+        rejections,
+      };
+    }
+    case NIX_EMBER_VAULT_SKILL_ID: {
+      const landing = computeDashLanding(
+        loco.position, aim, NIX_EMBER_VAULT_TILES, solid, crates, bombs,
+        { passBombs: true },
+      );
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, NIX_EMBER_CHANNEL_MS, aim, landing),
+        facts,
+        rejections,
+      };
+    }
+    case LEE_SIN_DRAGON_RAGE_SKILL_ID: {
+      const landing = computeDashLanding(
+        loco.position, aim, LEE_SIN_DASH_TILES, solid, crates, bombs,
+      );
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, LEE_SIN_CHANNEL_MS, aim, landing),
+        facts,
+        rejections,
+      };
+    }
+    case NICO_ARCANE_BEAM_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, NICO_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case CROCODILO_EMERALD_SURGE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, CROCODILO_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case PENDULA_COMMAND_SHOCKWAVE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, PENDULA_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case MIRELLE_TIDE_SWAP_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, MIRELLE_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case THRESH_DEATH_SENTENCE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, THRESH_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case MADARA_FIREBALL_JUTSU_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      return {
+        entry: startChannel(entry, MADARA_CHANNEL_MS, aim, null),
+        facts,
+        rejections,
+      };
+    }
+    case KATARINA_BOUNCING_BLADE_SKILL_ID: {
+      // Throw: short channel then arm blade on projection.
+      facts.push(movementFact(entry.competitorId, true, null));
+      const origin = tileOf(loco.position);
+      const path = rayFreeTiles(
+        origin, aim, KATARINA_BLADE_RANGE, solid, crates, bombs, { stopOnBomb: true },
+      );
+      const bladeTile = path[path.length - 1] ?? origin;
+      return {
+        entry: startChannel(
+          entry,
+          KATARINA_THROW_CHANNEL_MS,
+          aim,
+          tileCenter(bladeTile),
+        ),
+        facts,
+        rejections,
+      };
+    }
+    default: {
+      rejections.push(reject(command, "skill-unavailable"));
+      return { entry, facts: [], rejections };
+    }
+  }
+}
+
+function completeSkill(
+  ctx: SystemRunContext,
+  entry: SkillEntry,
+  projection: WorldPosition | null,
+): TickWork {
+  const facts: TickFact[] = [];
+  const arena = ctx.read("arena");
+  const pressure = ctx.read("pressure");
+  const bombs = ctx.read("bombs").items;
+  const solid = effectiveSolidKeySet(arena, pressure);
+  const crates = new Set(arena.crates.map(tileKey));
+  const loco = findLocomotion(ctx.read("locomotion"), entry.competitorId);
+  const origin = loco ? tileOf(loco.position) : freezeTile({ x: 0, y: 0 });
+  const aim = entry.aimDirection ?? "down";
+
+  switch (entry.skillId) {
+    case RANNI_ICE_BLINK_SKILL_ID: {
+      const dest = projection;
+      facts.push(movementFact(
+        entry.competitorId,
+        true,
+        dest && projectionCanFinish(ctx, dest, entry.bombEgressKeys) ? dest : null,
+      ));
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case KILLER_BEE_WING_DASH_SKILL_ID:
+    case NIX_EMBER_VAULT_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, projection));
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case LEE_SIN_DRAGON_RAGE_SKILL_ID: {
+      const landing = projection ?? (loco ? loco.position : tileCenter(origin));
+      facts.push(movementFact(entry.competitorId, true, landing));
+      // Kick first enemy along dash ray (origin → landing + 1).
+      const path = rayFreeTiles(
+        origin, aim, LEE_SIN_DASH_TILES + 1, solid, crates, bombs,
+      );
+      const victims = competitorsOnTiles(ctx, path, entry.competitorId);
+      const victimId = victims[0];
+      if (victimId) {
+        const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
+        if (victimLoco) {
+          const from = tileOf(victimLoco.position);
+          const kb = knockbackLanding(
+            from, aim, LEE_SIN_KNOCKBACK_TILES, solid, crates, bombs,
+          );
+          facts.push(movementFact(victimId, false, tileCenter(kb)));
+        }
+      }
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case NICO_ARCANE_BEAM_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      const path = rayFreeTiles(
+        origin, aim, NICO_BEAM_RANGE, solid, crates, bombs, { stopOnBomb: false },
+      );
+      const hits = competitorsOnTiles(ctx, path, entry.competitorId);
+      facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case CROCODILO_EMERALD_SURGE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      const hits = competitorsInChebyshev(
+        ctx, origin, CROCODILO_SURGE_RANGE, entry.competitorId,
+      );
+      facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case PENDULA_COMMAND_SHOCKWAVE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      const victims = competitorsInChebyshev(
+        ctx, origin, PENDULA_PULL_RANGE, entry.competitorId,
+      );
+      const reserved = new Set<string>([tileKey(origin)]);
+      for (const victimId of victims) {
+        const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
+        if (!victimLoco) continue;
+        const landing = pullLanding(
+          origin, tileOf(victimLoco.position), solid, crates, bombs, reserved,
+        );
+        reserved.add(tileKey(landing));
+        facts.push(movementFact(victimId, false, tileCenter(landing)));
+      }
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case MIRELLE_TIDE_SWAP_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      // Nearest living rival in Chebyshev range.
+      let bestId: CompetitorId | null = null;
+      let bestDist = Infinity;
+      for (const other of ctx.read("locomotion").entries) {
+        if (other.competitorId === entry.competitorId) continue;
+        if (findVitals(ctx.read("vitals"), other.competitorId)?.alive !== true) continue;
+        const dist = chebyshev(origin, tileOf(other.position));
+        if (dist < 1 || dist > MIRELLE_SWAP_RANGE) continue;
+        if (dist < bestDist || (dist === bestDist && bestId !== null && other.competitorId < bestId)) {
+          bestId = other.competitorId;
+          bestDist = dist;
+        }
+      }
+      if (bestId && loco) {
+        const otherLoco = findLocomotion(ctx.read("locomotion"), bestId);
+        if (otherLoco) {
+          facts.push(movementFact(entry.competitorId, true, otherLoco.position));
+          facts.push(movementFact(bestId, false, loco.position));
+        }
+      }
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case THRESH_DEATH_SENTENCE_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      const path = rayFreeTiles(
+        origin, aim, THRESH_HOOK_RANGE, solid, crates, bombs, { stopOnBomb: false },
+      );
+      const hits = competitorsOnTiles(ctx, path, entry.competitorId);
+      const victimId = hits[0];
+      if (!victimId) {
+        return { entry: cooldown(entry, THRESH_MISS_COOLDOWN_MS), facts, rejections: [] };
+      }
+      const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
+      if (victimLoco) {
+        const landing = pullLanding(
+          origin,
+          tileOf(victimLoco.position),
+          solid,
+          crates,
+          bombs,
+          new Set([tileKey(origin)]),
+        );
+        facts.push(movementFact(victimId, false, tileCenter(landing)));
+      }
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case MADARA_FIREBALL_JUTSU_SKILL_ID: {
+      facts.push(movementFact(entry.competitorId, true, null));
+      const { path, burned } = fireballTiles(
+        origin, aim, MADARA_FIREBALL_RANGE, solid, crates, MADARA_MAX_BURNED_BOXES,
+      );
+      if (burned.length > 0) {
+        facts.push(Object.freeze({
+          kind: "crates-destroyed" as const,
+          tiles: Object.freeze(burned.map(freezeTile)),
+        }));
+      }
+      const hits = competitorsOnTiles(ctx, path, entry.competitorId);
+      facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
+      return { entry: cooldown(entry), facts, rejections: [] };
+    }
+    case KATARINA_BOUNCING_BLADE_SKILL_ID: {
+      // Throw channel finished → arm blade (stay channeling with long timer).
+      if (entry.channelRemainingMs > KATARINA_THROW_CHANNEL_MS) {
+        // Already armed path handled in tickChannel.
+      }
+      // Completing throw channel: re-enter armed channeling with blade projection.
+      if (projection) {
+        return {
+          entry: freezeEntry({
+            ...entry,
+            phase: "channeling",
+            channelRemainingMs: KATARINA_BLADE_ARMED_MS,
+            cooldownRemainingMs: 0,
+            projection: freezePosition(projection),
+            bombEgressKeys: Object.freeze([]),
+            aimDirection: aim,
+          }),
+          facts: [movementFact(entry.competitorId, false, null)],
+          rejections: [],
+        };
+      }
+      return { entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS), facts, rejections: [] };
+    }
+    default:
+      return { entry: cooldown(entry), facts, rejections: [] };
+  }
+}
+
+function shunpoKatarina(ctx: SystemRunContext, entry: SkillEntry): TickWork {
+  const facts: TickFact[] = [];
+  if (!entry.projection) {
+    return { entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS), facts, rejections: [] };
+  }
+  const bladeTile = tileOf(entry.projection);
+  facts.push(movementFact(entry.competitorId, true, entry.projection));
+  const hits = competitorsInChebyshev(
+    ctx, bladeTile, KATARINA_SLASH_RADIUS, entry.competitorId,
+  );
+  facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, bladeTile));
+  return { entry: cooldown(entry), facts, rejections: [] };
+}
+
+function tickChannel(
+  ctx: SystemRunContext,
+  entry: SkillEntry,
+  ownCommands: readonly SystemRunContext["commands"][number][],
+): TickWork {
+  const rejections: CommandRejection[] = [];
+  const facts: TickFact[] = [];
+  const command = ownCommands[0];
+  for (const duplicate of ownCommands.slice(1)) {
+    rejections.push(reject(duplicate, "skill-unavailable"));
+  }
+
+  // Katarina armed blade: long channel with projection set after throw.
+  if (
+    entry.skillId === KATARINA_BOUNCING_BLADE_SKILL_ID
+    && entry.projection
+    && entry.channelRemainingMs > KATARINA_THROW_CHANNEL_MS
+  ) {
+    if (command) {
+      const work = shunpoKatarina(ctx, entry);
+      return { ...work, rejections: [...rejections, ...work.rejections] };
+    }
+    const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
+    if (remaining === 0) {
+      return {
+        entry: cooldown(entry, KATARINA_EXPIRE_COOLDOWN_MS),
+        facts: [movementFact(entry.competitorId, false, null)],
+        rejections,
+      };
+    }
+    return {
+      entry: freezeEntry({ ...entry, channelRemainingMs: remaining }),
+      facts: [],
+      rejections,
+    };
+  }
+
+  // Ranni: steer projection while channeling.
+  if (entry.skillId === RANNI_ICE_BLINK_SKILL_ID) {
+    const projection = entry.projection;
+    if (!projection) return { entry: cooldown(entry), facts, rejections };
+    const canCompleteManually = entry.channelRemainingMs < RANNI_CHANNEL_MS;
+    const completionRequested = Boolean(command) && canCompleteManually;
+    if (command && !canCompleteManually) {
+      rejections.push(reject(command, "skill-unavailable"));
+    }
+    const arena = ctx.read("arena");
+    const pressure = ctx.read("pressure");
+    const bombs = ctx.read("bombs").items;
+    const solid = effectiveSolidKeySet(arena, pressure);
+    const crates = new Set(arena.crates.map(tileKey));
+    const intentEntry = findIntent(ctx.read("intent"), entry.competitorId);
+    const direction = intentEntry ? activeDirection(intentEntry) : null;
+    const attempted = direction
+      ? attemptDirection(
+          projection,
+          direction,
+          solid,
+          crates,
+          bombs,
+          new Set(entry.bombEgressKeys),
+        )
+      : projection;
+    const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
+    const completes = completionRequested || remaining === 0;
+    if (completes) {
+      const work = completeSkill(ctx, entry, attempted);
+      return { ...work, rejections: [...rejections, ...work.rejections] };
+    }
+    facts.push(movementFact(entry.competitorId, true, null));
+    return {
+      entry: freezeEntry({
+        ...entry,
+        channelRemainingMs: remaining,
+        projection: attempted,
+        bombEgressKeys: Object.freeze(
+          [...preOverlappingBombKeys(attempted, bombs)].sort(),
+        ),
+      }),
+      facts,
+      rejections,
+    };
+  }
+
+  // Early release for channel-then-fire skills (nico, crocodilo, madara, thresh, pendula, mirelle).
+  const earlyReleaseSkills = new Set<SkillId>([
+    NICO_ARCANE_BEAM_SKILL_ID,
+    CROCODILO_EMERALD_SURGE_SKILL_ID,
+    MADARA_FIREBALL_JUTSU_SKILL_ID,
+    THRESH_DEATH_SENTENCE_SKILL_ID,
+    PENDULA_COMMAND_SHOCKWAVE_SKILL_ID,
+    MIRELLE_TIDE_SWAP_SKILL_ID,
+  ]);
+  const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
+  const early = Boolean(command) && earlyReleaseSkills.has(entry.skillId)
+    && entry.channelRemainingMs < skillChannelMs(entry.skillId);
+  if (command && !early && entry.skillId !== KATARINA_BOUNCING_BLADE_SKILL_ID) {
+    // During first tick of channel, reject extra presses (dash family).
+    if (!earlyReleaseSkills.has(entry.skillId)) {
+      rejections.push(reject(command, "skill-unavailable"));
+    } else if (entry.channelRemainingMs >= skillChannelMs(entry.skillId)) {
+      rejections.push(reject(command, "skill-unavailable"));
+    }
+  }
+
+  // Katarina throw short channel → arm blade on complete.
+  if (entry.skillId === KATARINA_BOUNCING_BLADE_SKILL_ID) {
+    facts.push(movementFact(entry.competitorId, true, null));
+    if (remaining === 0) {
+      const work = completeSkill(ctx, entry, entry.projection);
+      return { ...work, rejections: [...rejections, ...work.rejections] };
+    }
+    return {
+      entry: freezeEntry({ ...entry, channelRemainingMs: remaining }),
+      facts,
+      rejections,
+    };
+  }
+
+  if (early || remaining === 0) {
+    const work = completeSkill(ctx, entry, entry.projection);
+    return { ...work, rejections: [...rejections, ...work.rejections] };
+  }
+
+  facts.push(movementFact(entry.competitorId, true, null));
+  // Allow re-aim while channeling for beam-like skills.
+  let aimDirection = entry.aimDirection;
+  if (
+    entry.skillId === NICO_ARCANE_BEAM_SKILL_ID
+    || entry.skillId === MADARA_FIREBALL_JUTSU_SKILL_ID
+    || entry.skillId === THRESH_DEATH_SENTENCE_SKILL_ID
+  ) {
+    const intentEntry = findIntent(ctx.read("intent"), entry.competitorId);
+    const dir = intentEntry ? activeDirection(intentEntry) : null;
+    if (dir) aimDirection = dir;
+  }
+  return {
+    entry: freezeEntry({ ...entry, channelRemainingMs: remaining, aimDirection }),
+    facts,
+    rejections,
+  };
+}
+
+// ── Module systems ───────────────────────────────────────────────────────────
+
+function initialSkills(config: MatchConfig): SkillsSlice {
+  return Object.freeze({
+    entries: Object.freeze(
+      config.seats
+        .filter((seat) => seat.skillId !== undefined)
+        .map((seat) =>
+          freezeEntry({
+            competitorId: seat.competitorId,
+            skillId: seat.skillId!,
+            phase: "idle",
+            channelRemainingMs: 0,
+            cooldownRemainingMs: 0,
+            projection: null,
+            bombEgressKeys: Object.freeze([]),
+            aimDirection: null,
+          }),
+        ),
+    ),
+  });
 }
 
 function runSkillsReset(ctx: SystemRunContext): SystemRunResult {
@@ -145,11 +975,6 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
   const skills = ctx.read("skills");
   const match = ctx.read("match");
   const vitals = ctx.read("vitals");
-  const locomotion = ctx.read("locomotion");
-  const intent = ctx.read("intent");
-  const arena = ctx.read("arena");
-  const pressure = ctx.read("pressure");
-  const bombs = ctx.read("bombs").items;
   const commands = ctx.commands.filter(
     (command) => command.envelope.command.type === "use-skill",
   );
@@ -161,22 +986,17 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
     commandsByCompetitor.set(command.competitorId, list);
   }
   const rejections: CommandRejection[] = [];
+  const allFacts: TickFact[] = [];
 
   if (!isGameplayActive(match.phase)) {
     for (const command of commands) rejections.push(reject(command, "not-playing"));
     return { rejections };
   }
 
-  const solid = effectiveSolidKeySet(arena, pressure);
-  const crates = crateKeySet(arena);
-  const movementFacts: Array<{
-    kind: "skill-movement";
-    competitorId: CompetitorId;
-    suppress: boolean;
-    teleport: WorldPosition | null;
-  }> = [];
+  const byCompetitor = new Map(
+    skills.entries.map((entry) => [entry.competitorId, entry] as const),
+  );
 
-  const byCompetitor = new Map(skills.entries.map((entry) => [entry.competitorId, entry] as const));
   const nextEntries = skills.entries.map((current) => {
     const alive = findVitals(vitals, current.competitorId)?.alive === true;
     const ownCommands = commandsByCompetitor.get(current.competitorId) ?? [];
@@ -188,122 +1008,36 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
     if (current.phase === "cooldown") {
       const remaining = Math.max(0, current.cooldownRemainingMs - TICK_DURATION_MS);
       if (remaining === 0) {
-        const command = ownCommands[0];
         for (const duplicate of ownCommands.slice(1)) {
           rejections.push(reject(duplicate, "skill-unavailable"));
         }
-        if (!command) return idle(current);
-        const loco = findLocomotion(locomotion, current.competitorId);
-        if (!loco) {
-          rejections.push(reject(command, "skill-unavailable"));
-          return idle(current);
-        }
-        movementFacts.push({
-          kind: "skill-movement",
-          competitorId: current.competitorId,
-          suppress: true,
-          teleport: null,
-        });
-        return freezeEntry({
-          ...current,
-          phase: "channeling",
-          channelRemainingMs: RANNI_CHANNEL_MS - TICK_DURATION_MS,
-          cooldownRemainingMs: 0,
-          projection: loco.position,
-          bombEgressKeys: Object.freeze([...preOverlappingBombKeys(loco.position, bombs)].sort()),
-        });
+        if (!ownCommands[0]) return idle(current);
+        // Cooldown just ended + press in same tick → activate.
+        const work = beginSkill(ctx, idle(current), ownCommands[0]);
+        rejections.push(...work.rejections);
+        allFacts.push(...work.facts);
+        return work.entry;
       }
       for (const command of ownCommands) rejections.push(reject(command, "skill-unavailable"));
       return freezeEntry({ ...current, cooldownRemainingMs: remaining });
     }
 
     if (current.phase === "idle") {
-      const command = ownCommands[0];
       for (const duplicate of ownCommands.slice(1)) {
         rejections.push(reject(duplicate, "skill-unavailable"));
       }
-      if (!command) return current;
-      const loco = findLocomotion(locomotion, current.competitorId);
-      if (!loco) {
-        rejections.push(reject(command, "skill-unavailable"));
-        return current;
-      }
-      movementFacts.push({
-        kind: "skill-movement",
-        competitorId: current.competitorId,
-        suppress: true,
-        teleport: null,
-      });
-      return freezeEntry({
-        ...current,
-        phase: "channeling",
-        channelRemainingMs: RANNI_CHANNEL_MS - TICK_DURATION_MS,
-        cooldownRemainingMs: 0,
-        projection: loco.position,
-        bombEgressKeys: Object.freeze([...preOverlappingBombKeys(loco.position, bombs)].sort()),
-      });
+      if (!ownCommands[0]) return current;
+      const work = beginSkill(ctx, current, ownCommands[0]);
+      rejections.push(...work.rejections);
+      allFacts.push(...work.facts);
+      return work.entry;
     }
 
-    const projection = current.projection;
-    if (!projection) return cooldown(current);
-    const canCompleteManually = current.channelRemainingMs < RANNI_CHANNEL_MS;
-    const completionRequested = ownCommands.length > 0 && canCompleteManually;
-    if (ownCommands.length > 0 && !canCompleteManually) {
-      for (const command of ownCommands) rejections.push(reject(command, "skill-unavailable"));
-    } else if (ownCommands.length > 1) {
-      for (const duplicate of ownCommands.slice(1)) {
-        rejections.push(reject(duplicate, "skill-unavailable"));
-      }
-    }
-
-    const intentEntry = findIntent(intent, current.competitorId);
-    const direction = intentEntry ? activeDirection(intentEntry) : null;
-    const attempted = direction
-      ? attemptDirection(
-          projection,
-          direction,
-          solid,
-          crates,
-          bombs,
-          new Set(current.bombEgressKeys),
-        )
-      : projection;
-    const blockedByBody = locomotion.entries.some((other) =>
-      other.competitorId !== current.competitorId
-      && findVitals(vitals, other.competitorId)?.alive
-      && bodiesOverlap(attempted, other.position)
-    );
-    const projected = blockedByBody ? projection : attempted;
-    const remaining = Math.max(0, current.channelRemainingMs - TICK_DURATION_MS);
-    const completes = completionRequested || remaining === 0;
-
-    if (completes) {
-      movementFacts.push({
-        kind: "skill-movement",
-        competitorId: current.competitorId,
-        suppress: true,
-        teleport: projectionCanFinish(
-          ctx,
-          current.competitorId,
-          projected,
-          current.bombEgressKeys,
-        ) ? projected : null,
-      });
-      return cooldown(current);
-    }
-
-    movementFacts.push({
-      kind: "skill-movement",
-      competitorId: current.competitorId,
-      suppress: true,
-      teleport: null,
-    });
-    return freezeEntry({
-      ...current,
-      channelRemainingMs: remaining,
-      projection: projected,
-      bombEgressKeys: Object.freeze([...preOverlappingBombKeys(projected, bombs)].sort()),
-    });
+    // channeling
+    const work = tickChannel(ctx, current, ownCommands);
+    rejections.push(...work.rejections);
+    allFacts.push(...work.facts);
+    return work.entry;
   });
 
   for (const command of commands) {
@@ -315,7 +1049,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
 
   return {
     writes: { skills: Object.freeze({ entries: Object.freeze(nextEntries) }) },
-    facts: Object.freeze(movementFacts),
+    facts: Object.freeze(allFacts),
     rejections,
   };
 }
@@ -324,16 +1058,20 @@ function restoreSkills(raw: unknown, config: MatchConfig): SkillsSlice {
   if (!raw || typeof raw !== "object") throw new Error("slices.skills must be an object.");
   const rows = (raw as { entries?: unknown }).entries;
   if (!Array.isArray(rows)) throw new Error("slices.skills.entries must be an array.");
-  const assigned = config.seats.filter((seat) => seat.skillId).map((seat) => seat.competitorId);
+  const assigned = config.seats.filter((seat) => seat.skillId).map((seat) => ({
+    competitorId: seat.competitorId,
+    skillId: seat.skillId!,
+  }));
   const entries = rows.map((value, index) => {
     if (!value || typeof value !== "object") {
       throw new Error(`slices.skills.entries[${index}] is invalid.`);
     }
     const row = value as Record<string, unknown>;
-    if (row.competitorId !== assigned[index]) {
+    const expected = assigned[index];
+    if (!expected || row.competitorId !== expected.competitorId) {
       throw new Error("slices.skills.entries must follow assigned config seat order.");
     }
-    if (row.skillId !== RANNI_ICE_BLINK_SKILL_ID) {
+    if (typeof row.skillId !== "string" || !isSkillId(row.skillId) || row.skillId !== expected.skillId) {
       throw new Error(`slices.skills.entries[${index}].skillId is invalid.`);
     }
     if (typeof row.phase !== "string" || !PHASES.has(row.phase as SkillEntry["phase"])) {
@@ -348,23 +1086,32 @@ function restoreSkills(raw: unknown, config: MatchConfig): SkillsSlice {
       row.cooldownRemainingMs,
       `slices.skills.entries[${index}].cooldownRemainingMs`,
     );
-    if (channelRemainingMs % TICK_DURATION_MS !== 0 || channelRemainingMs > RANNI_CHANNEL_MS) {
+    const maxChannel = skillChannelMs(row.skillId);
+    const maxCooldown = skillCooldownMs(row.skillId);
+    if (channelRemainingMs % TICK_DURATION_MS !== 0 || channelRemainingMs > maxChannel) {
       throw new Error(`slices.skills.entries[${index}].channelRemainingMs is invalid.`);
     }
-    if (cooldownRemainingMs % TICK_DURATION_MS !== 0 || cooldownRemainingMs > RANNI_COOLDOWN_MS) {
+    if (cooldownRemainingMs % TICK_DURATION_MS !== 0 || cooldownRemainingMs > maxCooldown) {
       throw new Error(`slices.skills.entries[${index}].cooldownRemainingMs is invalid.`);
     }
-    const projection = row.projection === null ? null : assertPosition(
+    const projection = row.projection === null ? null : wrapPosition(assertPosition(
       row.projection,
       `slices.skills.entries[${index}].projection`,
-    );
+    ));
     if (!Array.isArray(row.bombEgressKeys) || row.bombEgressKeys.some((key) => typeof key !== "string")) {
       throw new Error(`slices.skills.entries[${index}].bombEgressKeys is invalid.`);
     }
-    if (phase === "idle" && (projection || channelRemainingMs !== 0 || cooldownRemainingMs !== 0)) {
+    let aimDirection: Direction | null = null;
+    if (row.aimDirection !== undefined && row.aimDirection !== null) {
+      if (typeof row.aimDirection !== "string" || !DIRECTIONS.has(row.aimDirection as Direction)) {
+        throw new Error(`slices.skills.entries[${index}].aimDirection is invalid.`);
+      }
+      aimDirection = row.aimDirection as Direction;
+    }
+    if (phase === "idle" && (projection || channelRemainingMs !== 0 || cooldownRemainingMs !== 0 || aimDirection)) {
       throw new Error(`slices.skills.entries[${index}] idle state is inconsistent.`);
     }
-    if (phase === "channeling" && (!projection || channelRemainingMs === 0 || cooldownRemainingMs !== 0)) {
+    if (phase === "channeling" && (channelRemainingMs === 0 || cooldownRemainingMs !== 0)) {
       throw new Error(`slices.skills.entries[${index}] channeling state is inconsistent.`);
     }
     if (phase === "cooldown" && (projection || channelRemainingMs !== 0 || cooldownRemainingMs === 0)) {
@@ -372,13 +1119,14 @@ function restoreSkills(raw: unknown, config: MatchConfig): SkillsSlice {
     }
     return freezeEntry({
       competitorId: row.competitorId as CompetitorId,
-      skillId: row.skillId as SkillId,
+      skillId: row.skillId,
       phase,
       channelRemainingMs,
       cooldownRemainingMs,
       projection,
       bombEgressKeys: Object.freeze([...(row.bombEgressKeys as string[])]),
-    } as SkillEntry);
+      aimDirection,
+    });
   });
   if (entries.length !== assigned.length) {
     throw new Error("slices.skills.entries must list every assigned skill exactly once.");

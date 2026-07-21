@@ -12,11 +12,13 @@ const PENDULA_CHARACTER_ID = CHAMPION_MEMBERSHIP.pendula.characterId;
 const MIRELLE_CHARACTER_ID = CHAMPION_MEMBERSHIP.mirelle.characterId;
 const LEE_SIN_CHARACTER_ID = CHAMPION_MEMBERSHIP["lee-sin"].characterId;
 const THRESH_CHARACTER_ID = CHAMPION_MEMBERSHIP["thresh"].characterId;
+const KATARINA_CHARACTER_ID = CHAMPION_MEMBERSHIP["katarina"].characterId;
+const MADARA_CHARACTER_ID = CHAMPION_MEMBERSHIP["madara"].characterId;
 
 describe("runtime character roster", () => {
   it("consome somente as definições e os assets canônicos de Champions", () => {
     const roster = composeCharacterRoster();
-    expect(roster).toHaveLength(9);
+    expect(roster).toHaveLength(11);
     expect(
       roster.map(({ id, name, selectionIndex, order, defaultSlot }) => ({
         id,
@@ -89,6 +91,20 @@ describe("runtime character roster", () => {
         order: 8,
         defaultSlot: undefined,
       },
+      {
+        id: KATARINA_CHARACTER_ID,
+        name: "Katarina",
+        selectionIndex: 9,
+        order: 9,
+        defaultSlot: undefined,
+      },
+      {
+        id: MADARA_CHARACTER_ID,
+        name: "Madara",
+        selectionIndex: 10,
+        order: 10,
+        defaultSlot: undefined,
+      },
     ]);
     expect(roster.map((entry) => entry.size)).toEqual([
       { width: 160, height: 160 },
@@ -98,6 +114,8 @@ describe("runtime character roster", () => {
       { width: 124, height: 124 },
       { width: 124, height: 124 },
       { width: 124, height: 124 },
+      { width: 160, height: 160 },
+      { width: 160, height: 160 },
       { width: 160, height: 160 },
       { width: 160, height: 160 },
     ]);

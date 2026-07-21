@@ -7,6 +7,7 @@ import type {
   RoundOutcome,
   ScoreEntry,
   SeatId,
+  SkillId,
   TileCoord,
   Velocity,
   WorldPosition,
@@ -30,6 +31,19 @@ export const ARENA_HEIGHT = 9;
 export { TICK_DURATION_MS };
 export const BOMB_FUSE_MS = 2_000;
 export const FLAME_DURATION_MS = 600;
+/**
+ * Lethal window of a flame (Decision 012): a flame only kills while fresh —
+ * `remainingMs > FLAME_DURATION_MS - FLAME_LETHAL_GRACE_MS`. After the grace
+ * the tile keeps burning as residual VFX (fog) and walking into it is safe.
+ * Chain reactions refresh remainingMs to FLAME_DURATION_MS, so a new blast on
+ * the tile is lethal again.
+ */
+export const FLAME_LETHAL_GRACE_MS = 100;
+
+/** True while a flame is fresh enough to kill (Decision 012). */
+export function isFlameLethal(remainingMs: number): boolean {
+  return remainingMs > FLAME_DURATION_MS - FLAME_LETHAL_GRACE_MS;
+}
 
 /** Fixed-point world units per arena tile (Decision 006). */
 export const UNITS_PER_TILE = 1024;
@@ -205,13 +219,15 @@ export type ProgressionSlice = Readonly<{
 
 export type SkillEntry = Readonly<{
   competitorId: CompetitorId;
-  skillId: "ranni-ice-blink";
+  skillId: SkillId;
   phase: "idle" | "channeling" | "cooldown";
   channelRemainingMs: number;
   cooldownRemainingMs: number;
   projection: WorldPosition | null;
   /** Bomb tiles overlapped by the projection before placement, for monotone egress. */
   bombEgressKeys: readonly string[];
+  /** Facing locked at cast (dash/beam/hook aim). Null when idle. */
+  aimDirection: Direction | null;
 }>;
 
 export type SkillsSlice = Readonly<{
@@ -239,9 +255,9 @@ export function impactAt(index: number): number {
 
 /**
  * Outer-to-center rectangular spiral over the full grid, then filter base
- * solids. Starts at top-left of the outer ring; first playable cell after
- * solid filter is (1,1) on the canonical 11×9 pillar arena (51 tiles, last
- * center (5,4)). Clockwise: top L→R, right T→B, bottom R→L, left B→T.
+ * solids. Starts at top-left of the outer ring; on the classic 11×9 toroidal
+ * arena (Decision 011, 24 solids) the path has 75 tiles, first (1,0), last
+ * center (5,4). Clockwise: top L→R, right T→B, bottom R→L, left B→T.
  */
 export function buildPressurePath(
   width: number,
@@ -364,6 +380,65 @@ export type WorldState = Readonly<{
   slices: WorldSlices;
 }>;
 
+/**
+ * Classic toroidal wrap portals (Decision 011). Mid-edge border tiles that are
+ * kept open even though the sparse border parity would make them solid.
+ */
+export const WRAP_PORTAL_TILES: readonly TileCoord[] = Object.freeze([
+  Object.freeze({ x: 0, y: Math.floor(ARENA_HEIGHT / 2) }),
+  Object.freeze({ x: ARENA_WIDTH - 1, y: Math.floor(ARENA_HEIGHT / 2) }),
+  Object.freeze({ x: Math.floor(ARENA_WIDTH / 2), y: 0 }),
+  Object.freeze({ x: Math.floor(ARENA_WIDTH / 2), y: ARENA_HEIGHT - 1 }),
+]);
+
+/** Positive modulo — the single torus normalization primitive. */
+export function wrapAxis(value: number, span: number): number {
+  const wrapped = value % span;
+  return wrapped < 0 ? wrapped + span : wrapped;
+}
+
+/**
+ * Canonical torus position: always in [0, width*UNITS) x [0, height*UNITS).
+ * Bodies may straddle the seam; only the center is normalized (Decision 011).
+ */
+export function wrapPosition(
+  position: WorldPosition,
+  width: number = ARENA_WIDTH,
+  height: number = ARENA_HEIGHT,
+): WorldPosition {
+  return freezePosition({
+    x: wrapAxis(position.x, width * UNITS_PER_TILE),
+    y: wrapAxis(position.y, height * UNITS_PER_TILE),
+  });
+}
+
+/** Canonical torus tile: always inside [0,width) x [0,height). */
+export function wrapTile(
+  tile: TileCoord,
+  width: number = ARENA_WIDTH,
+  height: number = ARENA_HEIGHT,
+): TileCoord {
+  return freezeTile({
+    x: wrapAxis(tile.x, width),
+    y: wrapAxis(tile.y, height),
+  });
+}
+
+/**
+ * Shortest signed delta between two axis coordinates on the torus
+ * (current - previous, chosen across the seam when shorter). Consistent
+ * velocity/delta reporting across the wrap seam (Decision 011).
+ */
+export function wrapDelta(current: number, previous: number, span: number): number {
+  let delta = current - previous;
+  if (delta > span * 0.5) {
+    delta -= span;
+  } else if (delta < -span * 0.5) {
+    delta += span;
+  }
+  return delta;
+}
+
 export function tileKey(tile: TileCoord): string {
   return `${tile.x},${tile.y}`;
 }
@@ -448,7 +523,30 @@ export function bodyOverlapsTile(
   return bodyTileOverlapArea(position, tile, halfExtent) > 0;
 }
 
-/** Entire body AABB must remain inside the arena; no wrap. */
+/**
+ * Positive-area overlap between body AABB and a full tile square on the torus
+ * (Decision 011). Uses the shortest wrapped delta per axis; unambiguous
+ * because BODY_HALF_EXTENT + UNITS_PER_TILE/2 < span/2 on both axes.
+ * Exact edge contact is allowed (not a hit).
+ */
+export function bodyOverlapsTileToroidal(
+  position: WorldPosition,
+  tile: TileCoord,
+  halfExtent: number = BODY_HALF_EXTENT,
+): boolean {
+  const center = tileCenter(tile);
+  const dx = wrapDelta(position.x, center.x, ARENA_WIDTH * UNITS_PER_TILE);
+  const dy = wrapDelta(position.y, center.y, ARENA_HEIGHT * UNITS_PER_TILE);
+  const reach = halfExtent + UNITS_PER_TILE / 2;
+  return Math.abs(dx) < reach && Math.abs(dy) < reach;
+}
+
+/**
+ * Strict full-body containment inside [0, w*UNITS) x [0, h*UNITS).
+ * Legacy predicate only: on the toroidal arena (Decision 011) runtime
+ * positions are kept canonical by wrapPosition and a body near the seam
+ * legitimately straddles the edge, so locomotion no longer uses this.
+ */
 export function bodyWithinBounds(
   position: WorldPosition,
   width: number = ARENA_WIDTH,
@@ -559,6 +657,100 @@ export function symmetryPairKey(a: TileCoord, b: TileCoord): string {
   return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
 }
 
+/**
+ * Sparse border parity (Decision 011): top/bottom rows are solid at even x,
+ * left/right columns at even y; odd border tiles are open wrap gaps.
+ * The four WRAP_PORTAL_TILES are never solid.
+ */
+function isSparseBorderSolid(x: number, y: number): boolean {
+  const isBorder = x === 0 || y === 0 || x === ARENA_WIDTH - 1 || y === ARENA_HEIGHT - 1;
+  if (!isBorder) return false;
+  if (WRAP_PORTAL_TILES.some((tile) => tile.x === x && tile.y === y)) return false;
+  if (y === 0 || y === ARENA_HEIGHT - 1) return x % 2 === 0;
+  return y % 2 === 0;
+}
+
+function isInteriorCoord(x: number, y: number): boolean {
+  return x > 0 && y > 0 && x < ARENA_WIDTH - 1 && y < ARENA_HEIGHT - 1;
+}
+
+/** Classic pillar seeds; central mirrors complete the 8-pillar set. */
+const PILLAR_SEEDS: readonly TileCoord[] = Object.freeze([
+  Object.freeze({ x: 3, y: 3 }),
+  Object.freeze({ x: 5, y: 3 }),
+  Object.freeze({ x: 2, y: 4 }),
+  Object.freeze({ x: 4, y: 2 }),
+]);
+
+/** Classic forced crates (D2-symmetric as a set). */
+const FORCED_CRATE_TILES: readonly TileCoord[] = Object.freeze([
+  Object.freeze({ x: 2, y: 3 }),
+  Object.freeze({ x: ARENA_WIDTH - 3, y: 3 }),
+  Object.freeze({ x: 2, y: ARENA_HEIGHT - 4 }),
+  Object.freeze({ x: ARENA_WIDTH - 3, y: ARENA_HEIGHT - 4 }),
+]);
+
+/** Spawn + x±1 + one tile vertically toward center (interior only). */
+function spawnSafeKeys(): ReadonlySet<string> {
+  const safe = new Set<string>();
+  const add = (x: number, y: number): void => {
+    if (isInteriorCoord(x, y)) safe.add(tileKey({ x, y }));
+  };
+  for (const spawn of CANONICAL_SPAWNS) {
+    const towardCenterY = spawn.y < ARENA_HEIGHT / 2 ? 1 : -1;
+    add(spawn.x, spawn.y);
+    add(spawn.x + 1, spawn.y);
+    add(spawn.x - 1, spawn.y);
+    add(spawn.x, spawn.y + towardCenterY);
+  }
+  return safe;
+}
+
+/** Center cross + portal lane tiles, kept crate-free (interior only). */
+function strategicOpenKeys(): ReadonlySet<string> {
+  const open = new Set<string>();
+  const add = (x: number, y: number): void => {
+    if (isInteriorCoord(x, y)) open.add(tileKey({ x, y }));
+  };
+  const middleX = Math.floor(ARENA_WIDTH / 2);
+  const middleY = Math.floor(ARENA_HEIGHT / 2);
+  for (const tile of [
+    { x: middleX, y: middleY },
+    { x: middleX - 1, y: middleY },
+    { x: middleX + 1, y: middleY },
+    { x: middleX, y: middleY - 1 },
+    { x: middleX, y: middleY + 1 },
+    { x: 1, y: middleY },
+    { x: Math.min(2, ARENA_WIDTH - 2), y: middleY },
+    { x: ARENA_WIDTH - 2, y: middleY },
+    { x: Math.max(ARENA_WIDTH - 3, 1), y: middleY },
+    { x: middleX, y: 1 },
+    { x: middleX, y: ARENA_HEIGHT - 2 },
+  ]) {
+    add(tile.x, tile.y);
+  }
+  return open;
+}
+
+/** D2-stable hash input: smallest of the 4 reflected tile-key variants. */
+function d2MinVariantKey(x: number, y: number): string {
+  const variants = [
+    tileKey({ x, y }),
+    tileKey({ x: ARENA_WIDTH - 1 - x, y }),
+    tileKey({ x, y: ARENA_HEIGHT - 1 - y }),
+    tileKey({ x: ARENA_WIDTH - 1 - x, y: ARENA_HEIGHT - 1 - y }),
+  ].sort();
+  return variants[0]!;
+}
+
+const CLASSIC_CRATE_DENSITY = 0.97;
+
+/**
+ * Classic 11x9 arena (Decision 011): sparse border with 4 wrap portals,
+ * 8 D2 pillars, spawn-safe corners and strategic-open lanes. Structure is
+ * fixed; only crate selection uses the per-round seed hash (D2-preserved
+ * via the min-of-4-variant key) so crates still vary per round.
+ */
 export function createArenaTiles(seed: string): Readonly<{
   solid: readonly TileCoord[];
   crates: readonly TileCoord[];
@@ -566,45 +758,31 @@ export function createArenaTiles(seed: string): Readonly<{
   const solidKeys = new Set<string>();
   for (let y = 0; y < ARENA_HEIGHT; y += 1) {
     for (let x = 0; x < ARENA_WIDTH; x += 1) {
-      const isBorder = x === 0 || y === 0 || x === ARENA_WIDTH - 1 || y === ARENA_HEIGHT - 1;
-      const isInteriorPillar = x > 0 && y > 0 && x % 2 === 0 && y % 2 === 0;
-      if (isBorder || isInteriorPillar) solidKeys.add(tileKey({ x, y }));
+      if (isSparseBorderSolid(x, y)) solidKeys.add(tileKey({ x, y }));
     }
   }
+  for (const seedTile of PILLAR_SEEDS) {
+    solidKeys.add(tileKey(seedTile));
+    solidKeys.add(tileKey(mirrorTile(seedTile)));
+  }
 
-  const spawnSafe = new Set<string>();
-  for (const spawn of CANONICAL_SPAWNS) {
-    const towardCenterX = spawn.x < ARENA_WIDTH / 2 ? 1 : -1;
-    const towardCenterY = spawn.y < ARENA_HEIGHT / 2 ? 1 : -1;
-    for (const tile of [
-      spawn,
-      { x: spawn.x + towardCenterX, y: spawn.y },
-      { x: spawn.x, y: spawn.y + towardCenterY },
-    ]) {
-      spawnSafe.add(tileKey(tile));
+  const spawnSafe = spawnSafeKeys();
+  const strategicOpen = strategicOpenKeys();
+  const forced = new Set<string>();
+  for (const tile of FORCED_CRATE_TILES) {
+    const key = tileKey(tile);
+    if (!solidKeys.has(key) && !spawnSafe.has(key) && !strategicOpen.has(key)) {
+      forced.add(key);
     }
   }
 
   const crateKeys = new Set<string>();
-  const visitedPairs = new Set<string>();
   for (let y = 1; y < ARENA_HEIGHT - 1; y += 1) {
     for (let x = 1; x < ARENA_WIDTH - 1; x += 1) {
-      const tile = { x, y };
-      const key = tileKey(tile);
-      if (solidKeys.has(key) || spawnSafe.has(key)) continue;
-
-      const mirrored = mirrorTile(tile);
-      const mirroredKey = tileKey(mirrored);
-      const pairKey = key < mirroredKey ? `${key}|${mirroredKey}` : `${mirroredKey}|${key}`;
-      if (visitedPairs.has(pairKey)) continue;
-      visitedPairs.add(pairKey);
-
-      if (hashToUnit(`${seed}|${pairKey}|crate`) >= 0.56) continue;
-      for (const candidate of [tile, mirrored]) {
-        const candidateKey = tileKey(candidate);
-        if (!solidKeys.has(candidateKey) && !spawnSafe.has(candidateKey)) {
-          crateKeys.add(candidateKey);
-        }
+      const key = tileKey({ x, y });
+      if (solidKeys.has(key) || spawnSafe.has(key) || strategicOpen.has(key)) continue;
+      if (forced.has(key) || hashToUnit(`${seed}|${d2MinVariantKey(x, y)}|breakable`) < CLASSIC_CRATE_DENSITY) {
+        crateKeys.add(key);
       }
     }
   }

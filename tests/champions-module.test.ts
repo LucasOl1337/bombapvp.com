@@ -16,13 +16,15 @@ const NIX_EMBER_CHARACTER_ID = CHAMPION_MEMBERSHIP["nix-ember"].characterId;
 const PENDULA_CHARACTER_ID = CHAMPION_MEMBERSHIP.pendula.characterId;
 const LEE_SIN_CHARACTER_ID = CHAMPION_MEMBERSHIP["lee-sin"].characterId;
 const THRESH_CHARACTER_ID = CHAMPION_MEMBERSHIP["thresh"].characterId;
+const KATARINA_CHARACTER_ID = CHAMPION_MEMBERSHIP["katarina"].characterId;
+const MADARA_CHARACTER_ID = CHAMPION_MEMBERSHIP["madara"].characterId;
 
 describe("Champions module", () => {
   it("keeps each canonical champion definition, portrait and sprite bundle together", () => {
     const definitions = listCharacterDefinitions();
     const entries = listChampionAssetEntries();
-    expect(definitions).toHaveLength(9);
-    expect(entries).toHaveLength(9);
+    expect(definitions).toHaveLength(11);
+    expect(entries).toHaveLength(11);
     const assetsByDefinition = definitions.map((definition) => ({
       name: definition.name,
       assets: getChampionAssets(definition.id),
@@ -61,6 +63,16 @@ describe("Champions module", () => {
       size: { width: 160, height: 160 },
     });
     expect(summary[8]!.fileCount).toBe(124);
+    expect(summary[9]).toMatchObject({
+      name: "Katarina",
+      size: { width: 160, height: 160 },
+    });
+    expect(summary[9]!.fileCount).toBe(124);
+    expect(summary[10]).toMatchObject({
+      name: "Madara",
+      size: { width: 160, height: 160 },
+    });
+    expect(summary[10]!.fileCount).toBe(124);
     for (const { assets } of entries) {
       expect(assets.portraitUrl).toContain("/Champions/");
       expect(Object.values(assets.staticSprites).every(Boolean)).toBe(true);
@@ -97,6 +109,22 @@ describe("Champions module", () => {
     expect(getChampionAssets(THRESH_CHARACTER_ID).animations.cast.down.length).toBe(6);
     expect(getChampionAssets(THRESH_CHARACTER_ID).animations.attack.down.length).toBe(4);
     expect(getChampionAssets(THRESH_CHARACTER_ID).animations.death.down.length).toBe(4);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.idle.down.length).toBe(8);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.walk.down.length).toBe(8);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.walk.right.length).toBe(8);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.walk.up.length).toBe(8);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.walk.left.length).toBe(8);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.cast.down.length).toBe(6);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.attack.down.length).toBe(4);
+    expect(getChampionAssets(KATARINA_CHARACTER_ID).animations.death.down.length).toBe(4);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.idle.down.length).toBe(8);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.walk.down.length).toBe(8);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.walk.right.length).toBe(8);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.walk.up.length).toBe(8);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.walk.left.length).toBe(8);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.cast.down.length).toBe(6);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.attack.down.length).toBe(4);
+    expect(getChampionAssets(MADARA_CHARACTER_ID).animations.death.down.length).toBe(4);
   });
 
   it("projects every canonical membership into light and heavy registries", () => {

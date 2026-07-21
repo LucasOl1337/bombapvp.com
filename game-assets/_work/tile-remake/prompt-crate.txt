@@ -1,0 +1,8 @@
+You have an `image_gen` tool. If a `game-tilesets` skill doc is readable in your environment, read it first and follow its guidance.
+
+Generate ONE image with image_gen and save it as PNG to C:/projetos/bombpvp/game-assets/_work/tile-remake/src-crate.png (convert the session JPG to PNG with Pillow, keep full resolution).
+
+Image prompt to use (1:1):
+"Top-down orthographic view of a SINGLE square wooden crate for a 2D Bomberman-like arena, hand-painted stylized game art: warm honey-brown wooden planks (horizontal planks visible on the lid), dark iron cross-bands forming an X or plus across the lid with small round rivets, slightly beveled wooden outer rim, rich painterly wood grain and a few small knots and scuffs, the crate fills the ENTIRE frame edge to edge, centered, square, NO background, NO floor, NO perspective tilt, NO vignette, soft even lighting with a subtle top-left catch-light, crisp detail, premium mobile game asset."
+
+Rules: exactly ONE crate filling the whole frame edge to edge (full-bleed); warm brown family around #a86639; it must read clearly as breakable wood vs dark stone walls. Report the final file path and dimensions.

@@ -25,6 +25,8 @@ import { CHAMPION_SKILL_ADAPTER as pendulaSkill } from "./pendula/skill";
 import { CHAMPION_SKILL_ADAPTER as mirelleSkill } from "./mirelle/skill";
 import { CHAMPION_SKILL_ADAPTER as leeSinSkill } from "./lee-sin/skill";
 import { CHAMPION_SKILL_ADAPTER as threshSkill } from "./thresh/skill";
+import { CHAMPION_SKILL_ADAPTER as katarinaSkill } from "./katarina/skill";
+import { CHAMPION_SKILL_ADAPTER as madaraSkill } from "./madara/skill";
 
 const SKILL_ADAPTERS_BY_SLUG = Object.freeze({
   ranni: ranniSkill,
@@ -36,6 +38,8 @@ const SKILL_ADAPTERS_BY_SLUG = Object.freeze({
   mirelle: mirelleSkill,
   "lee-sin": leeSinSkill,
   thresh: threshSkill,
+  katarina: katarinaSkill,
+  madara: madaraSkill,
 } satisfies Record<ChampionSlug, ChampionSkillAdapter>);
 
 const discoveredAdapters = listChampionMembership().map(({ slug, skillId }) => {

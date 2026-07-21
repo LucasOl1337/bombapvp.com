@@ -6,10 +6,10 @@ import type {
   SeatAssignment,
   SeatId,
 } from "./contracts.ts";
-import { RANNI_ICE_BLINK_SKILL_ID, TICK_DURATION_MS } from "./contracts.ts";
+import { isSkillId, TICK_DURATION_MS } from "./contracts.ts";
 
 /** Manual rules identifier. Bump when executable gameplay rules change. */
-export const DEFAULT_MECHANICS_REVISION = "mechanics-v1" as const;
+export const DEFAULT_MECHANICS_REVISION = "mechanics-v4" as const;
 
 /**
  * Content pack identifier. Pass-through metadata while no variable content
@@ -132,7 +132,7 @@ export function createMatchConfig(input: MatchConfigInput): MatchConfig {
       requireNonEmptyTrimmed(raw.competitorId, "MatchConfig competitorId"),
     );
     const skillId = raw.skillId;
-    if (skillId !== undefined && skillId !== RANNI_ICE_BLINK_SKILL_ID) {
+    if (skillId !== undefined && (typeof skillId !== "string" || !isSkillId(skillId))) {
       throw new Error(`Unknown MatchConfig skillId: ${String(skillId)}`);
     }
 

@@ -5,17 +5,17 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(process.cwd(), "GameMechanics");
 const BROWSER_MAIN = join(ROOT, "src", "browser", "main.ts");
 const BROWSER_STYLES = join(ROOT, "src", "browser", "styles.css");
+const BROWSER_PACKS = join(ROOT, "src", "browser", "champion-packs.ts");
 const INDEX_HTML = join(ROOT, "index.html");
 const ASSETS_DIR = join(ROOT, "assets");
 
-// Case-sensitive: local copies live under assets/champions/ (lowercase).
+// Case-sensitive: local arena copies live under assets/ (lowercase).
+// Character sprites may come from Champions/ (mode-4 roster).
 const FORBIDDEN_IMPORT_PATTERNS = [
   /from\s+["'][^"']*src\/original-game/,
-  /from\s+["'][^"']*\/Champions\//,
   /from\s+["'][^"']*game-assets\//,
   /from\s+["'][^"']*public\/Assets/,
   /from\s+["']@\//,
-  /from\s+["']\.\.\/\.\.\/\.\.\//, // outside GameMechanics
 ];
 
 const REQUIRED_LOCAL_ASSETS = [
@@ -29,18 +29,6 @@ const REQUIRED_LOCAL_ASSETS = [
   "gameplay/flame.png",
   "gameplay/power-bomb.png",
   "gameplay/power-flame.png",
-  "champions/ranni/idle-south-0.png",
-  "champions/ranni/walk-south-0.png",
-  "champions/ranni/cast-south-0.png",
-  "champions/ranni/death-south-0.png",
-  "champions/ranni/death-south-6.png",
-  "champions/ranni/portrait.png",
-  "champions/nico/idle-south-0.png",
-  "champions/nico/walk-south-0.png",
-  "champions/nico/cast-south-0.png",
-  "champions/nico/death-south-0.png",
-  "champions/nico/death-south-5.png",
-  "champions/nico/portrait.png",
   "gameplay/crate-break-0.png",
   "gameplay/crate-break-3.png",
   "audio/bombs/bomb_place.mp3",
@@ -49,9 +37,6 @@ const REQUIRED_LOCAL_ASSETS = [
   "audio/match/sudden_death_alarm.wav",
   "audio/power-ups/powerup_collect.mp3",
   "brand/brand-mark.png",
-  "hud/panel-center-v1.png",
-  "hud/panel-local-v1.png",
-  "hud/panel-rival-v1.png",
   "hud/icon-bomb-v1.png",
   "hud/icon-flame-v1.png",
 ] as const;
@@ -74,32 +59,23 @@ describe("browser visual adapter (product arena)", () => {
     }
   });
 
-  it("browser sources only import assets under GameMechanics/assets", () => {
+  it("browser sources do not import original-game / shared asset roots", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
     const styles = readFileSync(BROWSER_STYLES, "utf8");
-    const combined = `${main}\n${styles}`;
+    const packs = readFileSync(BROWSER_PACKS, "utf8");
+    const combined = `${main}\n${styles}\n${packs}`;
 
     for (const pattern of FORBIDDEN_IMPORT_PATTERNS) {
       expect(combined, `forbidden import matched ${pattern}`).not.toMatch(pattern);
     }
 
-    const assetImports = [...main.matchAll(/from\s+["']([^"']+\.(?:png|svg|webp|jpg))["']/g)].map(
-      (m) => m[1]!,
-    );
-    expect(assetImports.length).toBeGreaterThan(20);
-    for (const spec of assetImports) {
-      expect(spec.startsWith("../../assets/"), `non-local asset import: ${spec}`).toBe(true);
-    }
-
-    // Metallic HUD chrome must be real runtime imports — not dead files on disk.
-    expect(main).toContain("hud/panel-center-v1.png");
-    expect(main).toContain("hud/panel-local-v1.png");
-    expect(main).toContain("hud/panel-rival-v1.png");
-    expect(main).toMatch(/hudPanelCenterUrl|panel-center-v1/);
-    expect(main).toMatch(/--hud-panel-local|--hud-panel-center|--hud-panel-rival/);
-    expect(styles).toContain("var(--hud-panel-local)");
-    expect(styles).toContain("var(--hud-panel-rival)");
-    expect(styles).toContain("var(--hud-panel-center)");
+    // Mode 4 roster is loaded from Champions content pack.
+    expect(packs).toMatch(/Champions\/(assets-catalog|catalog|membership)/);
+    expect(main).toContain("champion-packs");
+    expect(main).toContain("hud/icon-bomb-v1.png");
+    expect(main).toContain("hud/icon-flame-v1.png");
+    expect(main).toMatch(/hudBombIconUrl|icon-bomb-v1/);
+    expect(main).toMatch(/hudFlameIconUrl|icon-flame-v1/);
   });
 
   it("default presentation is product arena, not diagnostic dashboard", () => {
@@ -116,6 +92,16 @@ describe("browser visual adapter (product arena)", () => {
     expect(styles).toContain(".arena-app");
     expect(styles).toContain(".arena-hud");
     expect(styles).toContain(".arena-hud__bar");
+
+    // LoL dual HUD + character select
+    expect(main).toContain("lol-hud");
+    expect(main).toContain("char-select");
+    expect(main).toContain("listChampionPresentations");
+    expect(main).toContain("createLolHudPanel");
+    expect(styles).toContain(".lol-hud");
+    expect(styles).toContain(".char-select");
+    expect(styles).toContain(".lol-hud--p1");
+    expect(styles).toContain(".lol-hud--p2");
 
     // Diagnostic dashboard removed from default markup construction
     expect(main).not.toContain("mechanics-sidebar");
@@ -148,7 +134,7 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("KeyO");
     expect(main).toContain("KeyP");
     expect(main).toContain('type: "use-skill"');
-    expect(main).toContain("arena-player-card__skill");
+    expect(main).toMatch(/lol-hud__spell--r|hud-ult/);
     expect(main).toContain("Escape");
     expect(main).toContain("KeyT");
   });
@@ -174,8 +160,11 @@ describe("browser visual adapter (product arena)", () => {
       /\.arena-canvas-frame\s*\{[^}]*max-width:\s*min\(\s*100%\s*,\s*calc\(\s*\(100dvh/s,
     );
 
-    // HUD stays a single horizontal bar — no multi-row stack that steals arena height at ≤900px.
+    // HUD stays a single horizontal bar — P1 | timer | P2.
     expect(styles).toContain(".arena-hud__bar");
+    expect(styles).toMatch(
+      /\.arena-hud__bar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/s,
+    );
     expect(styles).not.toMatch(
       /@media\s*\(\s*max-width:\s*900px\s*\)\s*\{[^}]*\.arena-hud\s*\{[^}]*grid-template-columns:\s*1fr/s,
     );
@@ -200,23 +189,23 @@ describe("browser visual adapter (product arena)", () => {
     );
     expect(main).toMatch(/if\s*\(\s*!acceptsGameplayInput\(\)\s*\)\s*return/);
     // Bomb gate appears (place-bomb path).
-    const bombGateBlock = main.slice(
-      main.indexOf('event.code === "KeyQ"'),
-      main.indexOf('event.code === "Escape"'),
-    );
+    const bombKeyIdx = main.lastIndexOf('event.code === "KeyQ"');
+    expect(bombKeyIdx).toBeGreaterThan(-1);
+    const bombGateBlock = main.slice(bombKeyIdx, bombKeyIdx + 500);
     expect(bombGateBlock).toContain("acceptsGameplayInput");
+    expect(bombGateBlock).toContain("place-bomb");
     // Movement release when leaving playable phase.
     expect(main).toContain("releaseMovement");
     expect(main).toMatch(/!acceptsGameplayInput\(snapshot\.phase\)[\s\S]{0,80}releaseMovement/);
   });
 
-  it("does not tree-walk into legacy asset roots at runtime import time", () => {
+  it("does not tree-walk into legacy original-game asset roots", () => {
     const sources = walkFiles(join(ROOT, "src", "browser"))
       .filter((f) => f.endsWith(".ts") || f.endsWith(".css"))
       .map((f) => readFileSync(f, "utf8"))
       .join("\n");
-    expect(sources).not.toMatch(/original-game|Champions\/|game-assets\/|public\/Assets/);
-    // relative imports stay inside GameMechanics
+    expect(sources).not.toMatch(/original-game|game-assets\/|public\/Assets/);
+    // relative imports stay inside GameMechanics browser or Champions pack
     const rel = relative(ROOT, BROWSER_MAIN);
     expect(rel.replace(/\\/g, "/")).toBe("src/browser/main.ts");
   });

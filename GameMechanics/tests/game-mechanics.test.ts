@@ -314,7 +314,7 @@ function derivedPathOf(state: WorldState | MutableWorldDraft) {
 }
 
 const SHORT_ROUND_MS = 5_000;
-const CANONICAL_PRESSURE_PATH_51 = buildPressurePath(
+const CANONICAL_PRESSURE_PATH_75 = buildPressurePath(
   11,
   9,
   createArenaTiles("pressure-canonical").solid,
@@ -961,36 +961,35 @@ describe("GameMechanics — regressao mecanica (2 competidores)", () => {
     expect(blocked.has("9,6")).toBe(false);
 
     const crateKeys = new Set(first.arena.crates.map(({ x, y }) => `${x},${y}`));
+    const solidKeys = new Set(first.arena.solid.map(({ x, y }) => `${x},${y}`));
+    // Central symmetry (Decision 011): pillars are seed + central mirror, and
+    // the crate hash is D2-uniform (min of the 4 reflected tile-key variants),
+    // so both sets close under the central mirror.
     for (const crate of first.arena.crates) {
       expect(crateKeys.has(`${first.arena.width - 1 - crate.x},${first.arena.height - 1 - crate.y}`))
         .toBe(true);
     }
+    for (const tile of first.arena.solid) {
+      expect(solidKeys.has(`${first.arena.width - 1 - tile.x},${first.arena.height - 1 - tile.y}`))
+        .toBe(true);
+    }
+    // Sparse border + wrap portals on the classic layout.
+    expect(solidKeys.has("0,2")).toBe(true);
+    expect(solidKeys.has("0,1")).toBe(false);
+    expect(solidKeys.has("0,4")).toBe(false);
+    expect(solidKeys.has("10,4")).toBe(false);
+    expect(solidKeys.has("5,0")).toBe(false);
+    expect(solidKeys.has("5,8")).toBe(false);
   });
 
-  it("move por comandos e bloqueia a borda solida", () => {
+  it("move por comandos: 16 ticks por tile e gap impar da borda cruza a costura com wrap", () => {
     const config = localDuel();
     const alpha = config.seats[0]!.competitorId;
     const game = createGameMechanics(config);
     const spawn = tileCenter({ x: 1, y: 1 });
     facadeEnterPlaying(game);
 
-    // Left toward the solid border is free until the body AABB would penetrate.
-    // Exact contact with the solid edge is allowed; one more step that overlaps is blocked.
-    game.dispatch({ type: "set-movement", competitorId: alpha, direction: "left", pressed: true });
-    for (let i = 0; i < 32; i += 1) {
-      game.dispatch({ type: "advance", deltaMs: 20 });
-    }
-    game.dispatch({ type: "set-movement", competitorId: alpha, direction: "left", pressed: false });
-    const againstWall = competitor(game, alpha).position;
-    expect(againstWall.x).toBeLessThan(spawn.x);
-    // Body left edge must not enter solid tile x=0 ([0,1024)).
-    expect(againstWall.x - BODY_HALF_EXTENT).toBeGreaterThanOrEqual(UNITS_PER_TILE);
-    expect(competitor(game, alpha).tile).toEqual({ x: 1, y: 1 });
-    expect(competitor(game, alpha).velocity).toEqual({ x: 0, y: 0 });
-
     // Restart from spawn for the exact 16-tick / 1-tile right walk.
-    game.dispatch({ type: "restart" });
-    facadeEnterPlaying(game);
     game.dispatch({ type: "set-movement", competitorId: alpha, direction: "right", pressed: true });
     const events = game.dispatch({ type: "advance", deltaMs: 20 });
     expect(competitor(game, alpha).position).toEqual({
@@ -1012,6 +1011,108 @@ describe("GameMechanics — regressao mecanica (2 competidores)", () => {
     game.dispatch({ type: "set-movement", competitorId: alpha, direction: "right", pressed: false });
     expect(competitor(game, alpha).position).toEqual(tileCenter({ x: 2, y: 1 }));
     expect(competitor(game, alpha).tile).toEqual({ x: 2, y: 1 });
+
+    // Row y=1 has open wrap gaps at (0,1)/(10,1): walking left crosses the
+    // seam and re-enters on the opposite side at the same y (Decision 011).
+    game.dispatch({ type: "restart" });
+    facadeEnterPlaying(game);
+    game.dispatch({ type: "set-movement", competitorId: alpha, direction: "left", pressed: true });
+    for (let i = 0; i < 16; i += 1) {
+      game.dispatch({ type: "advance", deltaMs: 20 });
+    }
+    // 16 ticks left: (1,1) -> (0,1) center, still canonical in [0, span).
+    expect(competitor(game, alpha).position).toEqual(tileCenter({ x: 0, y: 1 }));
+    expect(competitor(game, alpha).tile).toEqual({ x: 0, y: 1 });
+    for (let i = 0; i < 16; i += 1) {
+      game.dispatch({ type: "advance", deltaMs: 20 });
+    }
+    // 16 more ticks: exits the left edge and wraps to (10,1) at the same y.
+    expect(competitor(game, alpha).position).toEqual(tileCenter({ x: 10, y: 1 }));
+    expect(competitor(game, alpha).tile).toEqual({ x: 10, y: 1 });
+    for (let i = 0; i < 16; i += 1) {
+      game.dispatch({ type: "advance", deltaMs: 20 });
+    }
+    game.dispatch({ type: "set-movement", competitorId: alpha, direction: "left", pressed: false });
+    expect(competitor(game, alpha).position).toEqual(tileCenter({ x: 9, y: 1 }));
+    expect(competitor(game, alpha).tile).toEqual({ x: 9, y: 1 });
+  });
+
+  it("borda par bloqueia no contato exato; portal (0,4) sai a esquerda e re-entra em (10,4)", () => {
+    const program = createDefaultMechanicsProgram();
+    const config = localDuel("wrap-portal");
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const seat0 = config.seats[0]!.seatId;
+    const base = program.initial(config);
+    const openArena = {
+      width: 11,
+      height: 9,
+      solid: [...base.slices.arena.solid],
+      crates: [] as { x: number; y: number }[],
+    };
+    const pressLeft = (world: WorldState, sequence: number) =>
+      program.step(world, {
+        commands: [
+          {
+            tick: world.tick,
+            sequence,
+            seatId: seat0,
+            command: { type: "set-movement", direction: "left", pressed: true },
+          },
+        ],
+      }).state;
+
+    // Even border tile (0,2) is solid: walking left from (1,2) stops at exact
+    // contact (body left edge == tile right edge) and never penetrates.
+    let world = asPlayingWorld(program, base, {
+      arena: openArena,
+      locomotion: { entries: [locoAt(alpha, 1, 2), locoAt(beta, 9, 7)] },
+    });
+    world = pressLeft(world, 0);
+    for (let i = 0; i < 20; i += 1) {
+      world = program.step(world, { commands: [] }).state;
+    }
+    const blocked = world.slices.locomotion.entries[0]!;
+    expect(blocked.position).toEqual({
+      x: UNITS_PER_TILE + BODY_HALF_EXTENT,
+      y: tileCenter({ x: 1, y: 2 }).y,
+    });
+    expect(blocked.velocity).toEqual({ x: 0, y: 0 });
+    expect(bodyOverlapsTile(blocked.position, { x: 0, y: 2 })).toBe(false);
+
+    // Portal lane y=4: (0,4)/(10,4) are open portals. Walking left from (1,4)
+    // exits through (0,4) and re-enters on the right at (10,4), same y.
+    world = asPlayingWorld(program, base, {
+      arena: openArena,
+      locomotion: { entries: [locoAt(alpha, 1, 4), locoAt(beta, 9, 7)] },
+    });
+    world = pressLeft(world, 0);
+    for (let i = 0; i < 15; i += 1) {
+      world = program.step(world, { commands: [] }).state;
+    }
+    expect(world.slices.locomotion.entries[0]!.position).toEqual(tileCenter({ x: 0, y: 4 }));
+    expect(tileOf(world.slices.locomotion.entries[0]!.position)).toEqual({ x: 0, y: 4 });
+    // 8 more ticks reach x=0 (body straddling the seam), still canonical.
+    for (let i = 0; i < 8; i += 1) {
+      world = program.step(world, { commands: [] }).state;
+    }
+    expect(world.slices.locomotion.entries[0]!.position.x).toBe(0);
+    // Seam-crossing tick: wraps to the right edge; velocity stays the
+    // shortest wrapped delta (-64).
+    const seam = program.step(world, { commands: [] }).state;
+    const seamEntry = seam.slices.locomotion.entries[0]!;
+    expect(seamEntry.velocity).toEqual({ x: -BASE_SPEED_UNITS_PER_TICK, y: 0 });
+    expect(seamEntry.position.x).toBe(11 * UNITS_PER_TILE - BASE_SPEED_UNITS_PER_TICK);
+    world = seam;
+    for (let i = 0; i < 7; i += 1) {
+      world = program.step(world, { commands: [] }).state;
+    }
+    const wrapped = world.slices.locomotion.entries[0]!;
+    expect(wrapped.position).toEqual(tileCenter({ x: 10, y: 4 }));
+    expect(tileOf(wrapped.position)).toEqual({ x: 10, y: 4 });
+    // Position stays canonical in [0, width*UNITS) after the wrap.
+    expect(wrapped.position.x).toBeGreaterThanOrEqual(0);
+    expect(wrapped.position.x).toBeLessThan(11 * UNITS_PER_TILE);
   });
 
   it("explode uma bomba, cria chamas e encerra a rodada por eliminacao", () => {
@@ -1684,7 +1785,8 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
   });
 
   it("movimento simultaneo adversarial nao depende da ordem do roster", () => {
-    // Head-on within contract max step: finals positively overlap → both rejected.
+    // Head-on within contract max step: bodies never block (Decision 012) —
+    // both cross through each other and are accepted, order-independent.
     const aFrom = freezePosition({ x: 1500, y: 1600 });
     const zFrom = freezePosition({
       x: 1500 + BODY_HALF_EXTENT * 2 - 20,
@@ -1718,7 +1820,9 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
         lastDirection: null,
       }),
     ];
-    expect(resolveMovementBatch(headEntries, headOn).size).toBe(0);
+    expect([...resolveMovementBatch(headEntries, headOn)].sort()).toEqual(["a-first", "z-last"]);
+    expect([...resolveMovementBatch([...headEntries].reverse(), [...headOn].reverse())].sort())
+      .toEqual(["a-first", "z-last"]);
 
     // Parallel follow within step 128: both accepted, order-independent.
     // Full-tile swap is impossible under the contract max step and is rejected elsewhere.
@@ -1931,7 +2035,10 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
 
   it("kernel nao importa legacy/Champions/game-assets; program nao importa modules concretos", () => {
     const srcRoot = join(process.cwd(), "GameMechanics", "src");
-    const files = listSourceFiles(srcRoot);
+    // Browser adapter may load the character content pack; pure kernel/modules must not.
+    const files = listSourceFiles(srcRoot).filter(
+      (file) => !relative(srcRoot, file).replace(/\\/g, "/").startsWith("browser/"),
+    );
     const forbidden = [/original-game/, /Champions/, /game-assets/];
     for (const file of files) {
       const text = readFileSync(file, "utf8");
@@ -2218,51 +2325,52 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     }
 
     // Offset 100: assist corrects min(128,100)=100 → center, then longitudinal +64.
-    const clampStart = posAt(3, 3, 0, 100);
+    const clampStart = posAt(1, 3, 0, 100);
     const clamped = stepRight(openWorld(clampStart), 0).slices.locomotion.entries[0]!;
-    expect(clamped.position.y).toBe(tileCenter({ x: 3, y: 3 }).y);
+    expect(clamped.position.y).toBe(tileCenter({ x: 1, y: 3 }).y);
     expect(clamped.position.x).toBe(clampStart.x + BASE_SPEED_UNITS_PER_TICK);
 
     // Assist boundary: 460 corrects (partial), 461 does not assist.
-    const at460 = posAt(3, 3, 0, LANE_ASSIST_MAX_OFFSET);
+    const at460 = posAt(1, 3, 0, LANE_ASSIST_MAX_OFFSET);
     const after460 = stepRight(openWorld(at460), 1).slices.locomotion.entries[0]!;
     expect(after460.position.y).toBe(at460.y - LANE_CORRECTION_MAX);
     // Remaining transverse 460-128=332 > lock → no longitudinal.
     expect(after460.position.x).toBe(at460.x);
 
-    const at461 = posAt(3, 3, 0, LANE_ASSIST_MAX_OFFSET + 1);
+    const at461 = posAt(1, 3, 0, LANE_ASSIST_MAX_OFFSET + 1);
     const after461 = stepRight(openWorld(at461, null), 2).slices.locomotion.entries[0]!;
     expect(after461.position).toEqual(at461);
     expect(after461.velocity).toEqual({ x: 0, y: 0 });
 
     // Effective lock after max correction: 205 → 77 allows long; 206 → 78 blocks long.
-    const lockOk = posAt(3, 3, 0, LANE_CORRECTION_MAX + LANE_LONGITUDINAL_LOCK); // 205
+    const lockOk = posAt(1, 3, 0, LANE_CORRECTION_MAX + LANE_LONGITUDINAL_LOCK); // 205
     const afterLockOk = stepRight(openWorld(lockOk), 3).slices.locomotion.entries[0]!;
     expect(afterLockOk.position.y).toBe(lockOk.y - LANE_CORRECTION_MAX);
-    expect(Math.abs(afterLockOk.position.y - tileCenter({ x: 3, y: 3 }).y)).toBe(
+    expect(Math.abs(afterLockOk.position.y - tileCenter({ x: 1, y: 3 }).y)).toBe(
       LANE_LONGITUDINAL_LOCK,
     );
     expect(afterLockOk.position.x).toBe(lockOk.x + BASE_SPEED_UNITS_PER_TICK);
 
-    const lockNo = posAt(3, 3, 0, LANE_CORRECTION_MAX + LANE_LONGITUDINAL_LOCK + 1); // 206
+    const lockNo = posAt(1, 3, 0, LANE_CORRECTION_MAX + LANE_LONGITUDINAL_LOCK + 1); // 206
     const afterLockNo = stepRight(openWorld(lockNo), 4).slices.locomotion.entries[0]!;
     expect(afterLockNo.position.y).toBe(lockNo.y - LANE_CORRECTION_MAX);
-    expect(Math.abs(afterLockNo.position.y - tileCenter({ x: 3, y: 3 }).y)).toBe(
+    expect(Math.abs(afterLockNo.position.y - tileCenter({ x: 1, y: 3 }).y)).toBe(
       LANE_LONGITUDINAL_LOCK + 1,
     );
     expect(afterLockNo.position.x).toBe(lockNo.x);
 
-    // Use solid border wall at x=0: exact right contact with tile (0,1).
-    // tile (0,1) right edge = 1024; body.x - 384 = 1024 → body.x = 1408.
+    // Use solid border wall at x=0: exact right contact with tile (0,2)
+    // (sparse border: even-y left column is solid, Decision 011).
+    // tile (0,2) right edge = 1024; body.x - 384 = 1024 → body.x = 1408.
     const wallContact = freezePosition({
       x: UNITS_PER_TILE + BODY_HALF_EXTENT,
-      y: tileCenter({ x: 1, y: 1 }).y,
+      y: tileCenter({ x: 1, y: 2 }).y,
     });
-    expect(bodyOverlapsTile(wallContact, { x: 0, y: 1 })).toBe(false);
+    expect(bodyOverlapsTile(wallContact, { x: 0, y: 2 })).toBe(false);
     expect(
       bodyOverlapsTile(
         freezePosition({ x: wallContact.x - 1, y: wallContact.y }),
-        { x: 0, y: 1 },
+        { x: 0, y: 2 },
       ),
     ).toBe(true);
 
@@ -2282,8 +2390,8 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(oppositeBlocked.velocity).toEqual({ x: 0, y: 0 });
 
     // Perpendicular: left into wall, lastDirection down continues (with lane assist on X).
-    // Vertical continue uses lane center X of current tile (1,1) → x=1536, then +64 Y.
-    const laneCenterX = tileCenter({ x: 1, y: 1 }).x;
+    // Vertical continue uses lane center X of current tile (1,2) → x=1536, then +64 Y.
+    const laneCenterX = tileCenter({ x: 1, y: 2 }).x;
     const perpWorld = openWorld(wallContact, "down");
     const perp = program.step(perpWorld, {
       commands: [
@@ -2307,10 +2415,10 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     const beta = config.seats[1]!.competitorId;
     const seat0 = config.seats[0]!.seatId;
     const base = program.initial(config);
-    // Exact contact with left border solid tile (0,1).
+    // Exact contact with left border solid tile (0,2) (sparse border, Decision 011).
     const contact = freezePosition({
       x: UNITS_PER_TILE + BODY_HALF_EXTENT,
-      y: tileCenter({ x: 1, y: 1 }).y,
+      y: tileCenter({ x: 1, y: 2 }).y,
     });
     const world = asPlayingWorld(program, base, {
       arena: {
@@ -2355,12 +2463,12 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     const seat0 = config.seats[0]!.seatId;
     const base = program.initial(config);
 
-    // Pillar solid (2,2). Exact contacts from four sides.
-    const pillar = { x: 2, y: 2 };
+    // Pillar solid (2,4) (classic pillar seed, Decision 011). Exact contacts from four sides.
+    const pillar = { x: 2, y: 4 };
     const pillarLeft = 2 * UNITS_PER_TILE;
     const pillarRight = 3 * UNITS_PER_TILE;
-    const pillarTop = 2 * UNITS_PER_TILE;
-    const pillarBottom = 3 * UNITS_PER_TILE;
+    const pillarTop = 4 * UNITS_PER_TILE;
+    const pillarBottom = 5 * UNITS_PER_TILE;
     const contacts: Array<{ pos: WorldPosition; dir: "up" | "down" | "left" | "right" }> = [
       {
         // from above: body bottom == pillar top
@@ -2524,7 +2632,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     }
   });
 
-  it("batch 2–4: head-on/stationary/chain/follow/dead within step 128; impossible swap rejected; reorder independent", () => {
+  it("batch 2–4: bodies never block (head-on/stationary/chain/follow/dead); impossible swap rejected; reorder independent", () => {
     const a = "a" as CompetitorId;
     const b = "b" as CompetitorId;
     const c = "c" as CompetitorId;
@@ -2555,44 +2663,50 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
       });
     }
 
-    // Head-on from valid exact contact: both try to penetrate → both rejected.
+    // Head-on from valid exact contact: bodies never block (Decision 012) —
+    // both penetrate and are accepted.
     const aFrom = freezePosition({ x: 1000, y: 2000 });
     const bFrom = freezePosition({ x: 1000 + BODY_HALF_EXTENT * 2, y: 2000 });
     expect(bodiesOverlap(aFrom, bFrom)).toBe(false);
     expect(
-      resolveMovementBatch(
-        [entry(a, aFrom.x, aFrom.y), entry(b, bFrom.x, bFrom.y)],
-        [
-          cand(a, aFrom, step, 0, "right"),
-          cand(b, bFrom, -step, 0, "left"),
-        ],
-      ).size,
-    ).toBe(0);
+      [
+        ...resolveMovementBatch(
+          [entry(a, aFrom.x, aFrom.y), entry(b, bFrom.x, bFrom.y)],
+          [
+            cand(a, aFrom, step, 0, "right"),
+            cand(b, bFrom, -step, 0, "left"),
+          ],
+        ),
+      ].sort(),
+    ).toEqual([a, b]);
 
-    // Invade stationary (no candidate for B).
+    // Invade stationary (no candidate for B): the invader passes through.
     const invFrom = freezePosition({ x: 1500, y: 1500 });
-    // Exact contact is a valid pre-state; +64 would invade the stationary body.
     const closeStat = freezePosition({ x: invFrom.x + BODY_HALF_EXTENT * 2, y: invFrom.y });
     expect(bodiesOverlap(invFrom, closeStat)).toBe(false);
     expect(
-      resolveMovementBatch(
-        [entry(a, invFrom.x, invFrom.y), entry(b, closeStat.x, closeStat.y)],
-        [cand(a, invFrom, step, 0, "right")],
-      ).size,
-    ).toBe(0);
+      [
+        ...resolveMovementBatch(
+          [entry(a, invFrom.x, invFrom.y), entry(b, closeStat.x, closeStat.y)],
+          [cand(a, invFrom, step, 0, "right")],
+        ),
+      ],
+    ).toEqual([a]);
 
-    // Chain into stationary C: A→B, B→C → both rejected.
+    // Chain toward stationary C: A→B, B→C → both advance through the bodies.
     const cPos = freezePosition({ x: 3000, y: 1500 });
     const bPos = freezePosition({ x: cPos.x - BODY_HALF_EXTENT * 2, y: 1500 });
     const aPos = freezePosition({ x: bPos.x - BODY_HALF_EXTENT * 2, y: 1500 });
     expect(bodiesOverlap(aPos, bPos)).toBe(false);
     expect(bodiesOverlap(bPos, cPos)).toBe(false);
     expect(
-      resolveMovementBatch(
-        [entry(a, aPos.x, aPos.y), entry(b, bPos.x, bPos.y), entry(c, cPos.x, cPos.y)],
-        [cand(a, aPos, step, 0, "right"), cand(b, bPos, step, 0, "right")],
-      ).size,
-    ).toBe(0);
+      [
+        ...resolveMovementBatch(
+          [entry(a, aPos.x, aPos.y), entry(b, bPos.x, bPos.y), entry(c, cPos.x, cPos.y)],
+          [cand(a, aPos, step, 0, "right"), cand(b, bPos, step, 0, "right")],
+        ),
+      ].sort(),
+    ).toEqual([a, b]);
 
     // Follow: both advance same step with finals non-overlapping.
     const fA = freezePosition({ x: 1200, y: 1600 });
@@ -2603,7 +2717,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     );
     expect([...follow].sort()).toEqual([a, b]);
 
-    // Dead body not in livingEntries → does not block.
+    // Dead body not in livingEntries → its candidate is ignored.
     expect(
       [...resolveMovementBatch([entry(a, fA.x, fA.y)], [cand(a, fA, step, 0, "right")])],
     ).toEqual([a]);
@@ -2635,8 +2749,8 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     );
     expect(over.size).toBe(0);
 
-    // Non-trivial 4-player permutation: A→B→C stationary cascades to rejection,
-    // while D moves independently and remains accepted.
+    // Non-trivial 4-player permutation: every in-step candidate is accepted,
+    // order-independent (C has no candidate and is simply not in the set).
     const pA = freezePosition({ x: 2000, y: 2000 });
     const pB = freezePosition({ x: pA.x + BODY_HALF_EXTENT * 2, y: 2000 });
     const pC = freezePosition({ x: pB.x + BODY_HALF_EXTENT * 2, y: 2000 });
@@ -2655,12 +2769,12 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     const r1 = resolveMovementBatch(living, four);
     const r2 = resolveMovementBatch(living, [...four].reverse());
     const r3 = resolveMovementBatch([...living].reverse(), four);
-    expect([...r1]).toEqual([d]);
-    expect([...r2]).toEqual([d]);
-    expect([...r3]).toEqual([d]);
+    expect([...r1].sort()).toEqual([a, b, d]);
+    expect([...r2].sort()).toEqual([a, b, d]);
+    expect([...r3].sort()).toEqual([a, b, d]);
   });
 
-  it("bomba: egress, reverse-to-center while overlapping stays put, reentry, tileOf frontier, third body", () => {
+  it("bomba: egress, free pass-through while overlapping, reentry, tileOf frontier, third body", () => {
     const config = localDuel("bomb-egress");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
@@ -2700,7 +2814,8 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
       tileCenter({ x: 1, y: 1 }).x,
     );
 
-    // Still overlapping bomb: reverse toward center must stay put (monotone egress).
+    // Still overlapping bomb: reversing back across the center is allowed
+    // (free pass-through while any overlap persists — Decision 012).
     state = placed.state;
     expect(
       bodyOverlapsTile(
@@ -2719,8 +2834,17 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         },
       ],
     }).state;
-    expect(state.slices.locomotion.entries[0]!.position).toEqual(beforeReverse);
-    expect(state.slices.locomotion.entries[0]!.velocity).toEqual({ x: 0, y: 0 });
+    expect(state.slices.locomotion.entries[0]!.position.x).toBeLessThan(beforeReverse.x);
+    expect(state.slices.locomotion.entries[0]!.velocity).toEqual({
+      x: -BASE_SPEED_UNITS_PER_TICK,
+      y: 0,
+    });
+    expect(
+      bodyOverlapsTile(
+        state.slices.locomotion.entries[0]!.position,
+        state.slices.bombs.items[0]!.tile,
+      ),
+    ).toBe(true);
 
     // Resume egress right until clear, then reentry blocked.
     state = program.step(state, {
@@ -2823,6 +2947,9 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         ],
       },
     });
+    // Rival body overlapping the target tile no longer blocks placement
+    // (Decision 012): the bomb lands and the rival walks off with the
+    // pre-overlap geometric egress.
     expect(bodyOverlapsTile(near.slices.locomotion.entries[1]!.position, { x: 2, y: 1 })).toBe(
       true,
     );
@@ -2832,7 +2959,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         near.slices.locomotion.entries[1]!.position,
       ),
     ).toBe(false);
-    const blocked = program.step(near, {
+    const plantedUnder = program.step(near, {
       commands: [
         {
           tick: near.tick,
@@ -2842,12 +2969,13 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         },
       ],
     });
-    expect(blocked.rejections.some((r) => r.reason === "tile-occupied")).toBe(true);
-    expect(blocked.state.slices.bombs.items).toHaveLength(0);
+    expect(plantedUnder.rejections).toHaveLength(0);
+    expect(plantedUnder.events.some((e) => e.type === "bomb-placed")).toBe(true);
+    expect(plantedUnder.state.slices.bombs.items).toHaveLength(1);
   });
 
-  it("chama: partial kill, exact contact survives, leave-on-explode survives, partial-stay dies", () => {
-    const config = localDuel("flame-aabb");
+  it("chama: center-tile kill; edge-clip into neighbor flame survives (mechanics-v4)", () => {
+    const config = localDuel("flame-center-tile");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
     const beta = config.seats[1]!.competitorId;
@@ -2862,9 +2990,11 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(bodyOverlapsTile(exactPos, { x: 3, y: 1 })).toBe(false);
     const partialPos = freezePosition({ x: exactPos.x + 1, y: exactPos.y });
     expect(bodyOverlapsTile(partialPos, { x: 3, y: 1 })).toBe(true);
+    // Body center still on tile 2 — must NOT die from clipping into flame on tile 3.
+    expect(tileOf(partialPos)).toEqual({ x: 2, y: 1 });
 
-    // Stay partial on future flame tile → dies when bomb explodes this tick.
-    const dieWorld = asPlayingWorld(program, base, {
+    // Edge-clip into future flame tile → survives (center-tile rule).
+    const clipWorld = asPlayingWorld(program, base, {
       arena: {
         width: 11,
         height: 9,
@@ -2895,6 +3025,45 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         ],
       },
     });
+    const clipped = program.step(clipWorld, { commands: [] });
+    expect(clipped.events.some((e) => e.type === "bomb-exploded")).toBe(true);
+    expect(
+      clipped.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+    ).toBe(true);
+
+    // Center standing on the flame tile → dies.
+    const onFlame = tileCenter({ x: 3, y: 1 });
+    const dieWorld = asPlayingWorld(program, base, {
+      arena: {
+        width: 11,
+        height: 9,
+        solid: [...base.slices.arena.solid],
+        crates: [],
+      },
+      locomotion: {
+        entries: [
+          {
+            competitorId: alpha,
+            position: onFlame,
+            velocity: freezeVelocity({ x: 0, y: 0 }),
+            lastDirection: null,
+          },
+          locoAt(beta, 9, 7),
+        ],
+      },
+      bombs: {
+        nextId: 2,
+        items: [
+          {
+            id: 1,
+            ownerId: beta,
+            tile: freezeTile({ x: 5, y: 1 }),
+            fuseMs: 20,
+            flameRange: 2,
+          },
+        ],
+      },
+    });
     const died = program.step(dieWorld, { commands: [] });
     expect(died.events.some((e) => e.type === "bomb-exploded")).toBe(true);
     expect(died.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
@@ -2902,7 +3071,13 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
       died.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
     ).toBe(false);
 
-    // Same setup but move left out on the explosion tick → locomotion first → survives.
+    // Leave the flame tile on the explosion tick → locomotion first → survives.
+    // Start just inside the left edge of tile 3 so one step exits to tile 2.
+    const nearLeftOfFlame = freezePosition({
+      x: 3 * UNITS_PER_TILE + 10,
+      y: tileCenter({ x: 3, y: 1 }).y,
+    });
+    expect(tileOf(nearLeftOfFlame)).toEqual({ x: 3, y: 1 });
     const escapeWorld = asPlayingWorld(program, base, {
       arena: {
         width: 11,
@@ -2914,7 +3089,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         entries: [
           {
             competitorId: alpha,
-            position: partialPos,
+            position: nearLeftOfFlame,
             velocity: freezeVelocity({ x: 0, y: 0 }),
             lastDirection: null,
           },
@@ -2948,9 +3123,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(
       escaped.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
     ).toBe(true);
-    expect(
-      bodyOverlapsTile(escaped.state.slices.locomotion.entries[0]!.position, { x: 3, y: 1 }),
-    ).toBe(false);
+    expect(tileOf(escaped.state.slices.locomotion.entries[0]!.position).x).toBeLessThan(3);
 
     // Exact contact with active flame is allowed (no positive area).
     const exactWorld = asPlayingWorld(program, base, {
@@ -2987,7 +3160,166 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     ).toBe(true);
   });
 
-  it("restore rejects impossible velocity 129/-129/huge; non-safe, float, bounds, terrain, living overlap separately", () => {
+  it("bomba: corpo fora do centro com saida unica alem do centro nao fica preso (Decision 012)", () => {
+    const config = localDuel("bomb-trap");
+    const program = createDefaultMechanicsProgram();
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const seat0 = config.seats[0]!.seatId;
+    const initial = program.initial(config);
+
+    // Off-center body inside tile (1,1): left lane blocked by a crate, lane
+    // assist lock exceeded — under the old monotone egress this was a trap.
+    const center = tileCenter({ x: 1, y: 1 });
+    const offCenter = freezePosition({ x: center.x - 100, y: center.y });
+    expect(bodyOverlapsTile(offCenter, { x: 1, y: 1 })).toBe(true);
+    expect(bodyOverlapsTile(offCenter, { x: 0, y: 1 })).toBe(false);
+    let state = asPlayingWorld(program, initial, {
+      arena: {
+        width: 11,
+        height: 9,
+        solid: [...initial.slices.arena.solid],
+        crates: [freezeTile({ x: 0, y: 1 })],
+      },
+      locomotion: {
+        entries: [
+          {
+            competitorId: alpha,
+            position: offCenter,
+            velocity: freezeVelocity({ x: 0, y: 0 }),
+            lastDirection: null,
+          },
+          locoAt(beta, 9, 7),
+        ],
+      },
+    });
+
+    state = program.step(state, {
+      commands: [
+        {
+          tick: state.tick,
+          sequence: 0,
+          seatId: seat0,
+          command: { type: "place-bomb" },
+        },
+      ],
+    }).state;
+    expect(state.slices.bombs.items[0]!.tile).toEqual({ x: 1, y: 1 });
+
+    // Hold right: crosses the bomb tile center and fully clears the tile.
+    state = program.step(state, {
+      commands: [
+        {
+          tick: state.tick,
+          sequence: 1,
+          seatId: seat0,
+          command: { type: "set-movement", direction: "right", pressed: true },
+        },
+      ],
+    }).state;
+    for (let i = 0; i < 30; i += 1) {
+      state = program.step(state, { commands: [] }).state;
+    }
+    const escaped = state.slices.locomotion.entries[0]!.position;
+    expect(escaped.x).toBeGreaterThan(center.x);
+    expect(bodyOverlapsTile(escaped, { x: 1, y: 1 })).toBe(false);
+  });
+
+  it("chama: janela letal — nevoa residual nao mata; explosao nova rearma (Decision 012)", () => {
+    const config = localDuel("flame-lethal-window");
+    const program = createDefaultMechanicsProgram();
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const seat0 = config.seats[0]!.seatId;
+    const base = program.initial(config);
+
+    const makeWorld = (
+      remainingMs: number,
+      opts: { playerTile?: { x: number; y: number }; bomb?: boolean } = {},
+    ) => {
+      const playerTile = opts.playerTile ?? { x: 4, y: 1 };
+      return asPlayingWorld(program, base, {
+        arena: {
+          width: 11,
+          height: 9,
+          solid: [...base.slices.arena.solid],
+          crates: [],
+        },
+        locomotion: {
+          entries: [
+            {
+              competitorId: alpha,
+              position: tileCenter(playerTile),
+              velocity: freezeVelocity({ x: 0, y: 0 }),
+              lastDirection: null,
+            },
+            locoAt(beta, 9, 7),
+          ],
+        },
+        ...(opts.bomb
+          ? {
+              bombs: {
+                nextId: 2,
+                items: [
+                  {
+                    id: 1,
+                    ownerId: beta,
+                    tile: freezeTile({ x: 4, y: 1 }),
+                    fuseMs: TICK_DURATION_MS,
+                    flameRange: 1,
+                  },
+                ],
+              },
+            }
+          : {}),
+        flames: {
+          items: [
+            {
+              tile: freezeTile({ x: 4, y: 1 }),
+              remainingMs,
+              causes: [{ bombId: 9, ownerId: beta }],
+            },
+          ],
+        },
+      });
+    };
+
+    // Fresh flame (lethal window) on the body → dies.
+    const fresh = program.step(makeWorld(600), { commands: [] });
+    expect(fresh.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
+    expect(
+      fresh.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+    ).toBe(false);
+
+    // Residual fog (past the lethal window): stand and walk through → survives.
+    const fogWorld = makeWorld(400, { playerTile: { x: 3, y: 1 } });
+    let fog = program.step(fogWorld, {
+      commands: [
+        {
+          tick: fogWorld.tick,
+          sequence: 0,
+          seatId: seat0,
+          command: { type: "set-movement", direction: "right", pressed: true },
+        },
+      ],
+    }).state;
+    for (let i = 0; i < 20; i += 1) {
+      fog = program.step(fog, { commands: [] }).state;
+    }
+    const walker = fog.slices.locomotion.entries[0]!;
+    expect(
+      fog.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+    ).toBe(true);
+    // Walked across the whole fog tile without dying.
+    expect(walker.position.x).toBeGreaterThan(tileCenter({ x: 4, y: 1 }).x);
+
+    // New explosion on the fog tile refreshes remainingMs → lethal again.
+    const refreshed = program.step(makeWorld(400, { bomb: true }), { commands: [] });
+    expect(refreshed.events.some((e) => e.type === "bomb-exploded")).toBe(true);
+    expect(refreshed.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
+  });
+
+  it("restore rejects impossible velocity 129/-129/huge; non-safe, float; out-of-range positions normalize modulo the torus", () => {
     const program = createDefaultMechanicsProgram();
     const reversed = createDefaultMechanicsProgram("reversed");
     expect(program.mechanicsRevision).toBe(reversed.mechanicsRevision);
@@ -3072,26 +3404,32 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     floatVel.slices.locomotion.entries[0]!.velocity.x = 0.5;
     expect(() => program.restore(floatVel)).toThrow(/safe integer/);
 
-    // Body out of bounds.
-    expect(() =>
-      program.restore({
-        ...a,
-        slices: {
-          ...a.slices,
-          locomotion: {
-            entries: [
-              {
-                competitorId: alpha,
-                position: freezePosition({ x: BODY_HALF_EXTENT - 1, y: tileCenter({ x: 1, y: 1 }).y }),
-                velocity: freezeVelocity({ x: 0, y: 0 }),
-                lastDirection: null,
-              },
-              locoAt(beta, 9, 7),
-            ],
-          },
+    // Out-of-range positions normalize modulo the torus instead of rejecting
+    // (Decision 011). Structural validation (safe integers) stays strict.
+    const normalized = program.restore({
+      ...a,
+      slices: {
+        ...a.slices,
+        locomotion: {
+          entries: [
+            {
+              competitorId: alpha,
+              position: freezePosition({
+                x: -1,
+                y: 9 * UNITS_PER_TILE + BASE_SPEED_UNITS_PER_TICK,
+              }),
+              velocity: freezeVelocity({ x: 0, y: 0 }),
+              lastDirection: null,
+            },
+            locoAt(beta, 9, 7),
+          ],
         },
-      }),
-    ).toThrow(/bounds/);
+      },
+    });
+    expect(normalized.slices.locomotion.entries[0]!.position).toEqual({
+      x: 11 * UNITS_PER_TILE - 1,
+      y: BASE_SPEED_UNITS_PER_TICK,
+    });
 
   });
 
@@ -3106,11 +3444,6 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
       const midSnapshots: WorldState[] = [];
 
       function assertInvariants(world: WorldState): void {
-        const alive = new Set(
-          world.slices.vitals.entries
-            .filter((entry) => entry.alive)
-            .map((entry) => entry.competitorId),
-        );
         for (const entry of world.slices.locomotion.entries) {
           expect(Number.isInteger(entry.position.x)).toBe(true);
           expect(Number.isInteger(entry.position.y)).toBe(true);
@@ -3135,14 +3468,8 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
             expect(bodyOverlapsTile(entry.position, crate)).toBe(false);
           }
         }
-        const living = world.slices.locomotion.entries.filter((entry) =>
-          alive.has(entry.competitorId),
-        );
-        for (let i = 0; i < living.length; i += 1) {
-          for (let j = i + 1; j < living.length; j += 1) {
-            expect(bodiesOverlap(living[i]!.position, living[j]!.position)).toBe(false);
-          }
-        }
+        // Living bodies may overlap freely (Decision 012) — no body-body
+        // invariant; only terrain/bomb constraints apply.
       }
 
       // Scripted continuous motion (~few hundred ticks total — keep suite fast).
@@ -3253,7 +3580,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(world.slices.match.phase).toBe("round-start");
     expect(world.slices.match.phaseRemainingMs).toBe(ROUND_START_MS);
     expect(world.slices.match.roundNumber).toBe(1);
-    expect(snap.pressure.pathLength).toBe(51);
+    expect(snap.pressure.pathLength).toBe(75);
     expect(snap.pressure.closing).toBeNull();
     expect("closedTiles" in snap.pressure).toBe(false);
   });
@@ -3850,11 +4177,11 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     }
     // Versions for world-5 / kernel-0.10.0 (Slice 4A candidate).
     expect(matchModule.version).toBe("2.1.1");
-    expect(competitorsModule.version).toBe("3.0.0");
+    expect(competitorsModule.version).toBe("3.2.0");
     expect(arenaModule.version).toBe("2.4.0");
     expect(intentModule.version).toBe("2.1.0");
-    expect(ordnanceModule.version).toBe("3.0.0");
-    expect(locomotionModule.version).toBe("2.3.0");
+    expect(ordnanceModule.version).toBe("3.2.0");
+    expect(locomotionModule.version).toBe("3.2.0");
     expect(pressureModule.version).toBe("1.1.1");
     expect(powerupsModule.version).toBe("1.0.0");
     expect(WORLD_FORMAT_VERSION).toBe("world-5");
@@ -3872,7 +4199,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     const snap = program.snapshot(program.initial(localDuel("3a-no-pressure")));
     expect("suddenDeathElapsedMs" in snap).toBe(true);
     expect("pressure" in snap).toBe(true);
-    expect(snap.pressure.pathLength).toBe(51);
+    expect(snap.pressure.pathLength).toBe(75);
     expect("shrink" in snap).toBe(false);
   });
 
@@ -3986,19 +4313,19 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     }
   });
 
-  it("A: golden spiral 51 coords outer-to-center, first (1,1), last (5,4)", () => {
+  it("A: golden spiral 75 coords outer-to-center, first (1,0), last (6,4)", () => {
     const program = createDefaultMechanicsProgram();
     const world = program.initial(localDuel("3b-path", { roundDurationMs: SHORT_ROUND_MS }));
     const path = derivedPathOf(world);
     const solidKeys = new Set(world.slices.arena.solid.map((t) => `${t.x},${t.y}`));
 
-    expect(path).toHaveLength(51);
-    expect(path[0]).toEqual({ x: 1, y: 1 });
-    expect(path[path.length - 1]).toEqual({ x: 5, y: 4 });
-    expect(path.map((t) => ({ x: t.x, y: t.y }))).toEqual([...CANONICAL_PRESSURE_PATH_51]);
+    expect(path).toHaveLength(75);
+    expect(path[0]).toEqual({ x: 1, y: 0 });
+    expect(path[path.length - 1]).toEqual({ x: 6, y: 4 });
+    expect(path.map((t) => ({ x: t.x, y: t.y }))).toEqual([...CANONICAL_PRESSURE_PATH_75]);
 
     const keys = path.map((t) => `${t.x},${t.y}`);
-    expect(new Set(keys).size).toBe(51);
+    expect(new Set(keys).size).toBe(75);
     for (const tile of path) {
       expect(solidKeys.has(`${tile.x},${tile.y}`)).toBe(false);
     }
@@ -4473,9 +4800,11 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     const beta = config.seats[1]!.competitorId;
     const center = tileCenter(path0);
 
+    // Exact contact on the open-below side of path0 (classic border: (0,0)/(2,0)
+    // are solid, so side contact would touch a real wall).
     const exactContact = freezePosition({
-      x: (path0.x + 1) * UNITS_PER_TILE + BODY_HALF_EXTENT,
-      y: center.y,
+      x: center.x,
+      y: (path0.y + 1) * UNITS_PER_TILE + BODY_HALF_EXTENT,
     });
     expect(bodyOverlapsTile(exactContact, path0)).toBe(false);
     expect(
@@ -4492,7 +4821,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
         locomotion: {
           entries: [
             locoAtPosition(alpha, exactContact),
-            locoAt(beta, 5, 3),
+            locoAt(beta, 5, 4),
           ],
         },
       });
@@ -4740,7 +5069,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     expect(state.slices.match.roundNumber).toBe(2);
     expect(state.tick).toBe(tickAtRoundOver + ROUND_END_TICKS);
     expect(state.slices.pressure.closedTiles).toEqual([]);
-    expect(derivedPathOf(state)).toHaveLength(51);
+    expect(derivedPathOf(state)).toHaveLength(75);
     expect(program.snapshot(state).pressure.closing).toBeNull();
     expect(state.slices.match.scores).toEqual([
       { competitorId: alpha, wins: 1 },
@@ -4907,7 +5236,7 @@ describe("Ranni Ice Blink", () => {
     expect(findLocomotion(completed.state.slices.locomotion, alpha)!.position.x).toBeGreaterThan(body.x);
   });
 
-  it("invalid completion stays physical but consumes full cooldown", () => {
+  it("invalid completion (solid tile) stays physical but consumes full cooldown; landing on a rival body teleports", () => {
     const config = ranniDuel("skill-invalid");
     const program = createDefaultMechanicsProgram();
     let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
@@ -4915,6 +5244,9 @@ describe("Ranni Ice Blink", () => {
     const beta = config.seats[1]!.competitorId;
     const body = findLocomotion(state.slices.locomotion, alpha)!.position;
     const occupied = findLocomotion(state.slices.locomotion, beta)!.position;
+
+    // Landing exactly on a solid pillar is still invalid → stays physical.
+    const solidTile = state.slices.arena.solid[0]!;
     const draft = cloneDraft(state);
     draft.slices.skills.entries[0] = {
       competitorId: alpha,
@@ -4922,7 +5254,7 @@ describe("Ranni Ice Blink", () => {
       phase: "channeling",
       channelRemainingMs: TICK_DURATION_MS,
       cooldownRemainingMs: 0,
-      projection: { ...occupied },
+      projection: { ...tileCenter(solidTile) },
       bombEgressKeys: [],
     };
     state = program.restore(draft);
@@ -4934,6 +5266,24 @@ describe("Ranni Ice Blink", () => {
       cooldownRemainingMs: 8_000,
       projection: null,
     });
+
+    // Landing on a rival body is valid (Decision 012: bodies never block) →
+    // the blink teleports onto the occupied position.
+    const ontoBody = cloneDraft(state);
+    ontoBody.slices.skills.entries[0] = {
+      competitorId: alpha,
+      skillId: RANNI_ICE_BLINK_SKILL_ID,
+      phase: "channeling",
+      channelRemainingMs: TICK_DURATION_MS,
+      cooldownRemainingMs: 0,
+      projection: { ...occupied },
+      bombEgressKeys: [],
+    };
+    const teleported = program.step(program.restore(ontoBody), { commands: [] });
+    expect(
+      findLocomotion(teleported.state.slices.locomotion, alpha)!.position,
+    ).toEqual(occupied);
+    expect(teleported.state.slices.skills.entries[0]!.phase).toBe("cooldown");
   });
 
   it("is immune while channeling, vulnerable on completion, and places bombs at the physical body", () => {
@@ -5464,7 +5814,20 @@ describe("bot facade integration (real kernel, deterministic)", () => {
 
   it("agrees with the real arena generator on solid pillars", () => {
     const real = botCreateArenaTiles("bot-seed");
-    expect(real.solid.some((t) => t.x === 2 && t.y === 2)).toBe(true);
+    // Classic 8-pillar set: 4 seeds + central mirrors (Decision 011).
+    for (const pillar of [
+      { x: 3, y: 3 },
+      { x: 5, y: 3 },
+      { x: 2, y: 4 },
+      { x: 4, y: 2 },
+      { x: 7, y: 5 },
+      { x: 5, y: 5 },
+      { x: 8, y: 4 },
+      { x: 6, y: 6 },
+    ]) {
+      expect(real.solid.some((t) => t.x === pillar.x && t.y === pillar.y)).toBe(true);
+    }
+    expect(real.solid).toHaveLength(24);
     expect(BOT_UNITS_PER_TILE).toBeGreaterThan(0);
   });
 });
@@ -5491,6 +5854,10 @@ function reachableRestSafeCount(
   snap: GameSnapshot,
   from: Readonly<{ x: number; y: number }>,
 ): number {
+  const width = snap.arena.width;
+  const height = snap.arena.height;
+  const wrap = (x: number, y: number): string =>
+    `${((x % width) + width) % width},${((y % height) + height) % height}`;
   const solid = new Set(snap.arena.solid.map((t) => `${t.x},${t.y}`));
   const danger = new Set<string>();
   for (const flame of snap.flames) danger.add(`${flame.tile.x},${flame.tile.y}`);
@@ -5499,7 +5866,11 @@ function reachableRestSafeCount(
     for (const dir of ["up", "down", "left", "right"] as const) {
       const delta = DIR_DELTA[dir]!;
       for (let step = 1; step <= bomb.flameRange; step += 1) {
-        const k = `${bomb.tile.x + delta.x * step},${bomb.tile.y + delta.y * step}`;
+        const tx = bomb.tile.x + delta.x * step;
+        const ty = bomb.tile.y + delta.y * step;
+        // Flames never wrap: the blast walk stops at the grid edge.
+        if (tx < 0 || ty < 0 || tx >= width || ty >= height) break;
+        const k = `${tx},${ty}`;
         if (solid.has(k)) break;
         danger.add(k);
       }
@@ -5512,10 +5883,12 @@ function reachableRestSafeCount(
     if (solid.has(`${x},${y}`) || danger.has(`${x},${y}`)) return false;
     for (const dir of ["up", "down", "left", "right"] as const) {
       const delta = DIR_DELTA[dir]!;
-      if (danger.has(`${x + delta.x},${y + delta.y}`)) return false;
+      if (danger.has(wrap(x + delta.x, y + delta.y))) return false;
     }
     return true;
   };
+  // Toroidal walkability (Decision 011): open border gaps re-enter on the
+  // opposite edge; solid border tiles still block.
   const seen = new Set<string>([`${from.x},${from.y}`]);
   const queue: Array<{ x: number; y: number }> = [{ x: from.x, y: from.y }];
   let count = 0;
@@ -5524,8 +5897,8 @@ function reachableRestSafeCount(
     if (restSafe(current.x, current.y)) count += 1;
     for (const dir of ["up", "down", "left", "right"] as const) {
       const delta = DIR_DELTA[dir]!;
-      const nx = current.x + delta.x;
-      const ny = current.y + delta.y;
+      const nx = ((current.x + delta.x) % width + width) % width;
+      const ny = ((current.y + delta.y) % height + height) % height;
       const k = `${nx},${ny}`;
       if (seen.has(k) || solid.has(k)) continue;
       seen.add(k);
@@ -5608,7 +5981,7 @@ describe("bot acceptance — sudden-death pressure survival (no live opponent)",
     let botAlive = true;
     let deathSafeCount = -1;
     const rejectionReasons = new Set<string>();
-    const MAX_SD_TICKS = 2_000; // 40s ceiling; the 51-tile spiral closes in ~46s.
+    const MAX_SD_TICKS = 2_000; // 40s ceiling; the 75-tile spiral closes in ~67s.
 
     for (let tick = 0; tick < MAX_SD_TICKS; tick += 1) {
       if (state.slices.match.phase !== "sudden-death") break;

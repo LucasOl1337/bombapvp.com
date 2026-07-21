@@ -14,7 +14,9 @@ import {
   assertInteger,
   bodyOverlapsTile,
   freezeTile,
+  isFlameLethal,
   isGameplayActive,
+  tileOf,
   type FlameEntry,
   type MatchSlice,
   type RosterEntry,
@@ -24,10 +26,16 @@ import {
 } from "../../kernel/world-state.ts";
 
 /**
+ * 3.2.0: flame lethality uses the body-center tile (tileOf), not AABB clip into
+ * a neighboring flame tile — partial edge overlap no longer kills. Players
+ * read "the tile under my feet/center"; AABB edge-kills felt unfair next to
+ * dense champion sprites. Pressure impact still uses positive-area AABB.
+ * 3.1.0: flames kill only inside the fresh lethal window (Decision 012);
+ * residual flame fog is pure VFX.
  * 3.0.0: roster is identity-only (competitorId + seatId).
  * maxBombs/flameRange live solely in Powerups progression (Decision 009).
  */
-const MODULE_VERSION = "3.0.0";
+const MODULE_VERSION = "3.2.0";
 
 function freezeVitalsEntry(entry: VitalsEntry): VitalsEntry {
   return Object.freeze({
@@ -256,10 +264,12 @@ function runPressureImpactDamage(ctx: SystemRunContext): SystemRunResult {
 }
 
 /**
- * Simultaneous damage: every living unprotected competitor whose body has
- * positive-area overlap with any flame tile is eliminated against the same
- * pre-state. Protected competitors ignore flames (no event, no extension).
- * Exact edge contact does not kill. Sole writer of vitals (with vitals-cycle).
+ * Simultaneous damage: every living unprotected competitor whose **body-center
+ * tile** hosts a LETHAL flame is eliminated against the same pre-state.
+ * Neighbor-tile AABB clips no longer kill (3.2.0) — that read as "I died on a
+ * safe tile" with continuous locomotion. A flame is lethal only while fresh
+ * (Decision 012); residual flame fog never kills. Protected competitors ignore
+ * flames. Sole writer of vitals (with vitals-cycle).
  */
 function runDamage(ctx: SystemRunContext): SystemRunResult {
   const match = ctx.read("match");
@@ -283,11 +293,18 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
     return entry.spawnProtectionRemainingMs;
   };
 
-  type Hit = Readonly<{
+  type BombHit = Readonly<{
     competitorId: CompetitorId;
     causes: FlameEntry["causes"];
   }>;
-  const hits: Hit[] = [];
+  type SkillHit = Readonly<{
+    competitorId: CompetitorId;
+    skillId: import("../../contracts.ts").SkillId;
+    ownerId: CompetitorId;
+    at: { x: number; y: number };
+  }>;
+  const bombHits: BombHit[] = [];
+  const skillHits: SkillHit[] = [];
 
   for (const entry of locomotion.entries) {
     const row = vitals.entries.find((item) => item.competitorId === entry.competitorId);
@@ -295,10 +312,14 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
     if (immune.has(entry.competitorId)) continue;
     if (effectiveProtection(row) > 0) continue;
 
+    // Standing tile = floor(body center). Edge-clipping a neighbor flame is safe.
+    const bodyTile = tileOf(entry.position);
     const merged: FlameEntry["causes"][number][] = [];
     const seen = new Set<string>();
     for (const flame of flames.items) {
-      if (!bodyOverlapsTile(entry.position, flame.tile)) continue;
+      // Residual flame fog (past the lethal window) is pure VFX — no kill.
+      if (!isFlameLethal(flame.remainingMs)) continue;
+      if (flame.tile.x !== bodyTile.x || flame.tile.y !== bodyTile.y) continue;
       for (const cause of flame.causes) {
         const key = `${cause.bombId}|${cause.ownerId}`;
         if (seen.has(key)) continue;
@@ -313,7 +334,7 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
       return left.ownerId < right.ownerId ? -1 : left.ownerId > right.ownerId ? 1 : 0;
     });
 
-    hits.push(
+    bombHits.push(
       Object.freeze({
         competitorId: entry.competitorId,
         causes: Object.freeze(merged),
@@ -321,34 +342,76 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
     );
   }
 
-  hits.sort((left, right) =>
+  // Skill hits ignore spawn protection (ultimate pierce) but respect channel immunity.
+  for (const fact of factsOfKind(ctx.facts, "skill-hit")) {
+    const row = vitals.entries.find((item) => item.competitorId === fact.targetId);
+    if (!row?.alive) continue;
+    if (immune.has(fact.targetId)) continue;
+    skillHits.push(
+      Object.freeze({
+        competitorId: fact.targetId,
+        skillId: fact.skillId,
+        ownerId: fact.ownerId,
+        at: freezeTile(fact.at),
+      }),
+    );
+  }
+
+  bombHits.sort((left, right) =>
     left.competitorId < right.competitorId
       ? -1
       : left.competitorId > right.competitorId
         ? 1
         : 0,
   );
+  skillHits.sort((left, right) =>
+    left.competitorId < right.competitorId
+      ? -1
+      : left.competitorId > right.competitorId
+        ? 1
+        : left.skillId < right.skillId
+          ? -1
+          : left.skillId > right.skillId
+            ? 1
+            : 0,
+  );
 
-  if (hits.length === 0) {
-    // Still may need to persist sudden-death zeroing if vitals-cycle ran earlier
-    // with residual — already handled in vitals-cycle. Damage is no-op.
+  if (bombHits.length === 0 && skillHits.length === 0) {
     return {};
   }
 
-  const dead = new Set(hits.map((hit) => hit.competitorId));
-  const events: GameEvent[] = hits.map((hit) =>
+  // Merge causes per competitor (bomb + skill can co-credit in one tick).
+  type ElimCause = import("../../contracts.ts").EliminationCause;
+  const mergedCauses = new Map<CompetitorId, ElimCause[]>();
+
+  for (const hit of bombHits) {
+    const list = mergedCauses.get(hit.competitorId) ?? [];
+    for (const cause of hit.causes) {
+      list.push(Object.freeze({
+        kind: "bomb" as const,
+        bombId: cause.bombId,
+        ownerId: cause.ownerId,
+      }));
+    }
+    mergedCauses.set(hit.competitorId, list);
+  }
+  for (const hit of skillHits) {
+    const list = mergedCauses.get(hit.competitorId) ?? [];
+    list.push(Object.freeze({
+      kind: "skill" as const,
+      skillId: hit.skillId,
+      ownerId: hit.ownerId,
+      at: freezeTile(hit.at),
+    }));
+    mergedCauses.set(hit.competitorId, list);
+  }
+
+  const dead = new Set(mergedCauses.keys());
+  const events: GameEvent[] = [...dead].sort().map((competitorId) =>
     Object.freeze({
       type: "competitor-eliminated" as const,
-      competitorId: hit.competitorId,
-      causes: Object.freeze(
-        hit.causes.map((cause) =>
-          Object.freeze({
-            kind: "bomb" as const,
-            bombId: cause.bombId,
-            ownerId: cause.ownerId,
-          }),
-        ),
-      ),
+      competitorId,
+      causes: Object.freeze(mergedCauses.get(competitorId) ?? []),
     }),
   );
 

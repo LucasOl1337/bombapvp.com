@@ -19,9 +19,7 @@ import {
   assertVelocity,
   BASE_SPEED_UNITS_PER_TICK,
   BODY_HALF_EXTENT,
-  bodiesOverlap,
-  bodyOverlapsTile,
-  bodyWithinBounds,
+  bodyOverlapsTileToroidal,
   CANONICAL_SPAWNS,
   crateKeySet,
   effectiveSolidKeySet,
@@ -34,6 +32,9 @@ import {
   tileKey,
   tileOf,
   UNITS_PER_TILE,
+  wrapDelta,
+  wrapPosition,
+  wrapTile,
   type BombEntry,
   type BombsSlice,
   type LocomotionEntry,
@@ -45,8 +46,16 @@ import {
 } from "../../kernel/world-state.ts";
 import { factsOfKind } from "../../kernel/facts.ts";
 
-/** Bump: effective solid includes pressure closed tiles (Decision 008). */
-const MODULE_VERSION = "2.3.0";
+/**
+ * 3.2.0: living bodies never block each other — players pass through rivals
+ * (Decision 012, parity with the original game). 3.1.0: bomb egress is free
+ * pass-through while the body still overlaps the bomb tile (Decision 012).
+ * 3.0.0: toroidal wrap arena (Decision 011).
+ */
+const MODULE_VERSION = "3.2.0";
+
+const SPAN_X = ARENA_WIDTH * UNITS_PER_TILE;
+const SPAN_Y = ARENA_HEIGHT * UNITS_PER_TILE;
 
 const ZERO_VELOCITY = freezeVelocity({ x: 0, y: 0 });
 const DIRECTIONS = new Set<Direction>(["up", "down", "left", "right"]);
@@ -98,17 +107,19 @@ function assertLocomotionVelocity(value: unknown, label: string): Velocity {
   return velocity;
 }
 
-/** Candidate step is legal only when each component stays within contract max. */
+/** Candidate step is legal only when each wrapped component stays within contract max. */
 function isWithinContractStep(from: WorldPosition, to: WorldPosition): boolean {
   return (
-    Math.abs(to.x - from.x) <= LANE_CORRECTION_MAX
-    && Math.abs(to.y - from.y) <= LANE_CORRECTION_MAX
+    Math.abs(wrapDelta(to.x, from.x, SPAN_X)) <= LANE_CORRECTION_MAX
+    && Math.abs(wrapDelta(to.y, from.y, SPAN_Y)) <= LANE_CORRECTION_MAX
   );
 }
 
 /**
- * Bomb tiles the body already overlaps in pre-state (egress entitlement by geometry,
- * not by owner secret).
+ * Bomb tiles the body already overlaps in pre-state (egress entitlement by
+ * geometry, not by owner secret). While any overlap persists the body moves
+ * freely across the bomb tile (Decision 012); once fully clear, the key drops
+ * out of the pre-state set and re-entry is blocked by static validation.
  */
 export function preOverlappingBombKeys(
   position: WorldPosition,
@@ -116,7 +127,7 @@ export function preOverlappingBombKeys(
 ): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const bomb of bombs) {
-    if (bodyOverlapsTile(position, bomb.tile)) {
+    if (bodyOverlapsTileToroidal(position, bomb.tile)) {
       keys.add(tileKey(bomb.tile));
     }
   }
@@ -124,68 +135,43 @@ export function preOverlappingBombKeys(
 }
 
 /**
- * Monotone egress from a pre-overlapped bomb tile:
- * - must not approach the tile center
- * - must not cross the tile center on either axis
- * Re-entry into a non-pre-overlapped bomb is blocked by static validation.
+ * Static legality of a canonical (torus-normalized) body position.
+ * Positions are always in-bounds modulo the torus (Decision 011), so there
+ * is no bounds rejection: a body near the seam legitimately overlaps the
+ * wrapped corner tiles on the opposite edge, which are evaluated via
+ * wrapTile + toroidal overlap (body half extent < 1 tile, so the ≤2×2
+ * wrapped corner tiles suffice).
  */
-function isBombEgressMonotone(
-  from: WorldPosition,
-  to: WorldPosition,
-  bombTile: { x: number; y: number },
-): boolean {
-  const center = tileCenter(bombTile);
-  const distFrom = Math.abs(from.x - center.x) + Math.abs(from.y - center.y);
-  const distTo = Math.abs(to.x - center.x) + Math.abs(to.y - center.y);
-  if (distTo < distFrom) return false;
-
-  // Crossing the center on an axis is forbidden.
-  if (from.x < center.x && to.x > center.x) return false;
-  if (from.x > center.x && to.x < center.x) return false;
-  if (from.y < center.y && to.y > center.y) return false;
-  if (from.y > center.y && to.y < center.y) return false;
-
-  // Landing exactly on the center counts as crossing when we started off-center.
-  if (to.x === center.x && from.x !== center.x) return false;
-  if (to.y === center.y && from.y !== center.y) return false;
-
-  return true;
-}
-
 export function isStaticallyValid(
   position: WorldPosition,
-  prePosition: WorldPosition,
   solid: ReadonlySet<string>,
   crates: ReadonlySet<string>,
   bombs: readonly BombEntry[],
   preBombKeys: ReadonlySet<string>,
 ): boolean {
-  if (!bodyWithinBounds(position, ARENA_WIDTH, ARENA_HEIGHT)) return false;
-
-  // Solid / crate: any positive-area body overlap blocks.
+  // Solid / crate: any positive-area body overlap blocks (wrap-aware).
   const minTx = Math.floor((position.x - BODY_HALF_EXTENT) / UNITS_PER_TILE);
   const maxTx = Math.floor((position.x + BODY_HALF_EXTENT - 1) / UNITS_PER_TILE);
   const minTy = Math.floor((position.y - BODY_HALF_EXTENT) / UNITS_PER_TILE);
   const maxTy = Math.floor((position.y + BODY_HALF_EXTENT - 1) / UNITS_PER_TILE);
   for (let ty = minTy; ty <= maxTy; ty += 1) {
     for (let tx = minTx; tx <= maxTx; tx += 1) {
-      const tile = { x: tx, y: ty };
+      const tile = wrapTile({ x: tx, y: ty });
       const key = tileKey(tile);
-      if (!bodyOverlapsTile(position, tile)) continue;
+      if (!bodyOverlapsTileToroidal(position, tile)) continue;
       if (solid.has(key) || crates.has(key)) return false;
     }
   }
 
   for (const bomb of bombs) {
     const key = tileKey(bomb.tile);
-    if (!bodyOverlapsTile(position, bomb.tile)) continue;
+    if (!bodyOverlapsTileToroidal(position, bomb.tile)) continue;
     if (!preBombKeys.has(key)) {
       // Fresh contact / re-entry blocked.
       return false;
     }
-    if (!isBombEgressMonotone(prePosition, position, bomb.tile)) {
-      return false;
-    }
+    // Pre-overlapped bomb: free pass-through while any overlap persists
+    // (Decision 012). No monotone restriction — it trapped off-center bodies.
   }
 
   return true;
@@ -236,8 +222,8 @@ export function attemptDirection(
               : Math.max(corrected.x, laneCenter),
           y: corrected.y,
         });
-    if (isStaticallyValid(clamped, from, solid, crates, bombs, preBombKeys)) {
-      pos = clamped;
+    if (isStaticallyValid(wrapPosition(clamped), solid, crates, bombs, preBombKeys)) {
+      pos = wrapPosition(clamped);
     }
   }
 
@@ -245,8 +231,9 @@ export function attemptDirection(
   const offsetAfter = horizontal ? Math.abs(pos.y - laneCenter) : Math.abs(pos.x - laneCenter);
   if (offsetAfter <= LANE_LONGITUDINAL_LOCK) {
     const delta = longitudinalDelta(direction);
-    const advanced = freezePosition({ x: pos.x + delta.x, y: pos.y + delta.y });
-    if (isStaticallyValid(advanced, from, solid, crates, bombs, preBombKeys)) {
+    // Torus: advance modulo the arena span so seam crossings re-enter canonically.
+    const advanced = wrapPosition(freezePosition({ x: pos.x + delta.x, y: pos.y + delta.y }));
+    if (isStaticallyValid(advanced, solid, crates, bombs, preBombKeys)) {
       pos = advanced;
     }
   }
@@ -260,73 +247,24 @@ function positionsEqual(a: WorldPosition, b: WorldPosition): boolean {
 
 /**
  * Batch-resolve simultaneous body candidates against a shared pre-state.
- * Order-independent: mutual positive overlap rejects both; invading a
- * stationary or already-rejected body rejects the invader. Fixpoint.
- * Rejected competitors keep pre-state position and receive velocity zero
- * at the write site.
+ * Living bodies never block each other (Decision 012): players pass through
+ * rivals exactly like the original game, so the batch only filters candidates
+ * whose per-component step exceeds the contract max (would need swept
+ * collision / substeps and an explicit bump). Order-independent by
+ * construction. Candidates outside `livingEntries` (dead) are ignored.
  */
 export function resolveMovementBatch(
   livingEntries: readonly LocomotionEntry[],
   candidates: readonly MovementCandidate[],
 ): ReadonlySet<CompetitorId> {
-  if (candidates.length === 0) return new Set();
-
-  const preById = new Map<CompetitorId, WorldPosition>();
-  for (const entry of livingEntries) {
-    preById.set(entry.competitorId, entry.position);
-  }
-
-  let remaining = new Map<CompetitorId, MovementCandidate>();
+  const living = new Set(livingEntries.map((entry) => entry.competitorId));
+  const accepted = new Set<CompetitorId>();
   for (const candidate of candidates) {
-    // Contract max step is 128 per component; larger candidates are never accepted
-    // (would need swept collision / substeps and an explicit bump).
-    if (!isWithinContractStep(candidate.from, candidate.to)) {
-      continue;
-    }
-    remaining.set(candidate.competitorId, candidate);
+    if (!living.has(candidate.competitorId)) continue;
+    if (!isWithinContractStep(candidate.from, candidate.to)) continue;
+    accepted.add(candidate.competitorId);
   }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const reject = new Set<CompetitorId>();
-    const list = [...remaining.values()];
-
-    // Mutual positive overlap between candidate finals → both out.
-    for (let i = 0; i < list.length; i += 1) {
-      for (let j = i + 1; j < list.length; j += 1) {
-        const a = list[i]!;
-        const b = list[j]!;
-        if (bodiesOverlap(a.to, b.to)) {
-          reject.add(a.competitorId);
-          reject.add(b.competitorId);
-        }
-      }
-    }
-
-    // Invade stationary or already-rejected body (pre-state position).
-    for (const candidate of list) {
-      if (reject.has(candidate.competitorId)) continue;
-      for (const [otherId, prePos] of preById) {
-        if (otherId === candidate.competitorId) continue;
-        if (remaining.has(otherId) && !reject.has(otherId)) {
-          // Other is still a live candidate this iteration — resolved via mutual to-to.
-          continue;
-        }
-        if (bodiesOverlap(candidate.to, prePos)) {
-          reject.add(candidate.competitorId);
-          break;
-        }
-      }
-    }
-
-    if (reject.size > 0) {
-      changed = true;
-      for (const id of reject) remaining.delete(id);
-    }
-  }
-
-  return new Set(remaining.keys());
+  return accepted;
 }
 
 function runLocomotionReset(ctx: SystemRunContext): SystemRunResult {
@@ -375,7 +313,8 @@ function runLocomotion(ctx: SystemRunContext): SystemRunResult {
         Object.freeze({
           competitorId: entry.competitorId,
           from: freezePosition(entry.position),
-          to: freezePosition(skillMove.teleport),
+          // Blink destination normalized onto the torus (Decision 011).
+          to: wrapPosition(skillMove.teleport),
           direction: entry.lastDirection ?? "down",
         }),
       );
@@ -470,8 +409,9 @@ function runLocomotion(ctx: SystemRunContext): SystemRunResult {
     const velocity = teleports.has(entry.competitorId)
       ? ZERO_VELOCITY
       : freezeVelocity({
-          x: candidate.to.x - candidate.from.x,
-          y: candidate.to.y - candidate.from.y,
+          // Shortest wrapped delta keeps velocity consistent across the seam.
+          x: wrapDelta(candidate.to.x, candidate.from.x, SPAN_X),
+          y: wrapDelta(candidate.to.y, candidate.from.y, SPAN_Y),
         });
     const tile = tileOf(candidate.to);
     moveEvents.push(
@@ -563,15 +503,13 @@ function restoreLocomotion(raw: unknown, config: MatchConfig): LocomotionSlice {
         `slices.locomotion.entries[${index}] must not carry moveElapsedMs (removed in world-2).`,
       );
     }
-    const position = assertPosition(
+    // Torus (Decision 011): out-of-range positions are normalized modulo the
+    // arena span instead of rejected. Structural validation (safe integers,
+    // velocity contract, seat order) stays strict.
+    const position = wrapPosition(assertPosition(
       row.position,
       `slices.locomotion.entries[${index}].position`,
-    );
-    if (!bodyWithinBounds(position, ARENA_WIDTH, ARENA_HEIGHT)) {
-      throw new Error(
-        `slices.locomotion.entries[${index}].position body is out of arena bounds.`,
-      );
-    }
+    ));
     const velocity = assertLocomotionVelocity(
       row.velocity,
       `slices.locomotion.entries[${index}].velocity`,

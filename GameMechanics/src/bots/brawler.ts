@@ -95,10 +95,21 @@ function inBounds(grid: Grid, x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < grid.width && y < grid.height;
 }
 
+/** Torus wrap of a tile coordinate (Decision 011) — open border gaps re-enter on the opposite edge. */
+function wrapCoord(grid: Grid, x: number, y: number): TileCoord {
+  return {
+    x: ((x % grid.width) + grid.width) % grid.width,
+    y: ((y % grid.height) + grid.height) % grid.height,
+  };
+}
+
+/** Blast walk stops at solid, at a crate, and at the grid edge — flames never wrap. */
 function blastTiles(
   bomb: BombSnapshot,
   solid: ReadonlySet<string>,
   crates: ReadonlySet<string>,
+  width: number,
+  height: number,
 ): TileCoord[] {
   const tiles: TileCoord[] = [{ x: bomb.tile.x, y: bomb.tile.y }];
   for (const dir of STEP_DIRECTIONS) {
@@ -106,6 +117,7 @@ function blastTiles(
     for (let step = 1; step <= bomb.flameRange; step += 1) {
       const tx = bomb.tile.x + delta.x * step;
       const ty = bomb.tile.y + delta.y * step;
+      if (tx < 0 || ty < 0 || tx >= width || ty >= height) break;
       const k = key(tx, ty);
       if (solid.has(k)) break;
       tiles.push({ x: tx, y: ty });
@@ -153,7 +165,7 @@ function buildGrid(snapshot: GameSnapshot, selfId: CompetitorId): Grid {
     addDangerWindow(danger, dangerWindows, flame.tile, 0, flame.remainingMs);
   }
   for (const bomb of snapshot.bombs) {
-    for (const tile of blastTiles(bomb, solid, crates)) {
+    for (const tile of blastTiles(bomb, solid, crates, snapshot.arena.width, snapshot.arena.height)) {
       addDangerWindow(
         danger,
         dangerWindows,
@@ -213,7 +225,9 @@ function neighbours(
   const out: { tile: TileCoord; direction: Direction }[] = [];
   for (const direction of STEP_DIRECTIONS) {
     const delta = DIRECTION_DELTA[direction];
-    const next = { x: tile.x + delta.x, y: tile.y + delta.y };
+    // Torus (Decision 011): stepping off an open border gap re-enters on the
+    // opposite edge; solid border tiles still block.
+    const next = wrapCoord(grid, tile.x + delta.x, tile.y + delta.y);
     if (isWalkable(grid, next)) {
       out.push({ tile: next, direction });
     }
@@ -278,7 +292,8 @@ function isRestSafe(grid: Grid, tile: TileCoord): boolean {
   if (isDanger(grid, tile)) return false;
   for (const direction of STEP_DIRECTIONS) {
     const delta = DIRECTION_DELTA[direction];
-    if (isDanger(grid, { x: tile.x + delta.x, y: tile.y + delta.y })) return false;
+    const adjacent = wrapCoord(grid, tile.x + delta.x, tile.y + delta.y);
+    if (isDanger(grid, adjacent)) return false;
   }
   return true;
 }
@@ -382,7 +397,8 @@ function alignedWithinRange(
 function adjacentCrate(grid: Grid, tile: TileCoord): boolean {
   for (const direction of STEP_DIRECTIONS) {
     const delta = DIRECTION_DELTA[direction];
-    if (grid.crates.has(key(tile.x + delta.x, tile.y + delta.y))) return true;
+    const adjacent = wrapCoord(grid, tile.x + delta.x, tile.y + delta.y);
+    if (grid.crates.has(key(adjacent.x, adjacent.y))) return true;
   }
   return false;
 }
@@ -398,7 +414,7 @@ function projectBomb(grid: Grid, tile: TileCoord, flameRange: number): Grid {
   const danger = new Set(grid.danger);
   const dangerWindows = new Map<string, DangerWindow[]>();
   for (const [k, windows] of grid.dangerWindows) dangerWindows.set(k, [...windows]);
-  for (const t of blastTiles(hypothetical, grid.solid, grid.crates)) {
+  for (const t of blastTiles(hypothetical, grid.solid, grid.crates, grid.width, grid.height)) {
     addDangerWindow(
       danger,
       dangerWindows,
@@ -442,7 +458,7 @@ function jitteredMove(
   const safeSteps: Direction[] = [];
   for (const direction of STEP_DIRECTIONS) {
     const delta = DIRECTION_DELTA[direction];
-    const next = { x: here.x + delta.x, y: here.y + delta.y };
+    const next = wrapCoord(grid, here.x + delta.x, here.y + delta.y);
     if (isWalkable(grid, next) && !grid.danger.has(tileKey(next))) safeSteps.push(direction);
   }
   let direction = preferred;
@@ -486,7 +502,7 @@ export function decideBot(
     // retreat is the only chance to finish crossing before ignition.
     if (isDanger(grid, here) && memory.retreat !== null) {
       const delta = DIRECTION_DELTA[memory.retreat];
-      const next = { x: here.x + delta.x, y: here.y + delta.y };
+      const next = wrapCoord(grid, here.x + delta.x, here.y + delta.y);
       if (isWalkable(grid, next)) {
         return Object.freeze({
           intent: { kind: "move" as const, direction: memory.retreat },
@@ -512,10 +528,19 @@ export function decideBot(
     if (inward) return jitteredMove(grid, here, inward, prng);
   }
 
+  // The kernel rejects a plant on an already-occupied tile (tile-occupied).
+  // Rival bodies overlapping the tile no longer block placement (Decision
+  // 012), but two players sharing one tile could both plant in the same tick —
+  // the second is rejected. Mirror that: don't plant while sharing a tile.
   const canBomb =
     memory.cooldownTicks === 0 &&
     self.activeBombs < self.maxBombs &&
-    !grid.bombTiles.has(tileKey(here));
+    !grid.bombTiles.has(tileKey(here)) &&
+    !snapshot.competitors.some((competitor) =>
+      competitor.id !== self.id
+      && competitor.alive
+      && tileKey(competitor.tile) === tileKey(here)
+    );
 
   if (canBomb) {
     const opponentAligned =

@@ -1,4 +1,4 @@
-import type { CompetitorId, TileCoord, WorldPosition } from "../contracts.ts";
+import type { CompetitorId, SkillId, TileCoord, WorldPosition } from "../contracts.ts";
 
 /**
  * Typed, ephemeral, append-only facts between phases of the same tick.
@@ -55,13 +55,23 @@ export type SkillMovementFact = Readonly<{
   teleport: WorldPosition | null;
 }>;
 
+/** Instant skill damage resolved in the damage barrier (after locomotion). */
+export type SkillHitFact = Readonly<{
+  kind: "skill-hit";
+  skillId: SkillId;
+  ownerId: CompetitorId;
+  targetId: CompetitorId;
+  at: TileCoord;
+}>;
+
 export type TickFact =
   | CratesDestroyedFact
   | CratesRemovedFact
   | RoundResetFact
   | SpawnProtectionArmFact
   | PressureImpactFact
-  | SkillMovementFact;
+  | SkillMovementFact
+  | SkillHitFact;
 
 export function factsOfKind<K extends TickFact["kind"]>(
   facts: readonly TickFact[],

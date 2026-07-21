@@ -111,12 +111,24 @@ describe("character catalog", () => {
         order: 8,
         defaultSlot: undefined,
       },
+      {
+        id: "f2b8d4e6-1a3c-4b5d-9e7f-8c6a5b4d3e2f",
+        name: "Katarina",
+        order: 9,
+        defaultSlot: undefined,
+      },
+      {
+        id: "c155b0d5-644c-4b43-8d02-890e76574eff",
+        name: "Madara",
+        order: 10,
+        defaultSlot: undefined,
+      },
     ]);
   });
 
   it("projects localized launcher presentation from the same definitions", () => {
     const presentations = listCharacterPresentations("en");
-    expect(presentations).toHaveLength(9);
+    expect(presentations).toHaveLength(11);
     expect(presentations.map((entry) => entry.name)).toEqual([
       "Ranni",
       "Killer Bee",
@@ -127,6 +139,8 @@ describe("character catalog", () => {
       "Mirelle",
       "Lee Sin",
       "Thresh",
+      "Katarina",
+      "Madara",
     ]);
     expect(presentations[0]).toMatchObject({
       id: "03a976fb-7313-4064-a477-5bb9b0760034",
@@ -150,6 +164,8 @@ describe("character catalog", () => {
       "Tide Exchange",
       "Dragon's Rage",
       "Death Sentence",
+      "Bouncing Blade",
+      "Fireball Jutsu",
     ]);
   });
 
@@ -202,6 +218,16 @@ describe("character catalog", () => {
         name: "Thresh",
         order: 8,
       },
+      {
+        id: "f2b8d4e6-1a3c-4b5d-9e7f-8c6a5b4d3e2f",
+        name: "Katarina",
+        order: 9,
+      },
+      {
+        id: "c155b0d5-644c-4b43-8d02-890e76574eff",
+        name: "Madara",
+        order: 10,
+      },
     ]);
   });
 
@@ -250,6 +276,16 @@ describe("character catalog", () => {
       {
         characterId: "e7a1c4d2-9f3b-4c5e-a8d1-2b6f8e0c4a7d",
         skillId: "thresh-death-sentence",
+        cooldownMs: 8_000,
+      },
+      {
+        characterId: "f2b8d4e6-1a3c-4b5d-9e7f-8c6a5b4d3e2f",
+        skillId: "katarina-bouncing-blade",
+        cooldownMs: 8_000,
+      },
+      {
+        characterId: "c155b0d5-644c-4b43-8d02-890e76574eff",
+        skillId: "madara-fireball-jutsu",
         cooldownMs: 8_000,
       },
     ]);

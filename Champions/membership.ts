@@ -71,6 +71,22 @@ export const CHAMPION_MEMBERSHIP = Object.freeze({
     defaultSlot: undefined,
     skillCooldownMs: 8_000,
   }),
+  katarina: Object.freeze({
+    characterId: "f2b8d4e6-1a3c-4b5d-9e7f-8c6a5b4d3e2f",
+    skillId: "katarina-bouncing-blade",
+    name: "Katarina",
+    rosterOrder: 9,
+    defaultSlot: undefined,
+    skillCooldownMs: 8_000,
+  }),
+  madara: Object.freeze({
+    characterId: "c155b0d5-644c-4b43-8d02-890e76574eff",
+    skillId: "madara-fireball-jutsu",
+    name: "Madara",
+    rosterOrder: 10,
+    defaultSlot: undefined,
+    skillCooldownMs: 8_000,
+  }),
 } as const);
 
 export type ChampionSlug = keyof typeof CHAMPION_MEMBERSHIP;

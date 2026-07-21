@@ -12,10 +12,11 @@ import type {
   SystemRunResult,
 } from "../../kernel/protocol.ts";
 import {
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
   assertInteger,
   assertTile,
   assertTilesSortedUnique,
-  bodyOverlapsTile,
   BOMB_FUSE_MS,
   compareTiles,
   DIRECTION_DELTA,
@@ -37,15 +38,21 @@ import {
 } from "../../kernel/world-state.ts";
 
 /**
- * 3.0.0: placement/capacity/range read Powerups progression (Decision 009).
- * Bomb captures flameRange at placement; validator accepts 1..current range.
+ * 3.2.0: placement no longer rejects when a rival body overlaps the tile —
+ * pre-overlap geometric egress lets them walk off (Decision 012).
+ * 3.1.0: blast walk stops at grid bounds — flames never wrap the torus
+ * (Decision 011). 3.0.0: placement/capacity/range read Powerups progression.
  */
-const MODULE_VERSION = "3.0.0";
+const MODULE_VERSION = "3.2.0";
 
 /** Reachable active fuse after a complete tick (post fuse-system, pre explosion). */
 const MIN_ACTIVE_FUSE_MS = TICK_DURATION_MS;
 const MAX_ACTIVE_FUSE_MS = BOMB_FUSE_MS - TICK_DURATION_MS;
 
+/**
+ * Blast walk stops at solid, at a crate (consumed), and at the grid edge.
+ * Flames never wrap the torus (Decision 011) — unlike bodies.
+ */
 function collectBlast(
   origin: TileCoord,
   range: number,
@@ -59,6 +66,7 @@ function collectBlast(
         x: origin.x + direction.x * step,
         y: origin.y + direction.y * step,
       };
+      if (tile.x < 0 || tile.y < 0 || tile.x >= ARENA_WIDTH || tile.y >= ARENA_HEIGHT) break;
       const key = tileKey(tile);
       if (solid.has(key)) break;
       tiles.push(freezeTile(tile));
@@ -175,27 +183,9 @@ function runBombPlace(ctx: SystemRunContext): SystemRunResult {
       continue;
     }
 
-    // Reject a bomb whose full tile would swallow another living body.
-    let swallowsOther = false;
-    for (const other of locomotion.entries) {
-      if (other.competitorId === competitorId) continue;
-      const otherVitals = findVitals(vitals, other.competitorId);
-      if (!otherVitals?.alive) continue;
-      if (bodyOverlapsTile(other.position, placeTile)) {
-        swallowsOther = true;
-        break;
-      }
-    }
-    if (swallowsOther) {
-      rejections.push(
-        Object.freeze({
-          sequence: envelope.sequence,
-          seatId: envelope.seatId,
-          reason: "tile-occupied" as const,
-        }),
-      );
-      continue;
-    }
+    // A rival body overlapping the tile does not block placement (Decision
+    // 012, parity with the original): the pre-overlap geometric egress lets
+    // them simply walk off the fresh bomb.
 
     // Capture current flameRange at placement — later upgrades never rewrite it.
     const bomb: BombEntry = Object.freeze({
