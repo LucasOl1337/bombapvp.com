@@ -4,24 +4,19 @@
 
 | Caminho | Conteudo |
 | --- | --- |
-| `GameMechanics/src/` | Unica engine executavel: contratos, kernel, regras, skills, bots e adaptador de browser. |
-| `GameMechanics/content/` | Ponte explicita entre a engine e o conteudo canonico preservado. |
-| `GameMechanics/assets/` | Assets compartilhados da arena, gameplay, HUD, marca e audio. |
-| `GameMechanics/tests/` | Contratos e testes deterministas da engine. |
-| `Champions/` | Elenco canonico, identidades estaveis, definicoes, apresentacao, perfis de bots e assets finais. |
-| `index.html` | Entrada principal que carrega diretamente a GameMechanics. |
-| `GameMechanics/index.html` | Entrada multipagina equivalente para desenvolvimento e compatibilidade. |
-| `public/` | Favicons e metadados estaticos do site. |
-
-Nao existe segunda engine, launcher legado, Lab, runtime online ou Worker neste tree.
+| `GameMechanics/src/` | Engine, regras, bots e adaptador do navegador. |
+| `GameMechanics/assets/` | Arena, gameplay, HUD, marca e audio. |
+| `GameMechanics/tests/` | Testes da engine. |
+| `Champions/` | Elenco, identidades e assets finais. |
+| `public/` | Icones estaticos do site. |
 
 ## Quando ler
 
 | Documento | Condicao |
 | --- | --- |
-| `README.md` | Ao chegar sem contexto do produto ou da stack. |
-| `docs/gameplay.md` | Ao alterar arena, bots, controles ou contrato de URL. |
-| `docs/sprites.md` | Ao criar, regenerar ou plugar Champion. |
-| `docs/release.md` | Ao alterar build, dominios ou publicacao. |
-| `Champions/README.md` | Ao alterar o conteudo canonico de Champion. |
-| `GameMechanics/ARCHITECTURE.md` | Ao alterar ownership, kernel ou fronteiras da engine. |
+| `README.md` | SOMENTE ao chegar sem contexto do produto. |
+| `docs/gameplay.md` | SOMENTE ao alterar regras, controles, bots ou URL. |
+| `docs/sprites.md` | SOMENTE ao criar ou integrar assets de Champion. |
+| `docs/release.md` | SOMENTE ao alterar build ou publicacao. |
+| `DocsDev/` | SOMENTE para consulta historica pontual; nao e fonte de verdade. |
+| `DocsDev/arquivados/` | NUNCA leia. |

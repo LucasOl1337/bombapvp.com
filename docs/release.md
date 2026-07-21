@@ -1,11 +1,13 @@
 # Publicacao
 
-SOMENTE ao alterar build, dominios ou publicacao.
+SOMENTE ao alterar build ou publicacao.
 
-- Node.js 22+.
-- `npm run check` valida tipos, os testes da GameMechanics e o build Vite.
-- Entradas Vite: `index.html` e `GameMechanics/index.html`.
-- Artefato estatico: `dist/`.
-- Dominios do mesmo build: `bombapvp.com` e `bombpvp.com`.
-- O repositorio nao contem Worker, broker ou segredo de deploy.
-- O fluxo conectado ao branch `main` publica o build estatico; push/deploy exige ordem explicita do dono.
+Requer Node.js 22 ou superior.
+
+```text
+npm run check
+```
+
+O comando valida tipos, testes e build. As entradas Vite sao `index.html` e `GameMechanics/index.html`; o artefato fica em `dist/`.
+
+Push na `main` publica o mesmo jogo em `bombapvp.com` e `bombpvp.com`. O repositorio nao contem staging separado nem segredo de deploy.
