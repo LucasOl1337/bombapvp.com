@@ -9,6 +9,7 @@ import {
   TICK_DURATION_MS,
   RANNI_ICE_BLINK_SKILL_ID,
   type CompetitorId,
+  type Direction,
   type GameCommand,
   type GameEvent,
   type GameSnapshot,
@@ -222,6 +223,7 @@ type MutableWorldDraft = {
         cooldownRemainingMs: number;
         projection: { x: number; y: number } | null;
         bombEgressKeys: string[];
+        aimDirection?: Direction | null;
       }>;
     };
   };
