@@ -37,11 +37,8 @@ import crateBreak2Url from "../../assets/gameplay/crate-break-2.png";
 import crateBreak3Url from "../../assets/gameplay/crate-break-3.png";
 import {
   collectChampionAssetUrls,
-  DEFAULT_P1_SLUG,
-  DEFAULT_P2_SLUG,
   getChampionPresentation,
   listChampionPresentations,
-  resolveChampionSlug,
   type ChampAccent,
   type ChampPack,
   type ChampPresentation,
@@ -104,14 +101,26 @@ import {
   wrapDelta,
 } from "../kernel/world-state.ts";
 import {
-  createBotMemory,
-  createBotPrng,
-  driveBot,
-  resolveBotProfile,
-  type BotMemory,
-  type BotPrng,
-  type BotProfile,
+  BOT_PROFILES,
+  type BotProfileId,
 } from "../bots/index.ts";
+import {
+  browserBotDriverForPlayer,
+  createBrowserBotDrivers,
+  driveBrowserBotsForTick,
+  type BrowserBotDriver,
+} from "./bot-drivers.ts";
+import {
+  botProfileForPlayer,
+  createBrowserMatchConfiguration,
+  parseBrowserLaunchState,
+  resolveChampionSlug,
+  seedForBrowserMatch,
+  serializeBrowserMatchConfiguration,
+  type BrowserGameMode,
+  type BrowserMatchConfiguration,
+} from "./match-mode.ts";
+import { createBotLabObservation } from "./lab-observation.ts";
 
 declare global {
   interface Window {
@@ -416,9 +425,13 @@ const FLAME_ANIM_URLS = [
 
 const CRATE_BREAK_URLS = [crateBreak0Url, crateBreak1Url, crateBreak2Url, crateBreak3Url] as const;
 
-/** Active visual packs + roster meta for the local duel. */
-let selectedP1 = resolveChampionSlug(null, DEFAULT_P1_SLUG);
-let selectedP2 = resolveChampionSlug(null, DEFAULT_P2_SLUG);
+const initialLaunchState = parseBrowserLaunchState(window.location.search);
+let activeConfiguration = initialLaunchState.configuration;
+let activeMatchNumber = 1;
+
+/** Active visual packs + roster meta for the current typed browser mode. */
+let selectedP1 = activeConfiguration.players[0].championSlug;
+let selectedP2 = activeConfiguration.players[1].championSlug;
 
 function presentationFor(slot: LocalControlSlot): ChampPresentation {
   const slug = slot === "control-a" ? selectedP1 : selectedP2;
@@ -439,14 +452,17 @@ function championCooldownMs(slot: LocalControlSlot): number {
   return presentationFor(slot).skillCooldownMs;
 }
 
-function buildMatchConfig(p1Slug: string, p2Slug: string) {
-  const localDuelConfig = createLocalDuel1v1MatchConfig();
-  const p1 = getChampionPresentation(p1Slug);
-  const p2 = getChampionPresentation(p2Slug);
+function buildMatchConfig(
+  configuration: BrowserMatchConfiguration,
+  matchNumber = activeMatchNumber,
+) {
+  const localDuelConfig = createLocalDuel1v1MatchConfig({
+    seed: seedForBrowserMatch(configuration, matchNumber),
+  });
   return createMatchConfig({
     ...localDuelConfig,
     seats: localDuelConfig.seats.map((seat, index) => {
-      const champ = index === 0 ? p1 : p2;
+      const champ = getChampionPresentation(configuration.players[index]!.championSlug);
       const skillId = champ?.kernelSkillId;
       return {
         seatId: seat.seatId,
@@ -457,22 +473,7 @@ function buildMatchConfig(p1Slug: string, p2Slug: string) {
   });
 }
 
-// Seed selection from URL (?p1=ranni&p2=thresh) so deep-links skip re-picking.
-try {
-  const params = new URLSearchParams(window.location.search);
-  selectedP1 = resolveChampionSlug(params.get("p1") ?? params.get("character") ?? params.get("char1"), DEFAULT_P1_SLUG);
-  const rawP2 = params.get("char2") ?? params.get("p2");
-  const p2AsChar = rawP2 && rawP2 !== "bot" && rawP2 !== "human" ? rawP2 : null;
-  selectedP2 = resolveChampionSlug(
-    p2AsChar,
-    selectedP1 === DEFAULT_P2_SLUG ? DEFAULT_P1_SLUG : DEFAULT_P2_SLUG,
-  );
-} catch {
-  selectedP1 = DEFAULT_P1_SLUG;
-  selectedP2 = DEFAULT_P2_SLUG;
-}
-
-let matchConfig = buildMatchConfig(selectedP1, selectedP2);
+let matchConfig = buildMatchConfig(activeConfiguration);
 const localCompetitorBySlot: Readonly<Record<LocalControlSlot, CompetitorId>> = Object.freeze({
   "control-a": matchConfig.seats[0]!.competitorId,
   "control-b": matchConfig.seats[1]!.competitorId,
@@ -482,38 +483,26 @@ const localSlotByCompetitor: ReadonlyMap<CompetitorId, LocalControlSlot> = new M
   [localCompetitorBySlot["control-b"], "control-b"],
 ]);
 
-/** Seat controlled by P2, resolved once from the frozen config. */
-const P2_SEAT_ID = matchConfig.seats[1]!.seatId;
-const P2_COMPETITOR_ID = localCompetitorBySlot["control-b"];
-
-/** Presentation-only: is P2 driven by the pure bot or a local human? Default human. */
-type P2Control = "human" | "bot";
-function initialP2Control(): P2Control {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("bot") === "1" || params.get("control2") === "bot") return "bot";
-    // Legacy: ?p2=bot still means bot-controlled P2.
-    if (params.get("p2") === "bot") return "bot";
-    return "human";
-  } catch {
-    return "human";
-  }
-}
-let p2Control: P2Control = initialP2Control();
-
 /**
- * Deterministic bot PRNG seeded from the match seed. Reset on restart so a
- * fresh session reproduces the same bot stream. Bot memory holds the currently
- * pressed direction so we emit clean release/press transitions each decision.
+ * Adapter-only bot controllers. The selected profile is resolved once per
+ * match and passed into driveBot on every decision; the kernel only sees the
+ * resulting ordinary GameCommands.
  */
-let botPrng: BotPrng = createBotPrng(matchConfig.seed);
-let botMemory: BotMemory = createBotMemory();
-function resetBot(): void {
-  botPrng = createBotPrng(matchConfig.seed);
-  botMemory = createBotMemory();
+let botDrivers: BrowserBotDriver[] = createBrowserBotDrivers(activeConfiguration, matchConfig);
+function resetBots(): void {
+  botDrivers = createBrowserBotDrivers(activeConfiguration, matchConfig);
+}
+function playerIndexForSlot(slot: LocalControlSlot): 0 | 1 {
+  return slot === "control-a" ? 0 : 1;
+}
+function slotIsBot(slot: LocalControlSlot): boolean {
+  return activeConfiguration.players[playerIndexForSlot(slot)].control === "bot";
+}
+function competitorIsBot(competitorId: CompetitorId): boolean {
+  return slotIsBot(slotForCompetitor(competitorId));
 }
 function p2IsBot(): boolean {
-  return p2Control === "bot";
+  return slotIsBot("control-b");
 }
 
 const MOVEMENT_BINDINGS: Readonly<Record<string, Readonly<{
@@ -554,7 +543,9 @@ function slotForCompetitor(competitorId: CompetitorId): LocalControlSlot {
 }
 
 function displayName(competitorId: CompetitorId, copy: BrowserCopy): string {
-  return copy.controlName(slotForCompetitor(competitorId));
+  const slot = slotForCompetitor(competitorId);
+  const profile = botProfileForPlayer(activeConfiguration, playerIndexForSlot(slot));
+  return profile ? `${profile.label} · ${copy.controlName(slot)}` : copy.controlName(slot);
 }
 
 function eventDescription(event: GameEvent, copy: BrowserCopy): string | null {
@@ -849,6 +840,7 @@ type LolHudPanel = Readonly<{
   name: HTMLElement;
   tag: HTMLElement;
   skillName: HTMLElement;
+  controller: HTMLElement;
   status: HTMLElement;
   statusBar: HTMLElement;
   pips: HTMLElement;
@@ -890,6 +882,7 @@ function createLolHudPanel(slot: LocalControlSlot): LolHudPanel {
   const name = element(document, "span", "lol-hud__name", championName(slot));
   const pips = element(document, "div", "lol-hud__pips hud-pips");
   header.append(tag, name, pips);
+  const controller = element(document, "div", "lol-hud__controller", "");
 
   const statusRow = element(document, "div", "lol-hud__status-row");
   const statusBar = element(document, "div", "lol-hud__hp");
@@ -944,7 +937,7 @@ function createLolHudPanel(slot: LocalControlSlot): LolHudPanel {
   spellR.append(spellRLabel, spellRCd);
   spells.append(spellQ, spellR);
 
-  body.append(header, statusRow, skillName, powerRail, spells);
+  body.append(header, controller, statusRow, skillName, powerRail, spells);
   root.append(portraitWrap, body);
 
   return {
@@ -953,6 +946,7 @@ function createLolHudPanel(slot: LocalControlSlot): LolHudPanel {
     name,
     tag,
     skillName,
+    controller,
     status,
     statusBar: statusBarFill,
     pips,
@@ -979,10 +973,17 @@ function paintLolIdentity(panel: LolHudPanel): void {
   panel.spellR.title = `${panel.slot === "control-a" ? "R" : "I"} · ${champ.skillName}`;
   panel.spellRLabel.textContent = champ.skillName.slice(0, 1).toUpperCase();
   panel.spellR.classList.toggle("is-locked", !champ.kernelSkillId);
+  const profile = botProfileForPlayer(activeConfiguration, playerIndexForSlot(panel.slot));
+  panel.controller.textContent = profile
+    ? `${isEnglish ? "AI" : "IA"} · ${profile.label}`
+    : (isEnglish ? "HUMAN" : "HUMANO");
+  panel.root.classList.toggle("is-bot-controlled", profile !== null);
 }
 
 const p1Hud = createLolHudPanel("control-a");
 const p2Hud = createLolHudPanel("control-b");
+paintLolIdentity(p1Hud);
+paintLolIdentity(p2Hud);
 /** @deprecated alias kept for pulseHudStat compatibility */
 const localPanel = p1Hud;
 const rivalPill = p2Hud;
@@ -1013,37 +1014,90 @@ timerShell.append(roundLabel, timeValue, sdMeter);
 hudBar.append(p1Hud.root, timerShell, p2Hud.root);
 hud.append(brand, hudBar);
 
-// ── Character select (mode 4 roster pick) ─────────────────────
+// ── Landing mode + competitor selection ───────────────────────
 
 let matchStarted = false;
+let pickMode: BrowserGameMode = activeConfiguration.mode;
 let pickP1 = selectedP1;
 let pickP2 = selectedP2;
+let pickBotP1: BotProfileId = botProfileForPlayer(activeConfiguration, 0)?.id ?? "bomb";
+let pickBotP2: BotProfileId = botProfileForPlayer(activeConfiguration, 1)?.id
+  ?? (activeConfiguration.mode === "bot-training" ? "bomb" : "pingo");
 
 const selectScreen = element(document, "section", "char-select");
-selectScreen.setAttribute("aria-label", isEnglish ? "Character select" : "Seleção de personagens");
+selectScreen.setAttribute(
+  "aria-label",
+  isEnglish ? "Game mode and competitor selection" : "Seleção de modo e competidores",
+);
 
 const selectInner = element(document, "div", "char-select__inner");
 const selectTitle = element(
   document,
   "h1",
   "char-select__title",
-  isEnglish ? "Choose your fighters" : "Escolha seus personagens",
+  isEnglish ? "Choose your experiment" : "Escolha seu experimento",
 );
 const selectSub = element(
   document,
   "p",
   "char-select__sub",
   isEnglish
-    ? "P1 left · P2 right · click a portrait or use A/D and ←/→"
-    : "P1 esquerda · P2 direita · clique no retrato ou use A/D e ←/→",
+    ? "Play locally, train against one bot, or watch two selected AIs compete."
+    : "Jogue localmente, treine contra um bot ou observe duas IAs selecionadas.",
 );
+
+const modePicker = element(document, "div", "char-select__modes");
+modePicker.setAttribute("role", "radiogroup");
+modePicker.setAttribute("aria-label", isEnglish ? "Game modes" : "Modos de jogo");
+const modeDefinitions: readonly Readonly<{
+  id: BrowserGameMode;
+  label: string;
+  description: string;
+  marker: string;
+}>[] = Object.freeze([
+  Object.freeze({
+    id: "local-duel",
+    label: isEnglish ? "Local duel" : "Duelo local",
+    description: isEnglish ? "Two players · one keyboard" : "Dois jogadores · um teclado",
+    marker: "2P",
+  }),
+  Object.freeze({
+    id: "bot-training",
+    label: isEnglish ? "Bot training" : "Treino vs bot",
+    description: isEnglish ? "Human vs selected AI profile" : "Humano vs perfil de IA",
+    marker: "1P",
+  }),
+  Object.freeze({
+    id: "bot-lab",
+    label: isEnglish ? "AI laboratory" : "Laboratório de IA",
+    description: isEnglish ? "Selected bot vs selected bot" : "Bot selecionado vs bot selecionado",
+    marker: "LAB",
+  }),
+]);
+const modeButtons = new Map<BrowserGameMode, HTMLButtonElement>();
+for (const definition of modeDefinitions) {
+  const button = element(document, "button", "char-select__mode") as HTMLButtonElement;
+  button.type = "button";
+  button.dataset.mode = definition.id;
+  button.setAttribute("role", "radio");
+  button.append(
+    element(document, "span", "char-select__mode-marker", definition.marker),
+    element(document, "strong", "char-select__mode-label", definition.label),
+    element(document, "span", "char-select__mode-description", definition.description),
+  );
+  modeButtons.set(definition.id, button);
+  modePicker.append(button);
+}
 
 function buildPickColumn(side: "p1" | "p2"): {
   root: HTMLElement;
+  badge: HTMLElement;
   portrait: HTMLImageElement;
   name: HTMLElement;
   skill: HTMLElement;
   grid: HTMLElement;
+  profileField: HTMLElement;
+  profileSelect: HTMLSelectElement;
 } {
   const root = element(document, "div", `char-select__col char-select__col--${side}`);
   const badge = element(document, "div", "char-select__badge", side === "p1" ? "PLAYER 1" : "PLAYER 2");
@@ -1055,11 +1109,31 @@ function buildPickColumn(side: "p1" | "p2"): {
   const name = element(document, "h2", "char-select__name", "");
   const skill = element(document, "p", "char-select__skill", "");
   stage.append(portrait, name, skill);
+  const profileField = element(document, "label", "char-select__profile");
+  profileField.append(element(
+    document,
+    "span",
+    "char-select__profile-label",
+    isEnglish ? "AI profile" : "Perfil de IA",
+  ));
+  const profileSelect = document.createElement("select");
+  profileSelect.setAttribute(
+    "aria-label",
+    isEnglish ? `${side === "p1" ? "P1" : "P2"} AI profile` : `Perfil de IA do ${side === "p1" ? "P1" : "P2"}`,
+  );
+  for (const profile of BOT_PROFILES) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = `${profile.label} · ${profile.model}`;
+    profileSelect.append(option);
+  }
+  profileSelect.value = side === "p1" ? pickBotP1 : pickBotP2;
+  profileField.append(profileSelect);
   const grid = element(document, "div", "char-select__grid");
   grid.setAttribute("role", "listbox");
   grid.setAttribute("aria-label", side === "p1" ? "P1 roster" : "P2 roster");
-  root.append(badge, stage, grid);
-  return { root, portrait, name, skill, grid };
+  root.append(badge, stage, profileField, grid);
+  return { root, badge, portrait, name, skill, grid, profileField, profileSelect };
 }
 
 const colP1 = buildPickColumn("p1");
@@ -1079,12 +1153,12 @@ const changeBtn = element(
   document,
   "button",
   "arena-button char-select__change",
-  isEnglish ? "Characters" : "Personagens",
+  isEnglish ? "Modes & fighters" : "Modos e personagens",
 ) as HTMLButtonElement;
 changeBtn.type = "button";
-changeBtn.title = isEnglish ? "Open character select" : "Abrir seleção de personagens";
+changeBtn.title = isEnglish ? "Open mode and competitor selection" : "Abrir seleção de modo e competidores";
 
-selectInner.append(selectTitle, selectSub, selectCols, startBtn);
+selectInner.append(selectTitle, selectSub, modePicker, selectCols, startBtn);
 selectScreen.append(selectInner);
 
 function paintPickColumn(
@@ -1094,16 +1168,42 @@ function paintPickColumn(
 ): void {
   const champ = getChampionPresentation(slug);
   if (!champ) return;
+  const playerIndex = side === "p1" ? 0 : 1;
+  const isBot = pickMode === "bot-lab" || (pickMode === "bot-training" && playerIndex === 1);
+  const profileId = side === "p1" ? pickBotP1 : pickBotP2;
+  const profile = BOT_PROFILES.find(({ id }) => id === profileId);
   col.portrait.src = champ.portrait;
   col.name.textContent = champ.name;
-  col.skill.textContent = `${champ.skillName} · ${(champ.skillCooldownMs / 1000).toFixed(0)}s`;
+  col.skill.textContent = isBot && profile
+    ? `${profile.label} · ${champ.skillName} · ${(champ.skillCooldownMs / 1000).toFixed(0)}s`
+    : `${champ.skillName} · ${(champ.skillCooldownMs / 1000).toFixed(0)}s`;
   col.root.dataset.accent = champ.accent;
   for (const btn of col.grid.querySelectorAll<HTMLButtonElement>("button")) {
     const active = btn.dataset.slug === slug;
     btn.classList.toggle("is-active", active);
     btn.setAttribute("aria-selected", String(active));
   }
-  void side;
+}
+
+function updateModeSelection(): void {
+  for (const [mode, button] of modeButtons) {
+    const active = mode === pickMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-checked", String(active));
+  }
+  const p1Bot = pickMode === "bot-lab";
+  const p2Bot = pickMode !== "local-duel";
+  colP1.profileField.hidden = !p1Bot;
+  colP1.profileSelect.disabled = !p1Bot;
+  colP2.profileField.hidden = !p2Bot;
+  colP2.profileSelect.disabled = !p2Bot;
+  colP1.badge.textContent = p1Bot ? "BOT A" : (isEnglish ? "PLAYER 1" : "JOGADOR 1");
+  colP2.badge.textContent = p2Bot ? "BOT B" : (isEnglish ? "PLAYER 2" : "JOGADOR 2");
+  startBtn.textContent = pickMode === "bot-lab"
+    ? (isEnglish ? "Start experiment" : "Iniciar experimento")
+    : (isEnglish ? "Fight" : "Lutar");
+  paintPickColumn(colP1, pickP1, "p1");
+  paintPickColumn(colP2, pickP2, "p2");
 }
 
 function fillRosterGrid(col: ReturnType<typeof buildPickColumn>, side: "p1" | "p2"): void {
@@ -1132,8 +1232,32 @@ function fillRosterGrid(col: ReturnType<typeof buildPickColumn>, side: "p1" | "p
 
 fillRosterGrid(colP1, "p1");
 fillRosterGrid(colP2, "p2");
-paintPickColumn(colP1, pickP1, "p1");
-paintPickColumn(colP2, pickP2, "p2");
+colP1.profileSelect.addEventListener("change", () => {
+  pickBotP1 = colP1.profileSelect.value as BotProfileId;
+  paintPickColumn(colP1, pickP1, "p1");
+});
+colP2.profileSelect.addEventListener("change", () => {
+  pickBotP2 = colP2.profileSelect.value as BotProfileId;
+  paintPickColumn(colP2, pickP2, "p2");
+});
+for (const [mode, button] of modeButtons) {
+  button.addEventListener("click", () => {
+    const previousMode = pickMode;
+    pickMode = mode;
+    if (mode === "bot-training" && previousMode === "local-duel") {
+      pickBotP2 = "bomb";
+      colP2.profileSelect.value = pickBotP2;
+    }
+    if (mode === "bot-lab" && previousMode === "local-duel") {
+      pickBotP1 = "bomb";
+      pickBotP2 = "pingo";
+      colP1.profileSelect.value = pickBotP1;
+      colP2.profileSelect.value = pickBotP2;
+    }
+    updateModeSelection();
+  });
+}
+updateModeSelection();
 
 function stepPick(side: "p1" | "p2", delta: number): void {
   const roster = listChampionPresentations();
@@ -1152,47 +1276,61 @@ function showSelectScreen(show: boolean): void {
   app.classList.toggle("is-selecting", show);
 }
 
-function applyRosterAndRestart(p1Slug: string, p2Slug: string, restartMatch = true): void {
-  selectedP1 = resolveChampionSlug(p1Slug, DEFAULT_P1_SLUG);
-  selectedP2 = resolveChampionSlug(p2Slug, DEFAULT_P2_SLUG);
+function applyConfigurationAndRestart(
+  configuration: BrowserMatchConfiguration,
+  restartMatch = true,
+): void {
+  activeConfiguration = configuration;
+  activeMatchNumber = 1;
+  labPlaybackSpeed = 1;
+  speedButton.textContent = "1×";
+  selectedP1 = configuration.players[0].championSlug;
+  selectedP2 = configuration.players[1].championSlug;
   pickP1 = selectedP1;
   pickP2 = selectedP2;
-  matchConfig = buildMatchConfig(selectedP1, selectedP2);
+  pickMode = configuration.mode;
+  pickBotP1 = botProfileForPlayer(configuration, 0)?.id ?? pickBotP1;
+  pickBotP2 = botProfileForPlayer(configuration, 1)?.id ?? pickBotP2;
+  colP1.profileSelect.value = pickBotP1;
+  colP2.profileSelect.value = pickBotP2;
+  matchConfig = buildMatchConfig(configuration);
   game = createGameMechanics(matchConfig);
-  botPrng = createBotPrng(matchConfig.seed);
-  botMemory = createBotMemory();
+  resetBots();
   paintLolIdentity(p1Hud);
   paintLolIdentity(p2Hud);
-  paintPickColumn(colP1, pickP1, "p1");
-  paintPickColumn(colP2, pickP2, "p2");
+  updateModeSelection();
   clearCombatPresentation();
   deathAnims.clear();
   championActionAnims.clear();
   prevChampionSkillPhase.clear();
   lastFacing.set(localCompetitorBySlot["control-a"], "south");
   lastFacing.set(localCompetitorBySlot["control-b"], "north");
+  prevTickPositions = null;
+  currTickPositions = null;
+  accumulatorMs = 0;
+  lastKnownPhase = game.snapshot().phase;
   eventMessages.length = 0;
   eventMessages.push(copy.ready);
   renderLog();
-  if (restartMatch) {
-    // Fresh mechanics already start at round-start; just render.
-    render();
-  }
-  // Persist selection in the URL without reloading.
+  syncP2ModeButton();
+  if (restartMatch) render();
   try {
     const url = new URL(window.location.href);
-    url.searchParams.set("p1", selectedP1);
-    url.searchParams.set("p2", selectedP2);
-    if (p2IsBot()) url.searchParams.set("bot", "1");
-    else url.searchParams.delete("bot");
+    url.search = serializeBrowserMatchConfiguration(configuration, url.search).toString();
     window.history.replaceState({}, "", url);
   } catch {
-    /* ignore */
+    /* URL persistence is best-effort; typed state remains authoritative. */
   }
 }
 
 function confirmCharacterSelect(): void {
-  applyRosterAndRestart(pickP1, pickP2, true);
+  applyConfigurationAndRestart(createBrowserMatchConfiguration({
+    mode: pickMode,
+    champion1: pickP1,
+    champion2: pickP2,
+    bot1: pickBotP1,
+    bot2: pickBotP2,
+  }), true);
   matchStarted = true;
   showSelectScreen(false);
 }
@@ -1201,19 +1339,16 @@ startBtn.addEventListener("click", () => confirmCharacterSelect());
 changeBtn.addEventListener("click", () => {
   pickP1 = selectedP1;
   pickP2 = selectedP2;
-  paintPickColumn(colP1, pickP1, "p1");
-  paintPickColumn(colP2, pickP2, "p2");
+  pickMode = activeConfiguration.mode;
+  pickBotP1 = botProfileForPlayer(activeConfiguration, 0)?.id ?? pickBotP1;
+  pickBotP2 = botProfileForPlayer(activeConfiguration, 1)?.id ?? pickBotP2;
+  colP1.profileSelect.value = pickBotP1;
+  colP2.profileSelect.value = pickBotP2;
+  updateModeSelection();
   showSelectScreen(true);
 });
 
-// Open select by default unless ?skipSelect=1
-let skipSelect = false;
-try {
-  skipSelect = new URLSearchParams(window.location.search).get("skipSelect") === "1";
-} catch {
-  skipSelect = false;
-}
-if (skipSelect) {
+if (initialLaunchState.skipSelection) {
   matchStarted = true;
   showSelectScreen(false);
 } else {
@@ -1252,7 +1387,14 @@ const overlayPauseBtn = element(document, "button", "arena-button arena-button--
 overlayPauseBtn.type = "button";
 const overlayRestartBtn = element(document, "button", "arena-button", copy.restart);
 overlayRestartBtn.type = "button";
-overlayActions.append(overlayPauseBtn, overlayRestartBtn);
+const overlayNewMatchBtn = element(
+  document,
+  "button",
+  "arena-button arena-button--primary",
+  isEnglish ? "New match" : "Nova partida",
+);
+overlayNewMatchBtn.type = "button";
+overlayActions.append(overlayPauseBtn, overlayRestartBtn, overlayNewMatchBtn);
 overlayCard.append(overlayEyebrow, overlayPortraitWrap, overlayTitle, overlaySub, overlayActions);
 overlay.append(overlayCard);
 canvasFrame.append(sdBanner, overlay);
@@ -1267,34 +1409,114 @@ const pauseButton = element(document, "button", "arena-button", copy.pause);
 pauseButton.type = "button";
 const restartButton = element(document, "button", "arena-button arena-button--primary", copy.restart);
 restartButton.type = "button";
-actions.append(pauseButton, restartButton);
+const newMatchButton = element(
+  document,
+  "button",
+  "arena-button arena-button--primary",
+  isEnglish ? "New match" : "Nova partida",
+);
+newMatchButton.type = "button";
+const speedButton = element(document, "button", "arena-button arena-button--lab", "1×") as HTMLButtonElement;
+speedButton.type = "button";
+speedButton.title = isEnglish ? "AI lab playback speed" : "Velocidade do laboratório de IA";
+actions.append(pauseButton, restartButton, newMatchButton, speedButton);
 
 const devToggle = element(document, "button", "arena-dev-toggle", copy.devShow);
 devToggle.type = "button";
 devToggle.title = "Toggle diagnostics (?dev=1)";
-const p2ModeButton = element(document, "button", "arena-button arena-button--p2", copy.p2ModeLabel(p2Control));
+const p2ModeButton = element(
+  document,
+  "button",
+  "arena-button arena-button--p2",
+  copy.p2ModeLabel(p2IsBot() ? "bot" : "human"),
+);
 p2ModeButton.type = "button";
-p2ModeButton.title = "Toggle P2 human/bot (?p2=bot)";
 actions.append(p2ModeButton, changeBtn);
 
 function syncP2ModeButton(): void {
-  p2ModeButton.textContent = copy.p2ModeLabel(p2Control);
+  const isLab = activeConfiguration.mode === "bot-lab";
+  p2ModeButton.textContent = isLab
+    ? (isEnglish ? "AI laboratory" : "Laboratório de IA")
+    : copy.p2ModeLabel(p2IsBot() ? "bot" : "human");
+  p2ModeButton.title = isLab
+    ? (isEnglish ? "Both competitors use the selected AI profiles" : "Os dois competidores usam os perfis de IA selecionados")
+    : (isEnglish ? "Switch between local duel and bot training" : "Alternar entre duelo local e treino contra bot");
   p2ModeButton.classList.toggle("is-bot", p2IsBot());
+  p2ModeButton.disabled = isLab;
+  newMatchButton.hidden = !isLab;
+  speedButton.hidden = !isLab;
+  overlayNewMatchBtn.hidden = !isLab;
 }
 
 p2ModeButton.addEventListener("click", () => {
+  if (activeConfiguration.mode === "bot-lab") return;
   // Switching control releases any pressed P2 key and re-seeds the bot so the
   // handoff never leaves a stuck direction or a stale decision stream.
   if (p2IsBot()) {
-    if (botMemory.pressed !== null) {
-      game.dispatch({ type: "set-movement", competitorId: P2_COMPETITOR_ID, direction: botMemory.pressed, pressed: false });
+    const driver = browserBotDriverForPlayer(botDrivers, 1);
+    if (driver?.memory.pressed !== null && driver?.memory.pressed !== undefined) {
+      game.dispatch({
+        type: "set-movement",
+        competitorId: driver.competitorId,
+        direction: driver.memory.pressed,
+        pressed: false,
+      });
     }
   } else {
     releaseMovement();
   }
-  p2Control = p2IsBot() ? "human" : "bot";
-  resetBot();
+  activeConfiguration = createBrowserMatchConfiguration({
+    mode: p2IsBot() ? "local-duel" : "bot-training",
+    champion1: selectedP1,
+    champion2: selectedP2,
+    bot2: pickBotP2,
+  });
+  resetBots();
+  paintLolIdentity(p1Hud);
+  paintLolIdentity(p2Hud);
   syncP2ModeButton();
+  try {
+    const url = new URL(window.location.href);
+    url.search = serializeBrowserMatchConfiguration(activeConfiguration, url.search).toString();
+    window.history.replaceState({}, "", url);
+  } catch {
+    /* URL persistence is best-effort. */
+  }
+  render();
+});
+
+const LAB_PLAYBACK_SPEEDS = [1, 2, 4] as const;
+type LabPlaybackSpeed = (typeof LAB_PLAYBACK_SPEEDS)[number];
+let labPlaybackSpeed: LabPlaybackSpeed = 1;
+
+function startNewLabMatch(): void {
+  if (activeConfiguration.mode !== "bot-lab") return;
+  activeMatchNumber += 1;
+  matchConfig = buildMatchConfig(activeConfiguration, activeMatchNumber);
+  game = createGameMechanics(matchConfig);
+  resetBots();
+  clearCombatPresentation();
+  deathAnims.clear();
+  championActionAnims.clear();
+  prevChampionSkillPhase.clear();
+  prevTickPositions = null;
+  currTickPositions = null;
+  accumulatorMs = 0;
+  lastFacing.set(localCompetitorBySlot["control-a"], "south");
+  lastFacing.set(localCompetitorBySlot["control-b"], "north");
+  lastKnownPhase = game.snapshot().phase;
+  eventMessages.length = 0;
+  eventMessages.push(isEnglish ? `AI lab match ${activeMatchNumber} ready.` : `Partida ${activeMatchNumber} do laboratório pronta.`);
+  renderLog();
+  render();
+}
+
+newMatchButton.addEventListener("click", startNewLabMatch);
+overlayNewMatchBtn.addEventListener("click", startNewLabMatch);
+speedButton.addEventListener("click", () => {
+  const index = LAB_PLAYBACK_SPEEDS.indexOf(labPlaybackSpeed);
+  labPlaybackSpeed = LAB_PLAYBACK_SPEEDS[(index + 1) % LAB_PLAYBACK_SPEEDS.length]!;
+  speedButton.textContent = `${labPlaybackSpeed}×`;
   render();
 });
 
@@ -2811,6 +3033,13 @@ function renderSuddenDeathBanner(snapshot: GameSnapshot, animMs: number): void {
 }
 
 function renderOverlay(snapshot: GameSnapshot): void {
+  const labObservation = createBotLabObservation(
+    activeConfiguration,
+    snapshot,
+    [championName("control-a"), championName("control-b")],
+    isEnglish ? "en" : "pt-BR",
+    activeMatchNumber,
+  );
   const show =
     snapshot.phase === "paused"
     || snapshot.phase === "round-start"
@@ -2834,6 +3063,9 @@ function renderOverlay(snapshot: GameSnapshot): void {
   overlayActions.style.display = showActions ? "" : "none";
   overlayPauseBtn.hidden = snapshot.phase === "match-over";
   overlayPauseBtn.style.display = snapshot.phase === "match-over" ? "none" : "";
+  const showNewLabMatch = activeConfiguration.mode === "bot-lab" && snapshot.phase === "match-over";
+  overlayNewMatchBtn.hidden = !showNewLabMatch;
+  overlayNewMatchBtn.style.display = showNewLabMatch ? "" : "none";
 
   // Winner portrait on outcome overlays; hidden otherwise.
   const overlayWinner = snapshot.phase === "round-over"
@@ -2874,12 +3106,16 @@ function renderOverlay(snapshot: GameSnapshot): void {
   }
   if (snapshot.phase === "match-over") {
     overlayEyebrow.textContent = copy.matchOver;
-    if (snapshot.matchWinner) {
+    if (labObservation?.result) {
+      overlayTitle.textContent = labObservation.result;
+    } else if (snapshot.matchWinner) {
       overlayTitle.textContent = copy.matchWinner(displayName(snapshot.matchWinner, copy));
     } else {
       overlayTitle.textContent = copy.matchOver;
     }
-    overlaySub.textContent = `${copy.firstTo}${snapshot.targetRoundWins}`;
+    overlaySub.textContent = activeConfiguration.mode === "bot-lab"
+      ? `${copy.firstTo}${snapshot.targetRoundWins} · ${isEnglish ? "experiment" : "experimento"} ${activeMatchNumber}`
+      : `${copy.firstTo}${snapshot.targetRoundWins}`;
     return;
   }
 }
@@ -2947,10 +3183,19 @@ function updateLolPanel(panel: LolHudPanel, snapshot: GameSnapshot): void {
 }
 
 function renderHud(snapshot: GameSnapshot): void {
+  const labObservation = createBotLabObservation(
+    activeConfiguration,
+    snapshot,
+    [championName("control-a"), championName("control-b")],
+    isEnglish ? "en" : "pt-BR",
+    activeMatchNumber,
+  );
   const displayMs = timerDisplayMs(snapshot);
   timeValue.textContent = formatTime(displayMs);
   timerShell.classList.toggle("is-sudden-death", snapshot.phase === "sudden-death");
-  roundLabel.textContent = `R${snapshot.roundNumber} · FT${snapshot.targetRoundWins}`;
+  roundLabel.textContent = activeConfiguration.mode === "bot-lab"
+    ? `AI LAB · R${snapshot.roundNumber} · FT${snapshot.targetRoundWins}`
+    : `R${snapshot.roundNumber} · FT${snapshot.targetRoundWins}`;
 
   const sdActive = snapshot.phase === "sudden-death";
   sdMeter.classList.toggle("is-active", sdActive);
@@ -2968,13 +3213,28 @@ function renderHud(snapshot: GameSnapshot): void {
 
   updateLolPanel(p1Hud, snapshot);
   updateLolPanel(p2Hud, snapshot);
+  for (const panel of [p1Hud, p2Hud]) {
+    const playerIndex = playerIndexForSlot(panel.slot);
+    const driver = browserBotDriverForPlayer(botDrivers, playerIndex);
+    const profile = botProfileForPlayer(activeConfiguration, playerIndex);
+    panel.controller.textContent = profile
+      ? `${isEnglish ? "AI" : "IA"} · ${profile.label} · D${driver?.decisions ?? 0}`
+      : (isEnglish ? "HUMAN" : "HUMANO");
+  }
+
+  if (labObservation) {
+    hint.textContent = `${labObservation.summary} · ${labPlaybackSpeed}×`;
+  } else {
+    hint.innerHTML = `<kbd>WASD</kbd>+<kbd>Q</kbd>+<kbd>␣</kbd> · <kbd>↑←↓→</kbd>+<kbd>O</kbd>+<kbd>I</kbd> · <kbd>Esc</kbd> · <kbd>T</kbd> · <kbd>M</kbd>`;
+  }
 
   if (devOpen) {
     devMeta.textContent =
       `tick=${snapshot.revision} phase=${snapshot.phase} R${snapshot.roundNumber} `
       + `K=${snapshot.targetRoundWins} bombs=${snapshot.bombs.length} flames=${snapshot.flames.length} `
       + `powerups=${snapshot.powerUps.length} pressure=${snapshot.pressure.closing ? "closing" : "—"} `
-      + `p1=${selectedP1} p2=${selectedP2}`;
+      + `mode=${activeConfiguration.mode} p1=${selectedP1} p2=${selectedP2} `
+      + `bots=${botDrivers.map(({ profile }) => profile.id).join(",") || "none"}`;
   }
 }
 
@@ -2998,14 +3258,14 @@ function render(snapshot = game.snapshot(), animMs = performance.now()): void {
 
   boardSummary.textContent =
     `${phaseLabel(snapshot)}. ${copy.round} ${snapshot.roundNumber}. `
-    + `${copy.controlName("control-a")} ${scoreFor(snapshot, localCompetitorBySlot["control-a"])} – `
-    + `${scoreFor(snapshot, localCompetitorBySlot["control-b"])} ${copy.controlName("control-b")}. `
+    + `${displayName(localCompetitorBySlot["control-a"], copy)} ${scoreFor(snapshot, localCompetitorBySlot["control-a"])} – `
+    + `${scoreFor(snapshot, localCompetitorBySlot["control-b"])} ${displayName(localCompetitorBySlot["control-b"], copy)}. `
     + `${formatTime(timerDisplayMs(snapshot))}.`;
 }
 
 function dispatchAndRender(command: Parameters<typeof game.dispatch>[0]): readonly GameEvent[] {
   // A restart re-seeds the bot so a fresh session replays the same bot stream.
-  if (command.type === "restart") resetBot();
+  if (command.type === "restart") resetBots();
   const events = game.dispatch(command);
   appendEvents(events);
   render();
@@ -3047,8 +3307,8 @@ function onKeyDown(event: KeyboardEvent): void {
     event.preventDefault();
     // Gate movement to playable phases only — paused keys must not enqueue.
     if (!acceptsGameplayInput()) return;
-    // While the bot drives P2, ignore the human P2 movement keys entirely.
-    if (p2IsBot() && movement.competitorId === P2_COMPETITOR_ID) return;
+    // Bot-controlled slots never accept parallel human input.
+    if (competitorIsBot(movement.competitorId)) return;
     if (pressedMovementCodes.has(event.code)) return;
     pressedMovementCodes.add(event.code);
     game.dispatch({ type: "set-movement", ...movement, pressed: true });
@@ -3062,8 +3322,7 @@ function onKeyDown(event: KeyboardEvent): void {
     const competitorId = event.code === "KeyQ"
       ? localCompetitorBySlot["control-a"]
       : localCompetitorBySlot["control-b"];
-    // While the bot drives P2, ignore the human P2 bomb key.
-    if (p2IsBot() && competitorId === P2_COMPETITOR_ID) return;
+    if (competitorIsBot(competitorId)) return;
     dispatchAndRender({ type: "place-bomb", competitorId });
     return;
   }
@@ -3074,7 +3333,7 @@ function onKeyDown(event: KeyboardEvent): void {
     const competitorId = event.code === "Space" || event.code === "KeyE"
       ? localCompetitorBySlot["control-a"]
       : localCompetitorBySlot["control-b"];
-    if (p2IsBot() && competitorId === P2_COMPETITOR_ID) return;
+    if (competitorIsBot(competitorId)) return;
     dispatchAndRender({ type: "use-skill", competitorId });
     return;
   }
@@ -3174,16 +3433,15 @@ function renderPositionFor(
 }
 
 /**
- * Run one bot decision and dispatch its ordinary commands, immediately before a
- * kernel tick advances. Deterministic: same snapshot + seed + memory yields the
- * same commands. No-op unless P2 is bot-controlled and play is live.
+ * Run each configured bot decision and dispatch its ordinary commands,
+ * immediately before a kernel tick advances. Driver order follows seat order,
+ * so the same typed config + seed + command stream is deterministic.
  */
 function dispatchBotCommandsForTick(): void {
-  if (!p2IsBot()) return;
   const snapshot = game.snapshot();
-  if (snapshot.phase !== "playing" && snapshot.phase !== "sudden-death") return;
-  const commands = driveBot(snapshot, P2_SEAT_ID, P2_COMPETITOR_ID, botPrng, botMemory);
-  for (const command of commands) game.dispatch(command);
+  for (const report of driveBrowserBotsForTick(snapshot, botDrivers)) {
+    for (const command of report.commands) game.dispatch(command);
+  }
 }
 
 function frame(nowMs: number): void {
@@ -3195,7 +3453,7 @@ function frame(nowMs: number): void {
     animationFrame = window.requestAnimationFrame(frame);
     return;
   }
-  accumulatorMs += delta;
+  accumulatorMs += delta * (activeConfiguration.mode === "bot-lab" ? labPlaybackSpeed : 1);
   const events: GameEvent[] = [];
   let preTickPositions: Map<CompetitorId, WorldPositionLike> | null = null;
   while (accumulatorMs >= TICK_DURATION_MS) {

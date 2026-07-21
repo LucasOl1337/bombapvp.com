@@ -162,6 +162,29 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("KeyT");
   });
 
+  it("presents the AI laboratory on the landing surface and routes bots through selected profiles", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    const styles = readFileSync(BROWSER_STYLES, "utf8");
+    const matchMode = readFileSync(join(ROOT, "src", "browser", "match-mode.ts"), "utf8");
+    const botDrivers = readFileSync(join(ROOT, "src", "browser", "bot-drivers.ts"), "utf8");
+
+    expect(main).toContain('id: "local-duel"');
+    expect(main).toContain('id: "bot-training"');
+    expect(main).toContain('id: "bot-lab"');
+    expect(main).toContain("Laboratório de IA");
+    expect(main).toContain("AI laboratory");
+    expect(main).toContain("char-select__modes");
+    expect(main).toContain("BOT_PROFILES");
+    expect(styles).toContain(".char-select__mode");
+    expect(styles).toContain(".char-select__profile");
+
+    expect(matchMode).toContain("BrowserMatchConfiguration");
+    expect(matchMode).toContain("parseBrowserLaunchState");
+    expect(matchMode).toContain("serializeBrowserMatchConfiguration");
+    expect(botDrivers).toMatch(/driveBot[\s\S]*driver\.profile/);
+    expect(main).toContain("driveBrowserBotsForTick");
+  });
+
   it("layout contracts prevent canvas shrink-to-fit and HUD stack clipping", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
     const styles = readFileSync(BROWSER_STYLES, "utf8");
