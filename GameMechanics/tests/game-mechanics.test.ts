@@ -5131,7 +5131,7 @@ describe("Ranni Ice Blink", () => {
     expect(findLocomotion(state.slices.locomotion, alpha)!.position).toEqual(body);
     expect(program.snapshot(state).competitors[0]!.skill).toMatchObject({
       phase: "channeling",
-      channelRemainingMs: 1_480,
+      channelRemainingMs: 2_480,
       cooldownRemainingMs: 0,
       projection: body,
     });
@@ -5139,7 +5139,7 @@ describe("Ranni Ice Blink", () => {
     const completed = program.step(state, { commands: [useSkill(state, config)] });
     const moved = findLocomotion(completed.state.slices.locomotion, alpha)!.position;
     expect(completed.rejections).toEqual([]);
-    expect(moved.x).toBe(body.x + BASE_SPEED_UNITS_PER_TICK);
+    expect(moved.x).toBe(body.x + BASE_SPEED_UNITS_PER_TICK / 2);
     expect(moved.y).toBe(body.y);
     expect(findLocomotion(completed.state.slices.locomotion, alpha)!.velocity).toEqual({ x: 0, y: 0 });
     expect(program.snapshot(completed.state).competitors[0]!.skill).toMatchObject({
@@ -5150,7 +5150,32 @@ describe("Ranni Ice Blink", () => {
     });
   });
 
-  it("auto-completes on exactly the 75th activation-inclusive tick", () => {
+  it("keeps the frozen body behind while its projection crosses a solid wall", () => {
+    const config = ranniDuel("skill-wall-phase");
+    const program = createDefaultMechanicsProgram();
+    const initial = program.initial(config);
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(initial.slices.locomotion, alpha)!.position;
+    const bodyTile = tileOf(body);
+    const wall = { x: bodyTile.x + 1, y: bodyTile.y };
+    let state = asPlayingWorld(program, initial, {
+      arena: { crates: [], solid: [wall] },
+    });
+
+    state = program.step(state, {
+      commands: [pressRight(state, config), useSkill(state, config, 1)],
+    }).state;
+    for (let tick = 0; tick < 64; tick += 1) {
+      state = program.step(state, { commands: [] }).state;
+    }
+
+    expect(findLocomotion(state.slices.locomotion, alpha)!.position).toEqual(body);
+    const projection = state.slices.skills.entries[0]!.projection!;
+    expect(projection.x).toBeGreaterThan((wall.x + 1) * UNITS_PER_TILE);
+    expect(tileOf(projection).x).toBeGreaterThan(wall.x);
+  });
+
+  it("auto-completes on exactly the 125th activation-inclusive tick", () => {
     const config = ranniDuel("skill-auto");
     const program = createDefaultMechanicsProgram();
     let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
@@ -5160,7 +5185,7 @@ describe("Ranni Ice Blink", () => {
     state = program.step(state, {
       commands: [pressRight(state, config), useSkill(state, config, 1)],
     }).state;
-    for (let tick = 2; tick < 75; tick += 1) {
+    for (let tick = 2; tick < 125; tick += 1) {
       state = program.step(state, { commands: [] }).state;
       expect(state.slices.skills.entries[0]!.phase).toBe("channeling");
       expect(findLocomotion(state.slices.locomotion, alpha)!.position).toEqual(body);
@@ -6045,5 +6070,4 @@ describe("bot acceptance — a complete bot-vs-bot match reaches match-over", ()
 // Slice 4A focused suite (Decision 009) — co-located for `test:mechanics` filter.
 import "./slice-4a-powerups.test.ts";
 import "./browser-visual-adapter.test.ts";
-
 

@@ -42,6 +42,7 @@ export type HookProjectileAssets = Readonly<{
 
 export type ChampPack = Readonly<{
   portrait: string;
+  effects: Readonly<Record<string, string>>;
   static: Readonly<Record<Facing, string>>;
   idle: Readonly<Record<Facing, readonly string[]>>;
   walk: Readonly<Record<Facing, readonly string[]>>;
@@ -133,6 +134,7 @@ function packFromAssets(
 ): ChampPack {
   return Object.freeze({
     portrait: assets.portraitUrl,
+    effects: assets.effects,
     static: mapFacingRecord(assets.staticSprites),
     idle: mapFacingFrames(assets.animations.idle),
     walk: mapFacingFrames(assets.animations.walk),
@@ -249,6 +251,7 @@ export function collectChampionAssetUrls(
   for (const entry of presentations) {
     urls.add(entry.portrait);
     const pack = entry.pack;
+    for (const url of Object.values(pack.effects)) urls.add(url);
     for (const facing of ["south", "north", "east", "west"] as const) {
       urls.add(pack.static[facing]);
       for (const frame of pack.idle[facing]) urls.add(frame);

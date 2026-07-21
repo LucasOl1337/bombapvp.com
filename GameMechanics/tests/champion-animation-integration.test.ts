@@ -40,6 +40,12 @@ function labManifests(): readonly LabManifest[] {
 }
 
 describe("integrated animation lab assets", () => {
+  it("ships Ranni's dedicated six-beat ultimate sequence", () => {
+    const ranni = getChampionPresentation("ranni");
+    expect(ranni?.pack.ultimate.south).toHaveLength(6);
+    expect(ranni?.pack.ultimate.north).toHaveLength(0);
+  });
+
   it("keeps the published checkout limited to one approved pack per effect family", () => {
     const manifests = labManifests();
 

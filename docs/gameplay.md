@@ -24,6 +24,15 @@ O hostname mantem o contrato existente: `bombapvp.com` usa PT-BR e `bombpvp.com`
 
 ## Controles
 
-Controles: P1 usa `WASD`, `Q` e `Espaco` (`E` e alias); P2 usa setas, `O` e `I` (`P` e alias). `Esc` pausa, `T` reinicia e `M` alterna o som.
+Controles: P1 usa `WASD`, `Q` e `Espaco`/`R` (`E` e alias); P2 usa setas, `O` e `I` (`P` e alias). `Esc` pausa, `T` reinicia e `M` alterna o som.
 
 A simulacao usa ticks fixos de 20 ms. Bots recebem snapshot congelado e devolvem apenas comandos comuns da engine.
+
+## Ranni: Ice Blink
+
+Ao ativar, o corpo fisico congela imediatamente e permanece na origem durante a
+canalizacao. O movimento controla uma projecao espectral separada, que ignora
+paredes, caixas e bombas durante o trajeto. O teleporte so acontece ao concluir
+com um segundo `R` ou ao final da janela de 2,5 segundos. A projecao se move a
+metade da velocidade normal; a habilidade continua exigindo um destino final
+valido.

@@ -19,7 +19,7 @@ export const RANNI_DEFINITION = deepFreeze({
           "Feiticeira do gelo que joga com tempo e posição. Usa o mapa como arma: entra em cantos perigosos e sai quando o cerco fecha.",
         skillName: "Ice Blink",
         skillSummary:
-          "Projeta o movimento por até 1,5 s e reaparece na posição segura escolhida. Fica imune enquanto canaliza.",
+          "Projeta o movimento por até 2,5 s, atravessa terreno e reaparece na posição segura escolhida. Fica imune enquanto canaliza.",
         analysis:
           "Use para escapar de cercos ou invadir uma rota protegida; ativar sem um destino seguro desperdiça a recarga.",
       },
@@ -29,7 +29,7 @@ export const RANNI_DEFINITION = deepFreeze({
           "Ice sorceress who wins with timing and position. She steps into tight spots and leaves the moment the net closes.",
         skillName: "Ice Blink",
         skillSummary:
-          "Projects movement for up to 1.5 seconds, then reappears at the chosen safe position. She is immune while channeling.",
+          "Projects movement through terrain for up to 2.5 seconds, then reappears at the chosen safe position. She is immune while channeling.",
         analysis:
           "Use it to escape a trap or breach a guarded lane; casting without a safe destination wastes the cooldown.",
       },
