@@ -1,0 +1,65 @@
+{
+  "id": "arena-boundary-lock",
+  "round": "2026-07-21T05:30:00-03:00",
+  "category": "feedback de arena",
+  "status": "Candidato",
+  "concept": "Quatro cantos angulares fecham uma zona quadrada, travam com nós ciano, pulsam em lime e reabrem para sinalizar o ciclo de posse.",
+  "selectionRationale": "Escolhido como feedback de limite de arena novo, distinto de retícula de perigo, pulso de controle, beacon de rally, scan de portão e sigilo de captura.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 2D game arena-feedback VFX sprite animation for a competitive bomb-arena game. Primary request: create an arena boundary lock: four separate angular square corner brackets appear around an empty center, slide inward to define a controlled zone, lock with small cyan nodes at the corners, pulse once with a lime ownership glow, then slide outward and reset. Scene/backdrop: perfectly flat solid #fa02fa chroma-key background, no shadows, gradients, texture, reflections, floor plane, text, watermark or grid lines. Subject: square framing centered and fully inside every cell, with crisp corners and transparent space in the middle. Style/medium: polished stylized game UI/VFX with hard-edged geometry and controlled antialiasing. Composition/framing: exactly 16 distinct poses in a 4x4 grid, row-major timing, no cell overlap. Color palette: electric blue, cyan, lime and white accents. Constraints: separated corners -> align -> lock -> ownership pulse -> release -> separated corners; no circular ring, reticle, beacon, gate scan, capture sigil, text, letters, characters or chroma-key color in the subject.",
+  "source": {
+    "tool": "image_gen.integrated",
+    "nativePath": "C:/Users/user/.codex/generated_images/019f82ed-2008-7fc1-94cc-db09a8663b95/exec-48478d64-3e00-4774-b626-6d59eb69c3b5.png",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 grid, row-major",
+    "derived": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "resolutionNote": "2048px é derivado upscaled; a fonte nativa do image_gen é 1254px."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen integrado",
+      "remove_chroma_key.py",
+      "ImageMagick 7.1.2",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "alphaProcessing": "remove_chroma_key.py com auto-key na borda, soft matte, despill e edge-contract 1; recorte interno de 40px antes da extração.",
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0530-arena-boundary-lock",
+      "prompt": "Conferir a grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas; não tocar em outros paths, não instalar e não fazer git.",
+      "result": "Tentativa encerrada sem arquivos gerados; wrapper retornou exit code 1 após uma mensagem inicial.",
+      "imagineAvailable": false,
+      "fallback": "Processamento local com ImageMagick após a falha do wrapper."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png a frame-15.png, row-major",
+    "frameDimensions": "312x312",
+    "runtimeFrameDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewContactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/arena-boundary-lock-preview-v2.gif",
+    "framesPath": "frames-312-v2/",
+    "runtimeFramesPath": "frames-runtime-256-v2/"
+  },
+  "validation": {
+    "result": "PASS",
+    "report": "frames=16 empty=0 edgeHits=0 badDims=0 sourceSheet=1248x1248 runtimeSheet=1024x1024 contactSheet=1024x1024 gifFrames=16 timingCentiseconds=6,...,6",
+    "alpha": "Todos os 16 frames possuem alpha útil; nenhum pixel alpha toca as quatro bordas internas.",
+    "visualInspection": "Contact sheet inspecionado; cantos separados -> lock quadrado -> pulso lime -> reabertura é legível.",
+    "divisibility": "1248 e 1024 são divisíveis pelas grades 4x4; cada célula não está vazia."
+  },
+  "externalResources": [],
+  "license": "Visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo ou pack adotado.",
+  "runtimeIntegration": true,
+  "nextCategory": "animação curta de HUD"
+}

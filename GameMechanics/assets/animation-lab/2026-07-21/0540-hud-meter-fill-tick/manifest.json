@@ -1,0 +1,65 @@
+{
+  "id": "hud-meter-fill-tick",
+  "round": "2026-07-21T05:40:00-03:00",
+  "category": "animação curta de HUD",
+  "status": "Candidato",
+  "concept": "Barra horizontal de três segmentos chanfrados que preenche em sequência, recebe brilho teal/dourado e retorna ao contorno ocioso.",
+  "selectionRationale": "Escolhido como feedback de recurso novo, distinto de confirmação, captura, streak, fuse, crown, ability-ready e dos demais efeitos de HUD catalogados.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 2D game HUD VFX sprite animation for a competitive bomb-arena game. Primary request: create a compact resource-meter fill tick for a HUD slot: three short beveled cyan segments sit in a horizontal stack with a small amber marker, a clean white highlight sweeps across them from left to right, segments illuminate one after another in teal and gold, the meter reaches a crisp full state, then settles back to an idle outline. Scene/backdrop: perfectly flat solid #00ff00 chroma-key background, no shadows, gradients, texture, reflections, floor plane, text, watermark or grid lines. Subject: centered horizontal meter in every cell, fully inside each cell, readable at small UI scale. Style/medium: polished stylized game UI with hard-edged bevels and controlled antialiasing. Composition/framing: exactly 16 distinct poses in a 4x4 grid, row-major timing, no cell overlap. Color palette: cyan, electric blue, teal, amber and white. Constraints: empty outline -> first segment -> second -> third -> full glow -> settle -> idle; no numbers, letters, icons, characters, circular rings, champion faces or chroma-key color in the subject.",
+  "source": {
+    "tool": "image_gen.integrated",
+    "nativePath": "C:/Users/user/.codex/generated_images/019f82ed-2008-7fc1-94cc-db09a8663b95/exec-e3b15994-dae2-4b2e-a16b-fd465908135c.png",
+    "nativeDimensions": "1536x1024",
+    "layout": "4x4 grid, rectangular cells 384x256, row-major",
+    "derived": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1536x1024.png"
+    ],
+    "resolutionNote": "A fonte nativa veio 1536x1024; source-upscaled-2048 é derivado proporcional de 2048x1365. As células foram recortadas sem distorção e centralizadas em 312x312."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen integrado",
+      "remove_chroma_key.py",
+      "ImageMagick 7.1.2",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "alphaProcessing": "remove_chroma_key.py com auto-key na borda, soft matte, despill e edge-contract 1; cada célula retangular foi recortada proporcionalmente antes de ser centralizada em 312x312.",
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0540-hud-meter-fill-tick",
+      "prompt": "Conferir a grade 4x4 retangular, tentar extrair frames e validar alpha, ordem, timing e bordas internas; não tocar em outros paths, não instalar e não fazer git.",
+      "result": "Tentativa encerrada sem arquivos gerados; wrapper retornou exit code 1 após uma mensagem inicial.",
+      "imagineAvailable": false,
+      "fallback": "Processamento local proporcional com ImageMagick após a falha do wrapper."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png a frame-15.png, row-major",
+    "frameDimensions": "312x312",
+    "runtimeFrameDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewContactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/hud-meter-fill-tick-preview-v2.gif",
+    "framesPath": "frames-312-v2/",
+    "runtimeFramesPath": "frames-runtime-256-v2/"
+  },
+  "validation": {
+    "result": "PASS",
+    "report": "frames=16 empty=0 edgeHits=0 badDims=0 sourceSheet=1248x1248 runtimeSheet=1024x1024 contactSheet=1024x1024 gifFrames=16 timingCentiseconds=6,...,6",
+    "alpha": "Todos os 16 frames possuem alpha útil; nenhum pixel alpha toca as quatro bordas internas.",
+    "visualInspection": "Contact sheet inspecionado; segmentos vazios -> preenchimento sequencial -> estado dourado completo -> contorno ocioso é legível.",
+    "divisibility": "A grade nativa 1536x1024 é divisível em células 384x256; os derivados finais usam células 312x312 e atlas divisíveis em 4x4."
+  },
+  "externalResources": [],
+  "license": "Visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo ou pack adotado.",
+  "runtimeIntegration": true,
+  "nextCategory": "VFX de bomba/explosão"
+}

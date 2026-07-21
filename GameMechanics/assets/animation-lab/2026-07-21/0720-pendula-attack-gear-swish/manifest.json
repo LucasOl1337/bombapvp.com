@@ -1,0 +1,91 @@
+{
+  "id": "pendula-attack-gear-swish",
+  "round": "2026-07-21T07:20:00-03:00",
+  "category": "attack alternativo",
+  "status": "Integrado",
+  "integration": true,
+  "runtimeIntegration": true,
+  "runtimeAction": "attack",
+  "runtimeDirection": "south",
+  "runtimePaths": ["Champions/pendula/assets/animations/attack-south-0.png", "...attack-south-15.png"],
+  "integrationBackup": "GameMechanics/assets/animation-lab/2026-07-21/_integration-backup/pendula/attack/",
+  "champion": {
+    "slug": "pendula",
+    "name": "Pendula",
+    "skillId": "pendula-command-shockwave",
+    "sourceReferences": [
+      "Champions/pendula/assets/animations/attack-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing alternate attack for Pendula, 16 ordered frames showing a wind-up, bronze gear sweep and contained teal-white slash arc. Preserve the existing character design, keep the character and effects inside the cell with safe padding, use a cyan chroma-key background, do not include a bomb or any explosive object, and do not integrate into runtime.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "cyan (#02fbfd)",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill --edge-contract 1",
+    "productionVersion": "v2 atlas/preview rebuilt from current discrete frames",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; neutral, wind-up, gear sweep, slash arc, recovery and loop",
+    "timingMs": 90,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512-v2/frame-{00..15}.png",
+      "frames256": "frames-256-v2/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4-v2.png",
+      "atlas256": "spritesheet-256-4x4-v2.png",
+      "contactSheet": "preview-v2/contact-sheet.png",
+      "preview": "preview-v2/preview.gif",
+      "order": "preview-v2/frame-order.txt",
+      "priorWip": "frames-512/, frames-256/, spritesheet-512-4x4.png, spritesheet-256-4x4.png, preview/"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": false,
+    "minimumContentMarginPx": {
+      "512": 21,
+      "256": 10
+    },
+    "atlasCellsExactMatchFrames": true,
+    "cyanSpill": "no visible cyan-key spill or halo in contact sheet/preview",
+    "attackSafety": "no bomb or explosive object appears in any frame",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "previewFrames": 16,
+    "previewTimingMs": 90
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "INCONCLUSIVE (exit 1)",
+    "filesChanged": [
+      "spritesheet-512-4x4.png",
+      "spritesheet-256-4x4.png",
+      "_audit_temp.py",
+      "_fix_and_verify.py"
+    ],
+    "summary": "Worker audited the candidate and attempted atlas repair, then exited with code 1 before a final verdict. The original atlases were preserved as WIP; a separate v2 atlas/preview was rebuilt locally from the current discrete frames and independently validated."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab with integrated image_gen and internal Champion reference; no external pack or download.",
+  "license": "Internal project source; candidate only; not approved for final Champion distribution.",
+  "nextCategory": "death alternativo"
+}

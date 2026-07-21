@@ -1,0 +1,70 @@
+{
+  "id": "powerup-prism-ascension",
+  "round": "2026-07-21T06:02:50-03:00",
+  "category": "power-up",
+  "status": "Candidato",
+  "concept": "Fragmento prismático ciano-violeta que reúne motas douradas, sobe por uma coluna triangular, floresce como uma coroa angular e pulsa antes de recompor o fragmento.",
+  "rationale": "Escolhido para adicionar um power-up de ascensão prismática, distinto de flame, speed, shield, charge orb, portal rift, regen pulse e chrono tesseract.",
+  "prompt": "Create a high-resolution 2D game VFX sprite-sheet source for a competitive bomb-arena game. Use a perfectly flat solid #00ff00 chroma-key background, no shadows, no floor, no text, no watermark, no grid lines. Exactly 16 distinct poses in a clean 4x4 grid, row-major, with generous padding and no overlap. Effect: power-up prism ascension: a small faceted cyan-violet prism shard hovers, gathers three orbiting gold motes, rises through a compact triangular lift beam, unfolds into a bright angular prism crown, pulses once with a clean white core and violet/cyan rays, then contracts back into a hovering shard with a few fading motes. Keep the effect centered in every cell, crisp readable silhouette, transparent-ready flat shapes, polished stylized competitive game VFX. Palette electric cyan, deep violet, royal blue, warm gold and white. Sequence pre-charge -> mote orbit -> lift -> prism unfold -> peak pulse -> settle. Avoid flames, shield bubbles, portals, rings, tesseracts, orbs, speed trails, characters, letters, UI, and any chroma-key green inside the effect.",
+  "source": {
+    "tool": "image_gen integrado",
+    "generatedFile": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "grid": "4x4",
+    "frameOrder": "row-major, frame-00 a frame-15",
+    "background": "#00ff00 chroma-key plano",
+    "alphaDerivation": "remove_chroma_key.py com auto-key border, soft-matte, despill e edge-contract 1",
+    "sourceFiles": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "note": "source-upscaled-2048.png é derivado proporcional, não uma captura nativa 2048px."
+  },
+  "pipeline": {
+    "tool": "ImageMagick 7.1.2-Q16-HDRI",
+    "frameExtraction": "Célula 312x312; crop interno 232x232 com margem de 40px; resize 240px; extent transparente 312x312.",
+    "runtimeDerivation": "Cada frame 312x312 reduzido para 256x256.",
+    "grok": {
+      "wrapper": "C:\\Users\\user\\.agents\\skills\\grok-worker\\scripts\\Invoke-GrokWorker.ps1",
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0602-powerup-prism-ascension",
+      "request": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas; sem tocar em outros paths.",
+      "result": "Executado no escopo; não produziu arquivos nem alterou outros paths. Pipeline local concluiu a extração e validação.",
+      "imagineAvailable": false
+    },
+    "fallback": "Image_gen integrado + remove_chroma_key.py + ImageMagick local; Grok Imagine não foi alegado como usado."
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "row-major",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timing": "60ms por frame",
+    "durationMs": 960,
+    "loop": true,
+    "frames": "frames-312-v2/frame-00.png ... frame-15.png",
+    "runtimeFrames": "frames-runtime-256-v2/frame-00.png ... frame-15.png",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/powerup-prism-ascension-preview-v2.gif"
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "emptyFrames": 0,
+    "edgeHits": 0,
+    "badFrameDimensions": 0,
+    "sourceSpritesheetDimensions": "1248x1248",
+    "runtimeSpritesheetDimensions": "1024x1024",
+    "contactSheetDimensions": "1024x1024",
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "visualInspection": "Contact sheet inspecionado; progressão de fragmento, subida, coroa e pulso é legível e sem pixel alpha tocando a borda interna.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Recurso visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo adotado.",
+  "nextCategory": "feedback de arena"
+}

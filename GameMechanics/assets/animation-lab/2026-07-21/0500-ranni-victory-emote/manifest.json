@@ -1,0 +1,92 @@
+{
+  "id": "ranni-victory-emote",
+  "round": "2026-07-21T05:00:00-03:00",
+  "category": "vitória/derrota",
+  "status": "Candidato",
+  "champion": {
+    "slug": "ranni",
+    "character": "Ranni",
+    "skillId": "ranni-ice-blink"
+  },
+  "concept": "Emote de vitória: Ranni ergue o cajado, convoca uma constelação de estrelas azul-gelo, faz um floreio de capa e retorna à postura calma.",
+  "prompt": "Use case: stylized-concept. Asset type: non-integrated animation-lab candidate for an existing Bomba PvP Champion. Create a clean 4 by 4 sprite-animation source sheet with exactly 16 distinct sequential frames for Ranni performing a victory emote: begin in a calm stance with staff down, lift the staff, raise one arm, summon a small constellation of pale ice-blue stars, make a graceful two-step celebratory flourish with cape and hat, hold a clear victory pose, then settle back to calm. Preserve the tiny hooded mage silhouette, tall pointed blue hat, layered navy cloak and armor, skull-topped staff and pale blue highlights. Keep every character, staff, cape edge and star mote strictly inside an inset rectangle of each 312x312 cell, with generous magenta gutters and no cross-cell bleed. Use a perfectly flat #ff00ff chroma-key background, no text, watermark, UI, bomb, extra character, smoke or flames.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "image_gen integrated in this thread",
+    "references": [
+      "Champions/ranni/assets/portrait.png",
+      "Champions/ranni/assets/animations/cast-south-0.png"
+    ]
+  },
+  "source": {
+    "file": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "normalizedGrid": "source-grid-1248.png",
+    "grid": "4x4",
+    "cellDimensions": "312x312",
+    "frameCount": 16,
+    "order": "row-major, frame-00.png through frame-15.png"
+  },
+  "alpha": {
+    "sourceWithChromaRemoved": "source-chromakey-removed.png",
+    "keyColor": "#fb03f9 sampled from generated border",
+    "method": "remove_chroma_key.py with auto-key border, soft matte, despill",
+    "frameFormat": "RGBA PNG",
+    "internalEdgeAlphaHits": 0
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": [
+      "calm", "staff-lift", "arm-rise", "first-spark", "star-cast", "constellation-1", "constellation-2", "constellation-hold",
+      "flourish-1", "flourish-2", "flourish-3", "cape-sweep", "victory-hold", "victory-arm", "settle", "calm-return"
+    ],
+    "timingMsPerFrame": 100,
+    "durationMs": 1600,
+    "loop": true,
+    "frames512": "frames-512/frame-00.png through frame-15.png",
+    "frames256": "frames-256/frame-00.png through frame-15.png",
+    "sourceSpritesheet": "spritesheet-512-4x4.png",
+    "runtimeSizedSpritesheet": "spritesheet-256-4x4.png",
+    "previewContactSheet": "preview/contact-sheet.png",
+    "previewGif": "preview/preview.gif"
+  },
+  "dimensions": {
+    "source": "1254x1254",
+    "normalizedSource": "1248x1248",
+    "sourceAtlas": "2048x2048",
+    "runtimeAtlas": "1024x1024",
+    "frame512": "512x512",
+    "frame256": "256x256",
+    "contactSheet": "1024x1216"
+  },
+  "validation": {
+    "divisibleGrid": true,
+    "nativeSourceDivisibleBy4": false,
+    "nativeSourceNote": "1254x1254 preserved as generated; normalized 1248x1248 is used for exact 312x312 cells.",
+    "nonEmptyFrames": 16,
+    "emptyFrames": 0,
+    "internalEdgeAlphaHits": 0,
+    "previewFrames": 16,
+    "previewTimingMs": 100,
+    "contactSheetInspected": true,
+    "previewInspected": true,
+    "runtimeIntegration": false
+  },
+  "pipeline": {
+    "local": ["remove_chroma_key.py", "Pillow"],
+    "grok": {
+      "wrapper": "Invoke-GrokWorker.ps1",
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0500-ranni-victory-emote",
+      "requestedTask": "Organizar/extrair frames, spritesheets, contact sheet, preview e validar dimensões, alpha, ordem e seams.",
+      "result": "PASS; nenhum asset alterado, validação local do worker confirmou 16 frames, dimensões, alpha, atlases, contact sheet e GIF.",
+      "grokImagine": "não utilizado; disponibilidade não testada porque a organização/validação não exigiu nova geração"
+    }
+  },
+  "externalResources": [],
+  "origin": "Arte original gerada nesta thread pelo image_gen integrado, usando apenas referências locais do Champion.",
+  "license": "Origem interna do projeto; nenhum recurso externo ou pack adotado.",
+  "integration": false,
+  "nextCategory": "emote"
+}

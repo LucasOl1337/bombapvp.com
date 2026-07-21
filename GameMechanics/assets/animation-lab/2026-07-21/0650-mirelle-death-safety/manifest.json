@@ -1,0 +1,88 @@
+{
+  "id": "mirelle-death-safety",
+  "round": "2026-07-21T06:50:00-03:00",
+  "category": "death",
+  "status": "Integrado",
+  "integration": true,
+  "runtimeIntegration": true,
+  "runtimeAction": "death",
+  "runtimeDirection": "south",
+  "runtimePaths": ["Champions/mirelle/assets/animations/death-south-0.png", "...death-south-15.png"],
+  "integrationBackup": "GameMechanics/assets/animation-lab/2026-07-21/_integration-backup/mirelle/death/",
+  "champion": {
+    "slug": "mirelle",
+    "name": "Mirelle",
+    "skillId": "mirelle-water-orb",
+    "sourceReferences": [
+      "Champions/mirelle/assets/portrait.png",
+      "Champions/mirelle/assets/animations/death-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing death sequence for Mirelle, 16 ordered poses from floating fall through aqua spirit shimmer, water petals, orb dimming and return. Keep all content inside the center 60% of each cell with 20% padding, magenta chroma-key background, no bomb and no runtime integration.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "magenta",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --despill --edge-contract 1",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; float, sway, lose balance, kneel, lie down, spirit rise/fade, water petals and return",
+    "timingMs": 110,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512/frame-{00..15}.png",
+      "frames256": "frames-256/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4.png",
+      "atlas256": "spritesheet-256-4x4.png",
+      "contactSheet": "preview/contact-sheet.png",
+      "preview": "preview/preview.gif",
+      "order": "preview/frame-order.txt"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": false,
+    "minimumContentMarginPx": {
+      "512": 16,
+      "256": 7
+    },
+    "atlasCellsExactMatchFrames": true,
+    "magentaSpill": "no visible halo; Grok noted only near-invisible low-alpha fringe",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "previewFrames": 16,
+    "previewTimingMs": 110
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "INCONCLUSIVE (exit 1)",
+    "filesChanged": [
+      "_audit_check.py",
+      "_audit_gif.py",
+      "_audit_mag_sample.py"
+    ],
+    "summary": "Worker inspected dimensions, borders, GIF and magenta samples but exited before a final verdict; production files remained unchanged."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab; no external pack or downloaded asset.",
+  "license": "Internal project source; candidate only; not approved for final Champion distribution.",
+  "nextCategory": "emote"
+}

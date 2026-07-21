@@ -1,0 +1,16 @@
+00=stand
+01=stagger
+02=knee-drop
+03=brace
+04=fall-side
+05=prone
+06=spirit-rise
+07=spirit-fade
+08=kneel-recover
+09=kneel-brace
+10=push-up
+11=rise
+12=half-stand
+13=stand-recover
+14=idle
+15=idle-loop

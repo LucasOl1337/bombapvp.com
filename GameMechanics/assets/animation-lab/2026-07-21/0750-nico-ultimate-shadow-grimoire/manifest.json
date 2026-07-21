@@ -1,0 +1,88 @@
+{
+  "id": "nico-ultimate-shadow-grimoire",
+  "round": "2026-07-21T07:50:00-03:00",
+  "category": "ultimate alternativo",
+  "status": "Integrado",
+  "integration": true,
+  "runtimeIntegration": true,
+  "runtimeAction": "ultimate",
+  "runtimeDirection": "south",
+  "runtimePaths": ["Champions/nico/assets/animations/ultimate-south-0.png", "...ultimate-south-15.png"],
+  "integrationBackup": "GameMechanics/assets/animation-lab/2026-07-21/_integration-backup/nico/ultimate/",
+  "champion": {
+    "slug": "nico",
+    "name": "Nico",
+    "skillId": "nico-shadow-grimoire",
+    "sourceReferences": [
+      "Champions/nico/assets/portrait.png",
+      "Champions/nico/assets/animations/attack-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing alternate ultimate for Nico, 16 ordered frames with stance, dark violet sigil, orbiting grimoire pages and ink ribbons, contained violet beam flare, dissipating embers and recovery. Match the small black-clad masked spellcaster, use cyan chroma key with safe padding, no bomb, no explosive, no gore, no extra characters and no runtime integration.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "cyan (#02fbfd)",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill --edge-contract 1",
+    "productionVersion": "v2 frames/atlases/preview with 2px/1px edge safety",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; stance, sigil, grimoire orbit, beam flare, dissipation and recovery",
+    "timingMs": 100,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512-v2/frame-{00..15}.png",
+      "frames256": "frames-256-v2/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4-v2.png",
+      "atlas256": "spritesheet-256-4x4-v2.png",
+      "contactSheet": "preview-v2/contact-sheet.png",
+      "preview": "preview-v2/preview.gif",
+      "order": "preview-v2/frame-order.txt",
+      "priorWip": "frames-512/, frames-256/, spritesheet-512-4x4.png, spritesheet-256-4x4.png, preview/"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": false,
+    "minimumContentMarginPx": {
+      "512": 2,
+      "256": 1
+    },
+    "atlasCellsExactMatchFrames": true,
+    "cyanSpill": "no visible cyan-key spill or halo in inspected contact sheet",
+    "ultimateCoherence": "south-facing shadow grimoire sequence reads from stance through violet beam flare to recovery",
+    "attackSafety": "no bomb or explosive object appears",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "previewFrames": 16,
+    "previewTimingMs": 100
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "INCONCLUSIVE (exit 1)",
+    "filesChanged": [],
+    "summary": "Worker ran a scoped audit and reported structural checks were underway, then exited with code 1 before the final verdict. No production files or audit artifacts were left by the worker; local validation remains the basis for this candidate status."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab with integrated image_gen and internal Nico reference; no external pack or download.",
+  "license": "Internal project source; candidate only; not approved for final Champion distribution.",
+  "nextCategory": "emote alternativo"
+}

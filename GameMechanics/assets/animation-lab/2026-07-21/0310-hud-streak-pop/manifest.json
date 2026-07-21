@@ -1,0 +1,64 @@
+{
+  "id": "hud-streak-pop",
+  "round": "2026-07-21T03:10:00-03:00",
+  "category": "feedback-hud",
+  "status": "Candidato",
+  "concept": "Três marcas ciano/âmbar orbitam um diamante branco, abrem em pop estrelado e retornam a um agrupamento compacto, sem texto ou número.",
+  "selectionRationale": "A rodada alterna para animação curta de HUD e escolhe um sinal de streak reutilizável, visualmente distinto do retículo de confirmação e do capture-lock já existentes.",
+  "source": {
+    "tool": "image_gen integrado desta thread",
+    "prompt": "Pixel-art HUD streak/combo sprite sheet with three small cyan-and-amber chevrons orbiting a bright central diamond, spreading into a brief starburst then snapping back to a compact cluster, coherent 4x4 storyboard, dark navy tile interiors with vivid flat magenta chroma-key gutters, no text, numerals, panel or character.",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 storyboard, row-major",
+    "files": [
+      "source-generated-grid.png",
+      "source-grid-1248.png",
+      "source-upscaled-2048.png"
+    ],
+    "upscaleNote": "source-upscaled-2048.png é derivado redimensionado; a fonte nativa entregue pelo image_gen tem 1254x1254."
+  },
+  "pipeline": {
+    "tools": [
+      "ImageMagick 7.1.2-Q16-HDRI",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0310-hud-streak-pop",
+      "requestedTask": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas sem tocar em outros paths.",
+      "status": "attempted-no-files",
+      "timeoutSeconds": 25,
+      "result": "O wrapper retornou exit code 1 após a mensagem inicial; nenhum arquivo foi criado pelo Grok. Grok Imagine não estava disponível no ambiente.",
+      "fallback": "Extração, organização, previews e validação concluídas localmente com ImageMagick."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png até frame-15.png, row-major a partir da grade 4x4",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceAtlas": "spritesheet-source-4x4-312-v2.png",
+    "runtimeAtlas": "spritesheet-runtime-4x4-256-v2.png",
+    "framesDirectory": "frames-312-v2/",
+    "runtimeFramesDirectory": "frames-runtime-256-v2/",
+    "preview": "preview/hud-streak-pop-preview-v2.gif"
+  },
+  "validation": {
+    "sourceAtlasDimensions": "1248x1248",
+    "runtimeAtlasDimensions": "1024x1024",
+    "emptyFrames": 0,
+    "edgeAlphaHits": 0,
+    "badFrameDimensions": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "visualInspection": "Contact sheet inspecionado; marcas orbitam, abrem no pop central e retornam ao agrupamento inicial de forma legível.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Conteúdo visual gerado nesta thread; nenhum recurso externo ou pack foi adotado.",
+  "nextCategory": "vfx-bomba/explosão"
+}

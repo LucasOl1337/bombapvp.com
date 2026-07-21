@@ -78,6 +78,29 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toMatch(/hudFlameIconUrl|icon-flame-v1/);
   });
 
+  it("keeps champion accent channels compatible with CSS slash-alpha colors", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    const accentBlock = main.match(
+      /const ACCENT_RGB[\s\S]*?Object\.freeze\(\{([\s\S]*?)\}\);/,
+    );
+
+    expect(accentBlock, "ACCENT_RGB declaration not found").not.toBeNull();
+    const accentSource = accentBlock?.[1] ?? "";
+    const accents = Object.fromEntries(
+      [...accentSource.matchAll(/^\s*(blue|gold|green|red|orange):\s*"([^"]+)"/gm)].map(
+        ([, name, channels]) => [name, channels],
+      ),
+    );
+
+    expect(Object.keys(accents).sort()).toEqual(["blue", "gold", "green", "orange", "red"]);
+    for (const [name, channels] of Object.entries(accents)) {
+      expect(channels, `${name} must use space-separated RGB channels`).toMatch(
+        /^\d{1,3} \d{1,3} \d{1,3}$/,
+      );
+    }
+    expect(main).toMatch(/`rgb\(\$\{accent\} \/ \$\{/);
+  });
+
   it("default presentation is product arena, not diagnostic dashboard", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
     const styles = readFileSync(BROWSER_STYLES, "utf8");

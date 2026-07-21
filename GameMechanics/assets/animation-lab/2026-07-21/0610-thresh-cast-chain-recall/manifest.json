@@ -1,0 +1,74 @@
+{
+  "id": "thresh-cast-chain-recall",
+  "round": "2026-07-21T06:10:00-03:00",
+  "category": "cast",
+  "status": "Descartado",
+  "integration": false,
+  "champion": {
+    "slug": "thresh",
+    "name": "Thresh",
+    "skillId": "thresh-chain-recall",
+    "sourceReferences": [
+      "Champions/thresh/assets/portrait.png",
+      "Champions/thresh/assets/animations/cast-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing cast sequence for Thresh with 16 ordered poses, a spectral chain-and-lantern recall, compact pixel-art silhouette, magenta chroma-key background and no bomb, leaving generous cell padding.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "magenta",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --despill --edge-contract 1",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; settle, lantern raise, chain gather, spectral ring, pulse, release and return",
+    "timingMs": 110,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512/frame-{00..15}.png",
+      "frames256": "frames-256/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4.png",
+      "atlas256": "spritesheet-256-4x4.png",
+      "contactSheet": "preview/contact-sheet.png",
+      "preview": "preview/preview.gif",
+      "order": "preview/frame-order.txt"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": true,
+    "borderIssue": "Frames 03, 06, 07, 08, 09, 12 and 13 contain alpha above the audit threshold on a cell edge; this propagates to both atlases.",
+    "cyanOrMagentaSpill": "no visible magenta halo; residual magenta-like pixels are sub-visible palette colors",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "decision": "Discarded because border isolation was not engine-safe; no destructive cleanup was applied."
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "FAIL",
+    "filesChanged": [],
+    "summary": "Confirmed structure and timing but found border-touching alpha on seven frames; declined unsafe cleanup."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab; no external pack or downloaded asset.",
+  "license": "Internal project source; discarded candidate; not approved for final Champion distribution.",
+  "nextCategory": "cast com margem interna segura"
+}

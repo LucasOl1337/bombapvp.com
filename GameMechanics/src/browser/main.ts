@@ -47,6 +47,14 @@ import {
   type ChampPresentation,
   type Facing,
 } from "./champion-packs.ts";
+import {
+  ANIMATION_LAB_PACKS,
+  getAnimationLabPack,
+  nextAnimationLabPack,
+  resetAnimationLabRotation,
+  type AnimationLabCategory,
+  type AnimationLabPackId,
+} from "./animation-lab-packs.ts";
 
 import { createGameMechanics } from "../game-mechanics.ts";
 import { createLocalDuel1v1MatchConfig, createMatchConfig } from "../match-config.ts";
@@ -161,11 +169,11 @@ const HOOK_PULL_TOTAL_MS = HOOK_PULL_SNARE_MS + HOOK_PULL_DRAG_MS + HOOK_PULL_RE
  * Tuned to pop on light stone tiles (product arena) without washing the sprite.
  */
 const ACCENT_RGB: Readonly<Record<ChampAccent, string>> = Object.freeze({
-  blue: "56, 217, 245",
-  gold: "232, 188, 72",
-  green: "57, 255, 136",
-  red: "255, 96, 88",
-  orange: "255, 140, 48",
+  blue: "56 217 245",
+  gold: "232 188 72",
+  green: "57 255 136",
+  red: "255 96 88",
+  orange: "255 140 48",
 });
 
 function accentRgb(accent: ChampAccent): string {
@@ -187,6 +195,12 @@ type PresentationFx = {
   label: string;
   startMs: number;
 };
+
+type AnimationLabFx = Readonly<{
+  packId: AnimationLabPackId;
+  anchor: { tileX: number; tileY: number } | "hud";
+  startMs: number;
+}>;
 
 type CrateBreakFx = {
   tile: TileCoord;
@@ -580,11 +594,20 @@ function isDevQueryEnabled(): boolean {
   }
 }
 
+function isAnimationLabDemoEnabled(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("animationLab") === "1";
+  } catch {
+    return false;
+  }
+}
+
 const root = document.querySelector<HTMLElement>("#game-mechanics-root");
 if (!root) throw new Error("GameMechanics root was not found.");
 
 const isEnglish = window.location.hostname.replace(/^www\./, "") === "bombpvp.com";
 const copy = isEnglish ? EN_COPY : PT_COPY;
+const animationLabDemoEnabled = isAnimationLabDemoEnabled();
 document.documentElement.lang = isEnglish ? "en" : "pt-BR";
 document.title = isEnglish ? "Bomba PvP · Arena" : "Bomba PvP · Arena";
 root.removeAttribute("aria-live");
@@ -597,6 +620,9 @@ let trimProbeContext: CanvasRenderingContext2D | null = null;
 const pressedMovementCodes = new Set<string>();
 const eventMessages: string[] = [copy.ready];
 const presentationFx: PresentationFx[] = [];
+const animationLabFx: AnimationLabFx[] = [];
+let animationLabDemoIndex = 0;
+let animationLabDemoNextMs = 0;
 const crateBreakFx: CrateBreakFx[] = [];
 const chainSparkFx: ChainSparkFx[] = [];
 const blinkTrailFx: BlinkTrailFx[] = [];
@@ -669,6 +695,7 @@ function preloadAll(): void {
     ...CRATE_BREAK_URLS,
     hudBombIconUrl,
     hudFlameIconUrl,
+    ...ANIMATION_LAB_PACKS.map((pack) => pack.atlasUrl),
   ]);
   for (const url of collectChampionAssetUrls()) urls.add(url);
   for (const url of urls) loadImage(url);
@@ -1327,8 +1354,22 @@ function tileKeyOf(tile: TileCoord): string {
   return `${tile.x},${tile.y}`;
 }
 
+function queueAnimationLabFx(
+  category: AnimationLabCategory,
+  anchor: AnimationLabFx["anchor"],
+  startMs: number,
+): void {
+  const pack = nextAnimationLabPack(category);
+  if (!pack) return;
+  animationLabFx.push({ packId: pack.id, anchor, startMs });
+}
+
 function clearCombatPresentation(): void {
   presentationFx.length = 0;
+  animationLabFx.length = 0;
+  animationLabDemoIndex = 0;
+  animationLabDemoNextMs = 0;
+  resetAnimationLabRotation();
   crateBreakFx.length = 0;
   chainSparkFx.length = 0;
   blinkTrailFx.length = 0;
@@ -1371,6 +1412,8 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
       });
       powerUpRevealFx.delete(tileKeyOf(event.at));
       pulseHudStat(event.competitorId, event.powerUpType);
+      queueAnimationLabFx("power-up", { tileX: event.at.x, tileY: event.at.y }, nowMs);
+      queueAnimationLabFx("hud", "hud", nowMs);
     } else if (event.type === "bomb-placed") {
       bombPlaceFx.set(event.bombId, nowMs);
     } else if (event.type === "bomb-exploded") {
@@ -1402,12 +1445,18 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
           flameTiles: event.flameTiles,
           startMs: nowMs,
         });
+        queueAnimationLabFx(
+          "bomb",
+          { tileX: originTile.x, tileY: originTile.y },
+          nowMs,
+        );
         if (recentExplosions.length > 8) recentExplosions.splice(0, recentExplosions.length - 8);
       }
       bombPlaceFx.delete(event.bombId);
       bombTilesById.delete(event.bombId);
     } else if (event.type === "crate-destroyed") {
       crateBreakFx.push({ tile: event.at, startMs: nowMs });
+      queueAnimationLabFx("hit", { tileX: event.at.x, tileY: event.at.y }, nowMs);
     } else if (event.type === "competitor-eliminated") {
       const pose = lastCompetitorPose.get(event.competitorId);
       if (pose) {
@@ -1423,6 +1472,7 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
         startMs: nowMs,
         durationMs: Math.max(1, event.fallMs || event.remainingMs),
       });
+      queueAnimationLabFx("arena", { tileX: event.tile.x, tileY: event.tile.y }, nowMs);
     } else if (event.type === "sudden-death-started") {
       suddenDeathBannerUntilMs = nowMs + SUDDEN_DEATH_FLASH_MS;
     } else if (event.type === "round-started" || event.type === "restarted") {
@@ -1435,6 +1485,7 @@ function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void
   if (chainSparkFx.length > 12) chainSparkFx.splice(0, chainSparkFx.length - 12);
   if (blinkTrailFx.length > 8) blinkTrailFx.splice(0, blinkTrailFx.length - 8);
   if (pressureWarnFx.length > 8) pressureWarnFx.splice(0, pressureWarnFx.length - 8);
+  if (animationLabFx.length > 24) animationLabFx.splice(0, animationLabFx.length - 24);
   if (hookProjectileFx.length > 4) hookProjectileFx.splice(0, hookProjectileFx.length - 4);
 }
 
@@ -1538,6 +1589,64 @@ function screenShakeOffset(animMs: number): { x: number; y: number } {
     x: Math.sin(animMs * 0.073) * amplitude,
     y: Math.cos(animMs * 0.091) * amplitude,
   };
+}
+
+function drawAnimationLabFx(animMs: number): void {
+  for (let i = animationLabFx.length - 1; i >= 0; i -= 1) {
+    const fx = animationLabFx[i]!;
+    const pack = getAnimationLabPack(fx.packId);
+    const age = animMs - fx.startMs;
+    if (age < 0 || age >= pack.durationMs) {
+      animationLabFx.splice(i, 1);
+      continue;
+    }
+    const frameIndex = Math.min(pack.frameCount - 1, Math.floor(age / pack.frameMs));
+    const sourceX = (frameIndex % pack.columns) * pack.frameSize;
+    const sourceY = Math.floor(frameIndex / pack.columns) * pack.frameSize;
+    const image = loadImage(pack.atlasUrl);
+    if (!image.complete || image.naturalWidth <= 0) continue;
+
+    const isHud = fx.anchor === "hud";
+    const size = isHud ? TILE_SIZE * 1.1 : TILE_SIZE * 1.3;
+    const centerX = isHud
+      ? LOGICAL_WIDTH / 2
+      : fx.anchor.tileX * TILE_SIZE + TILE_SIZE / 2;
+    const centerY = isHud
+      ? TILE_SIZE * 0.52
+      : fx.anchor.tileY * TILE_SIZE + TILE_SIZE / 2;
+    const progress = age / pack.durationMs;
+    const alpha = Math.min(1, (age / 80) * 1.5) * Math.min(1, (1 - progress) * 1.8);
+    context.save();
+    context.globalAlpha = alpha;
+    context.globalCompositeOperation = "lighter";
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      pack.frameSize,
+      pack.frameSize,
+      centerX - size / 2,
+      centerY - size / 2,
+      size,
+      size,
+    );
+    context.restore();
+  }
+}
+
+function maybeQueueAnimationLabDemo(animMs: number): void {
+  if (!animationLabDemoEnabled || animMs < animationLabDemoNextMs) return;
+  const pack = ANIMATION_LAB_PACKS[animationLabDemoIndex % ANIMATION_LAB_PACKS.length];
+  if (!pack) return;
+  animationLabDemoIndex += 1;
+  animationLabDemoNextMs = animMs + pack.durationMs + 180;
+  animationLabFx.push({
+    packId: pack.id,
+    anchor: pack.category === "hud"
+      ? "hud"
+      : { tileX: Math.floor(ARENA_WIDTH / 2), tileY: Math.floor(ARENA_HEIGHT / 2) },
+    startMs: animMs,
+  });
 }
 
 function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
@@ -2499,6 +2608,9 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     context.fillText(fx.label, cx, cy - TILE_SIZE * (0.35 + t * 0.55));
     context.restore();
   }
+
+  // Animation-lab VFX stays presentation-only and is painted above world FX.
+  drawAnimationLabFx(animMs);
 
   // End screen-shake translate; vignette stays unshaken to seat the frame.
   context.restore();

@@ -1,0 +1,65 @@
+{
+  "id": "arena-capture-pulse",
+  "round": "2026-07-21T05:05:00-03:00",
+  "category": "feedback de arena",
+  "status": "Candidato",
+  "concept": "Sigilo hexagonal cyan/azul que expande um anel de captura, acende quatro marcadores cardeais e muda para lime no pico de posse antes de retrair.",
+  "selectionRationale": "Escolhido como feedback de arena novo, distinto de retícula de perigo, pulso de controle, beacon de rally e scan de portão já catalogados.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 2D VFX sprite animation for competitive arena capture feedback. Primary request: create a coherent 4x4 animation sheet for an arena capture-field pulse: a compact cyan and electric-blue hexagonal capture sigil appears, a thin luminous ring expands outward, four short directional beacons snap on at the cardinal points, the ring fills with lime accents at peak ownership, then contracts back to the compact sigil. Scene/backdrop: perfectly flat solid #fa02fa chroma-key background, no shadows, gradients, texture, reflections, floor plane, text, watermark or grid lines. Subject: centered sigil and symmetrical ring, generous padding and clear separation from the key color. Style/medium: polished stylized game VFX illustration with controlled antialiasing. Composition/framing: 4x4 grid, 16 distinct ordered poses, row-major timing, centered subject in every cell, no cell overlap. Lighting/mood: competitive, readable and energetic. Color palette: cyan, electric blue, lime and white glints. Constraints: preserve idle -> lock-on -> expanding ring -> capture peak -> release -> idle motion and keep all effects inside each cell; do not use the chroma-key color in the subject.",
+  "source": {
+    "tool": "image_gen.integrated",
+    "nativePath": "C:/Users/user/.codex/generated_images/019f82ed-2008-7fc1-94cc-db09a8663b95/exec-18b93549-3c12-4d93-b702-497da886fe1f.png",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 grid, row-major",
+    "derived": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "resolutionNote": "2048px é derivado upscaled; a fonte nativa do image_gen é 1254px."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen integrado",
+      "remove_chroma_key.py",
+      "ImageMagick 7.1.2",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "alphaProcessing": "remove_chroma_key.py com auto-key na borda, soft matte, despill e edge-contract 1; recorte interno de 40px antes da extração.",
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0505-arena-capture-pulse",
+      "prompt": "Conferir a grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas; não tocar em outros paths, não instalar e não fazer git.",
+      "result": "Tentativa encerrada sem arquivos gerados; wrapper retornou exit code 1 após uma mensagem inicial.",
+      "imagineAvailable": false,
+      "fallback": "Processamento local com ImageMagick após a falha do wrapper."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png a frame-15.png, row-major",
+    "frameDimensions": "312x312",
+    "runtimeFrameDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewContactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/arena-capture-pulse-preview-v2.gif",
+    "framesPath": "frames-312-v2/",
+    "runtimeFramesPath": "frames-runtime-256-v2/"
+  },
+  "validation": {
+    "result": "PASS",
+    "report": "frames=16 empty=0 edgeHits=0 badDims=0 sourceSheet=1248x1248 runtimeSheet=1024x1024 contactSheet=1024x1024 gifFrames=16 timingCentiseconds=6,...,6",
+    "alpha": "Todos os 16 frames possuem alpha útil; nenhum pixel alpha toca as quatro bordas internas.",
+    "visualInspection": "Contact sheet inspecionado; a progressão sigilo compacto -> anel -> pico lime -> retração é legível.",
+    "divisibility": "1248 e 1024 são divisíveis pelas grades 4x4; cada célula não está vazia."
+  },
+  "externalResources": [],
+  "license": "Visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo ou pack adotado.",
+  "runtimeIntegration": true,
+  "nextCategory": "animação curta de HUD"
+}

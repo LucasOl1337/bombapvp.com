@@ -1,0 +1,57 @@
+{
+  "id": "arena-danger-reticle",
+  "round": "2026-07-21T02:15:00-03:00",
+  "category": "feedback-arena",
+  "status": "Candidato",
+  "concept": "Reticulo de perigo no chao: losango e quadrado concentricos em energia ambar-vermelha, com faíscas ciano, pulso forte e desaparecimento.",
+  "origin": {
+    "tool": "image_gen",
+    "nativeSource": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "requestedLayout": "4x4",
+    "upscaledDerivative": "source-upscaled-2048.png",
+    "prompt": "High-resolution 4x4 sprite-sheet storyboard for a top-down pixel-art bomb game VFX only: isolated floor hazard reticle, 16 sequential frames, glowing amber-red diamond and smaller square outline, cyan corner sparks, draw-on pulse flash and fade, flat dark navy background, no arena tiles, no props, no characters, no text, magenta chroma-key border."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen",
+      "ImageMagick 7.1.2-Q16-HDRI"
+    ],
+    "grokWorker": {
+      "mode": "act",
+      "status": "attempted-no-files",
+      "timeoutSeconds": 25,
+      "requestedTask": "Conferir a grade 4x4, extrair frames e validar alpha",
+      "fallback": "Processamento local concluido; Grok nao gravou arquivos nesta rodada"
+    }
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00.png a frame-15.png, esquerda-direita e cima-baixo",
+    "sourceCell": "312x312",
+    "runtimeCell": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "sourceFrames": "frames-312-v2/",
+    "runtimeFrames": "frames-runtime-256-v2/",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewGif": "preview/arena-danger-reticle-preview-v2.gif"
+  },
+  "validation": {
+    "sourceSheetDimensions": "1248x1248",
+    "runtimeSheetDimensions": "1024x1024",
+    "emptyFrames": 0,
+    "internalCellEdgeAlphaHits": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "visualInspection": "preview/contact-sheet-v2.png",
+    "visualNote": "A variante final usa apenas o reticulo isolado; uma primeira geração com arena inteira foi rejeitada e nao foi copiada para o repositorio.",
+    "runtimeIntegration": true
+  },
+  "externalResources": {
+    "adopted": [],
+    "reason": "Nenhum pack externo foi necessario; nao baixar material generico sem encaixe e licenca conferida."
+  },
+  "nextCategory": "hit/impacto com fragmentos ou feedback de colisao"
+}

@@ -1,0 +1,65 @@
+{
+  "id": "powerup-regen-pulse",
+  "round": "2026-07-21T04:55:00-03:00",
+  "category": "power-up",
+  "status": "Candidato",
+  "concept": "Cristal compacto cyan/lima que abre arcos em forma de folhas e três pétalas luminosas para comunicar regeneração.",
+  "selectionRationale": "Escolhido como um power-up novo e concreto, distinto dos efeitos anteriores de chama, velocidade, escudo, orb de carga e portal de fenda.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 2D VFX sprite animation for Bomba PvP. Primary request: create a coherent 4x4 animation sheet for a regeneration power-up pulse: a compact faceted cyan and lime crystal with leaf-like energy arcs, three luminous petals/halo, small cyan and lime sparkles, a white glint, expansion from an idle crystal into a bright healing pulse, then a clean retract to idle. Scene/backdrop: perfectly flat solid #fa02fa chroma-key background, no shadows, gradients, texture, reflections, floor plane, text, watermark or extra objects. Subject: centered crystal and symmetrical energy pulse, generous padding and clear separation from the key color. Style/medium: crisp high-resolution game VFX illustration with pixel-art-inspired faceting and controlled antialiasing. Composition/framing: 4x4 grid, 16 distinct ordered poses, row-major timing, centered subject in every cell, no grid lines. Lighting/mood: energetic, restorative, readable in a competitive arena. Color palette: cyan, electric blue, lime green, white glint. Constraints: preserve a coherent start-to-peak-to-retract motion and keep all effects inside each cell; do not use the chroma-key color in the subject.",
+  "source": {
+    "tool": "image_gen.integrated",
+    "nativePath": "C:/Users/user/.codex/generated_images/019f82ed-2008-7fc1-94cc-db09a8663b95/exec-9e4698e7-c4ab-482a-9ea4-a9f20f6a48db.png",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 grid, row-major",
+    "derived": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "resolutionNote": "2048px é derivado upscaled; a fonte nativa do image_gen é 1254px."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen integrado",
+      "remove_chroma_key.py",
+      "ImageMagick 7.1.2",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "alphaProcessing": "remove_chroma_key.py com auto-key na borda, soft matte, despill e edge-contract 1; recorte interno adicional de 40px antes da extração.",
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0455-powerup-regen-pulse",
+      "prompt": "Conferir a grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas; não tocar em outros paths, não instalar e não fazer git.",
+      "result": "Tentativa encerrada sem arquivos gerados; wrapper retornou exit code 1 após uma mensagem inicial.",
+      "imagineAvailable": false,
+      "fallback": "Processamento local com ImageMagick após a falha do wrapper."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png a frame-15.png, row-major",
+    "frameDimensions": "312x312",
+    "runtimeFrameDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewContactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/powerup-regen-pulse-preview-v2.gif",
+    "framesPath": "frames-312-v2/",
+    "runtimeFramesPath": "frames-runtime-256-v2/"
+  },
+  "validation": {
+    "result": "PASS",
+    "report": "frames=16 empty=0 edgeHits=0 badDims=0 sourceSheet=1248x1248 runtimeSheet=1024x1024 contactSheet=1024x1024 gifFrames=16 timingCentiseconds=6,...,6",
+    "alpha": "Todos os 16 frames possuem alpha útil; nenhum pixel alpha toca as quatro bordas internas.",
+    "visualInspection": "Contact sheet inspecionado; a progressão compacto -> abertura -> pulso máximo -> retração é legível.",
+    "divisibility": "1248 e 1024 são divisíveis pelas grades 4x4; cada célula não está vazia."
+  },
+  "externalResources": [],
+  "license": "Visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo ou pack adotado.",
+  "runtimeIntegration": true,
+  "nextCategory": "feedback de arena"
+}

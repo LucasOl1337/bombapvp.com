@@ -1,0 +1,70 @@
+{
+  "id": "hit-ricochet-shards",
+  "round": "2026-07-21T05:55:00-03:00",
+  "category": "hit/impacto",
+  "status": "Candidato",
+  "concept": "Impacto cinético com um diamante azul que comprime, lança quatro estilhaços ciano e âmbar em diagonais, atinge um clarão central e recompõe o núcleo.",
+  "rationale": "Escolhido para ampliar a biblioteca de hits com ricochete direcional; não repete slash, parry clash, shield break, ground punch ou recoil burst.",
+  "prompt": "Create a high-resolution 2D game VFX sprite-sheet source for a competitive bomb-arena game. Use a perfectly flat solid #00ff00 chroma-key background, no shadows/gradients/texture/reflections/floor/text/watermark/grid lines. Exactly 16 distinct poses in clean 4x4 grid, row-major, generous padding/no overlap. Effect: kinetic hit ricochet shards: compact bright amber impact pin / blue faceted diamond appears, compresses, emits four cyan and gold shard fragments that ricochet diagonally along short angular paths, a contained white central flash peaks, fragments reverse and fade as the central diamond returns. Keep centered in every cell, crisp readable silhouette, no circular ring. Style polished stylized game VFX with hard-edged shards/controlled antialiasing. Palette cyan/electric blue/amber/white with minimal red accent. Sequence pre-hit -> compression -> shard launch -> peak -> ricochet/fade -> compact settle. Avoid slash, shield break, parry weapon, ground dust, radial petal explosion, characters, letters, chroma key color.",
+  "source": {
+    "tool": "image_gen integrado",
+    "generatedFile": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "grid": "4x4",
+    "frameOrder": "row-major, frame-00 a frame-15",
+    "background": "#00ff00 chroma-key plano",
+    "alphaDerivation": "remove_chroma_key.py com auto-key border, soft-matte, despill e edge-contract 1",
+    "sourceFiles": [
+      "source-generated-grid.png",
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "note": "source-upscaled-2048.png é derivado proporcional, não uma captura nativa 2048px."
+  },
+  "pipeline": {
+    "tool": "ImageMagick 7.1.2-Q16-HDRI",
+    "frameExtraction": "Célula 312x312; crop interno 232x232 com margem de 40px; resize 240px; extent transparente 312x312.",
+    "runtimeDerivation": "Cada frame 312x312 reduzido para 256x256.",
+    "grok": {
+      "wrapper": "C:\\Users\\user\\.agents\\skills\\grok-worker\\scripts\\Invoke-GrokWorker.ps1",
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0555-hit-ricochet-shards",
+      "request": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas; sem tocar em outros paths.",
+      "result": "Executado no escopo; não produziu arquivos nem alterou outros paths. Pipeline local concluiu a extração e validação.",
+      "imagineAvailable": false
+    },
+    "fallback": "Image_gen integrado + remove_chroma_key.py + ImageMagick local; Grok Imagine não foi inventado nem usado."
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "row-major",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timing": "60ms por frame",
+    "durationMs": 960,
+    "loop": true,
+    "frames": "frames-312-v2/frame-00.png ... frame-15.png",
+    "runtimeFrames": "frames-runtime-256-v2/frame-00.png ... frame-15.png",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/hit-ricochet-shards-preview-v2.gif"
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "emptyFrames": 0,
+    "edgeHits": 0,
+    "badFrameDimensions": 0,
+    "sourceSpritesheetDimensions": "1248x1248",
+    "runtimeSpritesheetDimensions": "1024x1024",
+    "contactSheetDimensions": "1024x1024",
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "visualInspection": "Contact sheet inspecionado; poses legíveis, centralizadas e sem pixel alpha tocando a borda interna.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Recurso visual gerado nesta thread pelo image_gen integrado; nenhum recurso externo adotado.",
+  "nextCategory": "power-up"
+}

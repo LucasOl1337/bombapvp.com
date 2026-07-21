@@ -1,0 +1,16 @@
+00: calm
+01: staff-lift
+02: arm-rise
+03: first-spark
+04: star-cast
+05: constellation-1
+06: constellation-2
+07: constellation-hold
+08: flourish-1
+09: flourish-2
+10: flourish-3
+11: cape-sweep
+12: victory-hold
+13: victory-arm
+14: settle
+15: calm-return

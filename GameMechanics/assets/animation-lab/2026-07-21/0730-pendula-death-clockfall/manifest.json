@@ -1,0 +1,91 @@
+{
+  "id": "pendula-death-clockfall",
+  "round": "2026-07-21T07:30:00-03:00",
+  "category": "death alternativo",
+  "status": "Integrado",
+  "integration": true,
+  "runtimeIntegration": true,
+  "runtimeAction": "death",
+  "runtimeDirection": "south",
+  "champion": {
+    "slug": "pendula",
+    "name": "Pendula",
+    "skillId": "pendula-command-shockwave",
+    "sourceReferences": [
+      "Champions/pendula/assets/portrait.png",
+      "Champions/pendula/assets/animations/attack-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing alternate death for Pendula, 16 ordered frames showing a clockwork girl losing balance, gears wobbling, a soft collapse onto her circular platform, then a final dim still pose. Preserve white hair, cream dress, bronze gears, teal clock orb and readable silhouette; use magenta chroma key, generous padding, no bomb, no explosive, no gore and no runtime integration.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "magenta (#f703f9 detected at border)",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --transparent-threshold 12 --opaque-threshold 220 --despill --edge-contract 1",
+    "productionVersion": "v5 frames/atlases/preview after Grok residual cleanup; runtime derivative 124px",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; sway, gear wobble, collapse, platform settle and dim final",
+    "timingMs": 120,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512-v5/frame-{00..15}.png",
+      "frames256": "frames-256-v5/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4-v5.png",
+      "atlas256": "spritesheet-256-4x4-v5.png",
+      "contactSheet": "preview-v5/contact-sheet.png",
+      "preview": "preview-v5/preview.gif",
+      "order": "preview-v5/frame-order.txt",
+      "runtime": "Champions/pendula/assets/animations/death-south-{0..15}.png",
+      "priorWip": "frames-512/, frames-256/, frames-512-v2..v4/, frames-256-v2..v4/, spritesheet-*-v1..v4.png, preview-v1..v4/"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": false,
+    "minimumContentMarginPx": {
+      "512": 6,
+      "256": 3
+    },
+    "atlasCellsExactMatchFrames": true,
+    "magentaSpill": "no visible spill; Grok removed one residual semi-transparent magenta pixel from frame-12 at 512",
+    "deathCoherence": "south-facing sway, collapse, platform settle and dim final are readable",
+    "attackSafety": "not an attack delivery; no bomb or explosive object appears",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "previewFrames": 16,
+    "previewTimingMs": 120
+    ,"runtimeDerivative": "16 x 124x124 RGBA PNGs; direct 256px candidate derivative scaled to runtime cell size"
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "PASS",
+    "filesChanged": [
+      "frames-512-v5/frame-12.png",
+      "spritesheet-512-4x4-v5.png"
+    ],
+    "summary": "Worker validated the v5 package and removed one semi-transparent magenta residual from frame-12, then rebuilt the matching 512 atlas cell. It confirmed frame count/order, dimensions, alpha borders, exact atlases, contact sheet, timing, south-facing death coherence and absence of bombs/explosives."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab with integrated image_gen and internal Pendula reference; no external pack or download.",
+  "license": "Internal project source; candidate only; not approved for final Champion distribution.",
+  "nextCategory": "ultimate alternativo"
+}

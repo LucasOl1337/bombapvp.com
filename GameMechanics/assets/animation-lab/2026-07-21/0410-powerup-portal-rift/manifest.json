@@ -1,0 +1,87 @@
+{
+  "id": "powerup-portal-rift",
+  "round": "2026-07-21T04:10:00-03:00",
+  "category": "power-up",
+  "status": "Candidato",
+  "concept": "Portal de pickup ciano e dourado com diamante central, quatro brackets angulares, abertura oval e flash branco.",
+  "selectionRationale": "Power-up de revelação distinto dos candidatos de chama, velocidade, escudo e orb de carga; a abertura oval comunica uma recompensa especial sem depender de texto ou números.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 2D sprite-sheet source for a Bomba PvP power-up VFX. Primary request: create a coherent 4x4 storyboard grid with 16 sequential frames of a pickup portal rift: a small cyan-and-gold diamond core appears, four angular bracket shards rotate/open around it, a luminous oval rift aperture expands with a white inner flash, then the brackets close and return to the small diamond. Each cell must contain exactly one centered frame with generous padding and identical framing, crisp readable pixel-art power-up silhouette, no text and no UI. Scene/backdrop: perfectly flat solid #ff00ff chroma-key background, no floor, no shadow, no gradient, no texture. Subject: isolated portal-like pickup effect with a diamond core, four bracket shards and a central aperture. Style/medium: crisp high-resolution pixel-art game VFX with limited cyan-blue, amber-gold, white and deep-navy accents, hard readable edges with restrained glow. Composition/framing: square 4x4 grid, row-major temporal order, centered effect in every cell, consistent scale, 16 distinct smoothly progressing frames. Lighting/mood: rare pickup reveal, energetic but clean. Color palette: cyan, amber-gold, white highlight, navy accents; never use magenta in the subject. Materials/textures: luminous angular shards, clean oval energy aperture and compact pixel clusters. Constraints: keep the chroma-key background perfectly uniform; preserve a full transparent-safe margin around every frame; no text, logos, watermark, characters, bomb, flames, shield, speed streaks, smoke, scenery or extra UI. Avoid: duplicate frames, cut-off brackets, circular orb-only design, empty cells, inconsistent framing and nonuniform background.",
+  "source": {
+    "tool": "image_gen integrado desta thread",
+    "sourceFile": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 storyboard, row-major order, 16 cells",
+    "derivedFiles": [
+      "source-chromakey-removed.png",
+      "source-upscaled-2048.png",
+      "source-grid-1248.png"
+    ],
+    "resolutionNote": "A geração entregue pelo image_gen é nativa em 1254x1254; source-upscaled-2048.png é somente um derivado ampliado e não uma fonte nativa 2048px."
+  },
+  "pipeline": {
+    "tools": [
+      "ImageMagick 7.1.2-Q16-HDRI",
+      "remove_chroma_key.py",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "alphaProcessing": "Helper remove_chroma_key.py com auto-key de borda, soft matte, despill e edge-contract 1; depois recorte interno de 40px e extensão transparente centralizada para impedir contato com as bordas.",
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0410-powerup-portal-rift",
+      "requestedTask": "Conferir a grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas.",
+      "status": "attempted-no-files",
+      "result": "Invoke-GrokWorker.ps1 retornou exit code 1 após a mensagem inicial e não criou arquivos.",
+      "timeoutSeconds": 25,
+      "grokImagine": "indisponível no ambiente; não utilizado"
+    },
+    "fallback": "Extração, atlases, contact sheet, GIF e validação concluídos localmente com ImageMagick após a remoção de halo pelo helper."
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png a frame-15.png, row-major",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "framePaths": [
+      "frames-312-v2/frame-00.png",
+      "frames-312-v2/frame-01.png",
+      "frames-312-v2/frame-02.png",
+      "frames-312-v2/frame-03.png",
+      "frames-312-v2/frame-04.png",
+      "frames-312-v2/frame-05.png",
+      "frames-312-v2/frame-06.png",
+      "frames-312-v2/frame-07.png",
+      "frames-312-v2/frame-08.png",
+      "frames-312-v2/frame-09.png",
+      "frames-312-v2/frame-10.png",
+      "frames-312-v2/frame-11.png",
+      "frames-312-v2/frame-12.png",
+      "frames-312-v2/frame-13.png",
+      "frames-312-v2/frame-14.png",
+      "frames-312-v2/frame-15.png"
+    ],
+    "runtimeFramesDirectory": "frames-runtime-256-v2/",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewContactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/powerup-portal-rift-preview-v2.gif"
+  },
+  "validation": {
+    "sourceSpritesheetDimensions": "1248x1248",
+    "runtimeSpritesheetDimensions": "1024x1024",
+    "contactSheetDimensions": "1024x1024",
+    "framesChecked": 16,
+    "emptyFrames": 0,
+    "internalEdgeAlphaHits": 0,
+    "badFrameDimensions": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+    "visualInspection": "Contact sheet inspecionado após a remoção de chroma-key; diamante, brackets, rift oval, flash e fechamento permanecem legíveis sem halo magenta observável.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Visual gerado nesta thread; nenhum recurso externo ou pack adotado.",
+  "nextCategory": "feedback de arena"
+}

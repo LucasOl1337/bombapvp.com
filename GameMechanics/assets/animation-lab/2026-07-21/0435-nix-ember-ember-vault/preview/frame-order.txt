@@ -1,0 +1,16 @@
+00: crouch-gather
+01: low-flare
+02: charge
+03: wings-open
+04: launch
+05: upward-arc-1
+06: upward-arc-2
+07: apex-arc
+08: apex-ring
+09: descend-1
+10: descend-2
+11: falling
+12: brake
+13: impact-land
+14: recover-crouch
+15: stand-ready

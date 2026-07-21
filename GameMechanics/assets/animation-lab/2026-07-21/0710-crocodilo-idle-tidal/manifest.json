@@ -1,0 +1,90 @@
+{
+  "id": "crocodilo-idle-tidal",
+  "round": "2026-07-21T07:10:00-03:00",
+  "category": "idle alternativo",
+  "status": "Integrado",
+  "integration": true,
+  "runtimeIntegration": true,
+  "runtimeAction": "idle",
+  "runtimeDirection": "south",
+  "runtimePaths": ["Champions/crocodilo-arcano/assets/animations/idle-south-0.png", "...idle-south-15.png"],
+  "integrationBackup": "GameMechanics/assets/animation-lab/2026-07-21/_integration-backup/crocodilo-arcano/idle/",
+  "champion": {
+    "slug": "crocodilo-arcano",
+    "name": "Crocodilo Arcano",
+    "skillId": "crocodilo-arcano-spectral-bite",
+    "sourceReferences": [
+      "Champions/crocodilo-arcano/assets/portrait.png",
+      "Champions/crocodilo-arcano/assets/animations/idle-south-0.png"
+    ]
+  },
+  "prompt": "Create a coherent 4x4 raster south-facing alternate idle for Crocodilo Arcano, 16 subtle ordered poses with breathing, visor glint, shoulder shifts, tail twitch and a tiny gold sparkle. Keep the narrow character inside the center 55% with 22% padding, magenta chroma-key background, no bomb and no runtime integration.",
+  "tool": {
+    "name": "image_gen",
+    "mode": "integrated",
+    "source": "source-generated-grid.png",
+    "sourceDimensions": "1254x1254 RGB",
+    "keyColor": "magenta",
+    "alphaProcessing": "remove_chroma_key.py --auto-key border --soft-matte --despill --edge-contract 1",
+    "productionVersion": "256 v2 atlas/preview; 512 base",
+    "groKImagine": "indisponível/não utilizado"
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00..frame-15; neutral, visor glint, breathing, shoulder shifts, tail twitch, sparkle and idle loop",
+    "timingMs": 120,
+    "directions": ["south"],
+    "dimensions": {
+      "sourceGrid": "1248x1248 RGBA, 4x4 cells of 312x312",
+      "frames512": "16 x 512x512 RGBA",
+      "frames256": "16 x 256x256 RGBA",
+      "atlas512": "2048x2048 RGBA, 4x4",
+      "atlas256": "1024x1024 RGBA, 4x4"
+    },
+    "paths": {
+      "source": "source-generated-grid.png",
+      "keyRemoved": "source-chromakey-removed.png",
+      "normalizedGrid": "source-grid-1248.png",
+      "frames512": "frames-512/frame-{00..15}.png",
+      "frames256": "frames-256-v2/frame-{00..15}.png",
+      "atlas512": "spritesheet-512-4x4.png",
+      "atlas256": "spritesheet-256-4x4-v2.png",
+      "contactSheet": "preview-v2/contact-sheet.png",
+      "preview": "preview-v2/preview.gif",
+      "order": "preview-v2/frame-order.txt",
+      "priorWip": "spritesheet-256-4x4.png"
+    }
+  },
+  "validation": {
+    "dimensionsDivisible": true,
+    "nonEmptyFrames": true,
+    "alphaPresent": true,
+    "alphaTouchesBorders": false,
+    "minimumContentMarginPx": {
+      "512": 42,
+      "256": 22
+    },
+    "atlasCellsExactMatchFrames": true,
+    "magentaSpill": "no visible halo; local visual inspection accepted intentional gold sparkle",
+    "idleCoherence": "subtle but readable breathing, visor/tail accents and a single sparkle; accepted locally as an alternate idle candidate",
+    "contactSheetReadable": true,
+    "previewInspected": true,
+    "previewFrames": 16,
+    "previewTimingMs": 120
+  },
+  "grok": {
+    "wrapper": "C:/Users/user/.agents/skills/grok-worker/scripts/Invoke-GrokWorker.ps1",
+    "mode": "act",
+    "scope": "this directory only",
+    "result": "INCONCLUSIVE (exit 1)",
+    "filesChanged": [
+      "spritesheet-256-4x4.png",
+      "_audit_tmp.py"
+    ],
+    "summary": "Worker audited and attempted an atlas rebuild, then exited while debugging; the original 256 atlas was left inconsistent, so a separate v2 atlas/preview was rebuilt locally from unchanged discrete frames."
+  },
+  "externalResources": [],
+  "origin": "Internal candidate generated for the Bomba PvP animation lab; no external pack or downloaded asset.",
+  "license": "Internal project source; candidate only; not approved for final Champion distribution.",
+  "nextCategory": "attack alternate"
+}

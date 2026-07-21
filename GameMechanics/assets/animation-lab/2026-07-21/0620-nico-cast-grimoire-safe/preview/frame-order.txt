@@ -1,0 +1,16 @@
+00=neutral
+01=book-open
+02=glyphs-gather
+03=glyphs-orbit
+04=hand-raise
+05=book-channel
+06=orbit-form
+07=orbit-lock
+08=core-charge
+09=pulse
+10=spell-release
+11=trail-fade
+12=hand-return
+13=glyph-dissipate
+14=book-close
+15=neutral-loop

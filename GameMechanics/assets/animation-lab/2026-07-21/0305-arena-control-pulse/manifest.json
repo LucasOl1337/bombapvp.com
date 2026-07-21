@@ -1,0 +1,64 @@
+{
+  "id": "arena-control-pulse",
+  "round": "2026-07-21T03:05:00-03:00",
+  "category": "feedback-arena",
+  "status": "Candidato",
+  "concept": "Marcador de controle territorial visto de cima: losango ciano com quatro beacons, anéis concêntricos e faísca central âmbar.",
+  "selectionRationale": "A rodada alterna para feedback de arena e escolhe um pulso de posse/controle que não depende de uma arena inteira e não repete o retículo vermelho de perigo existente.",
+  "source": {
+    "tool": "image_gen integrado desta thread",
+    "prompt": "Pixel-art arena feedback sprite sheet with an isolated top-down cyan diamond floor marker, four corner beacons, central amber/cyan capture spark and concentric rings expanding outward then settling, coherent 4x4 storyboard, dark navy tile interiors with vivid flat magenta chroma-key gutters, no arena, characters, hazard triangle or text.",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 storyboard, row-major",
+    "files": [
+      "source-generated-grid.png",
+      "source-grid-1248.png",
+      "source-upscaled-2048.png"
+    ],
+    "upscaleNote": "source-upscaled-2048.png é derivado redimensionado; a fonte nativa entregue pelo image_gen tem 1254x1254."
+  },
+  "pipeline": {
+    "tools": [
+      "ImageMagick 7.1.2-Q16-HDRI",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0305-arena-control-pulse",
+      "requestedTask": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas sem tocar em outros paths.",
+      "status": "attempted-no-files",
+      "timeoutSeconds": 25,
+      "result": "O wrapper retornou exit code 1 após a mensagem inicial; nenhum arquivo foi criado pelo Grok. Grok Imagine não estava disponível no ambiente.",
+      "fallback": "Extração, organização, previews e validação concluídas localmente com ImageMagick."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png até frame-15.png, row-major a partir da grade 4x4",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceAtlas": "spritesheet-source-4x4-312-v2.png",
+    "runtimeAtlas": "spritesheet-runtime-4x4-256-v2.png",
+    "framesDirectory": "frames-312-v2/",
+    "runtimeFramesDirectory": "frames-runtime-256-v2/",
+    "preview": "preview/arena-control-pulse-preview-v2.gif"
+  },
+  "validation": {
+    "sourceAtlasDimensions": "1248x1248",
+    "runtimeAtlasDimensions": "1024x1024",
+    "emptyFrames": 0,
+    "edgeAlphaHits": 0,
+    "badFrameDimensions": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "visualInspection": "Contact sheet inspecionado; beacons, anéis de posse e faísca central permanecem legíveis durante expansão, assentamento e retorno.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Conteúdo visual gerado nesta thread; nenhum recurso externo ou pack foi adotado.",
+  "nextCategory": "animação curta de HUD"
+}

@@ -1,0 +1,351 @@
+{
+  "primary_version": "v4",
+  "primary_pass": false,
+  "primary_green_fail": true,
+  "primary_technical_fail": true,
+  "primary_issues": [
+    "not_divisible_4 source-generated-grid.png 1254x1254",
+    "not_divisible_4 source-chromakey-removed-v4.png 1254x1254",
+    "GREEN_HALO strong_spill on frames: 00(75),01(85),02(79),03(107),04(105),05(170),06(69),07(165),08(285),09(149),10(165),11(94),12(114),13(110),14(99),15(129)",
+    "GREEN_FRINGE spill>50 on frames: 00(275),01(313),02(425),03(404),04(431),05(507),06(287),07(412),08(705),09(485),10(585),11(324),12(468),13(364),14(377),15(370)",
+    "body_green_pixels total=957"
+  ],
+  "versions": [
+    {
+      "version": "v1",
+      "pass": false,
+      "green_fail": true,
+      "technical_fail": true,
+      "issue_count": 5,
+      "issues": [
+        "not_divisible_4 source-generated-grid.png 1254x1254",
+        "not_divisible_4 source-chromakey-removed.png 1254x1254",
+        "GREEN_HALO strong_spill on frames: 00(723),01(636),02(512),03(747),04(508),05(658),06(463),07(843),08(919),09(553),10(526),11(794),12(603),13(598),14(488),15(658)",
+        "GREEN_FRINGE spill>50 on frames: 00(1774),01(1525),02(1247),03(1797),04(1452),05(1562),06(1241),07(1929),08(2089),09(1527),10(1410),11(1805),12(1584),13(1611),14(1290),15(1751)",
+        "body_green_pixels total=1901"
+      ],
+      "checks_summary": {
+        "frames-512": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 25594,
+          "strong_spill_total": 10229,
+          "body_green_total": 1901,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 2089
+        },
+        "frames-256": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 6748,
+          "strong_spill_total": 2789,
+          "body_green_total": 257,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 559
+        },
+        "spritesheet-512-4x4.png": {
+          "size": [
+            2048,
+            2048
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "spritesheet-256-4x4.png": {
+          "size": [
+            1024,
+            1024
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "frame_order_lines": 16,
+        "preview_gif": {
+          "size": [
+            256,
+            256
+          ],
+          "n_frames": 16,
+          "durations_ms_sample": [
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        "contact_sheet": {
+          "size": [
+            1024,
+            1144
+          ],
+          "spill": {
+            "fringe_pixels": 0,
+            "spill_pixels": 0,
+            "strong_spill_pixels": 0,
+            "body_green_pixels": 1488,
+            "spill_ratio_of_fringe": 0.0,
+            "mean_green_excess": 0.0,
+            "max_green_excess": 0.0,
+            "max_g_on_spill": 0
+          }
+        }
+      }
+    },
+    {
+      "version": "v2",
+      "pass": false,
+      "green_fail": true,
+      "technical_fail": true,
+      "issue_count": 5,
+      "issues": [
+        "not_divisible_4 source-generated-grid.png 1254x1254",
+        "not_divisible_4 source-chromakey-removed-v2.png 1254x1254",
+        "GREEN_HALO strong_spill on frames: 00(105),01(84),02(87),03(109),04(99),05(176),06(78),07(169),08(290),09(171),10(171),11(104),12(119),13(117),14(104),15(131)",
+        "GREEN_FRINGE spill>50 on frames: 00(318),01(304),02(477),03(407),04(476),05(510),06(304),07(448),08(703),09(519),10(616),11(351),12(475),13(394),14(372),15(386)",
+        "body_green_pixels total=1066"
+      ],
+      "checks_summary": {
+        "frames-512-v2": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 7060,
+          "strong_spill_total": 2114,
+          "body_green_total": 1066,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 703
+        },
+        "frames-256-v2": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 1763,
+          "strong_spill_total": 535,
+          "body_green_total": 236,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 174
+        },
+        "spritesheet-512-4x4-v2.png": {
+          "size": [
+            2048,
+            2048
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "spritesheet-256-4x4-v2.png": {
+          "size": [
+            1024,
+            1024
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "frame_order_lines": 16,
+        "preview_gif": {
+          "size": [
+            256,
+            256
+          ],
+          "n_frames": 16,
+          "durations_ms_sample": [
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        "contact_sheet": {
+          "size": [
+            1024,
+            1144
+          ],
+          "spill": {
+            "fringe_pixels": 0,
+            "spill_pixels": 0,
+            "strong_spill_pixels": 0,
+            "body_green_pixels": 447,
+            "spill_ratio_of_fringe": 0.0,
+            "mean_green_excess": 0.0,
+            "max_green_excess": 0.0,
+            "max_g_on_spill": 0
+          }
+        }
+      }
+    },
+    {
+      "version": "v3",
+      "pass": false,
+      "green_fail": true,
+      "technical_fail": true,
+      "issue_count": 5,
+      "issues": [
+        "not_divisible_4 source-generated-grid.png 1254x1254",
+        "not_divisible_4 source-chromakey-removed-v3.png 1254x1254",
+        "GREEN_HALO strong_spill on frames: 00(98),01(85),02(83),03(106),04(97),05(175),06(70),07(167),08(286),09(163),10(167),11(99),12(114),13(111),14(103),15(128)",
+        "GREEN_FRINGE spill>50 on frames: 00(292),01(313),02(447),03(404),04(455),05(501),06(296),07(441),08(696),09(498),10(585),11(336),12(466),13(383),14(382),15(378)",
+        "body_green_pixels total=964"
+      ],
+      "checks_summary": {
+        "frames-512-v3": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 6873,
+          "strong_spill_total": 2052,
+          "body_green_total": 964,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 696
+        },
+        "frames-256-v3": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 1719,
+          "strong_spill_total": 512,
+          "body_green_total": 220,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 170
+        },
+        "spritesheet-512-4x4-v3.png": {
+          "size": [
+            2048,
+            2048
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "spritesheet-256-4x4-v3.png": {
+          "size": [
+            1024,
+            1024
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "frame_order_lines": 16,
+        "preview_gif": {
+          "size": [
+            256,
+            256
+          ],
+          "n_frames": 16,
+          "durations_ms_sample": [
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        "contact_sheet": {
+          "size": [
+            1024,
+            1144
+          ],
+          "spill": {
+            "fringe_pixels": 0,
+            "spill_pixels": 0,
+            "strong_spill_pixels": 0,
+            "body_green_pixels": 422,
+            "spill_ratio_of_fringe": 0.0,
+            "mean_green_excess": 0.0,
+            "max_green_excess": 0.0,
+            "max_g_on_spill": 0
+          }
+        }
+      }
+    },
+    {
+      "version": "v4",
+      "pass": false,
+      "green_fail": true,
+      "technical_fail": true,
+      "issue_count": 5,
+      "issues": [
+        "not_divisible_4 source-generated-grid.png 1254x1254",
+        "not_divisible_4 source-chromakey-removed-v4.png 1254x1254",
+        "GREEN_HALO strong_spill on frames: 00(75),01(85),02(79),03(107),04(105),05(170),06(69),07(165),08(285),09(149),10(165),11(94),12(114),13(110),14(99),15(129)",
+        "GREEN_FRINGE spill>50 on frames: 00(275),01(313),02(425),03(404),04(431),05(507),06(287),07(412),08(705),09(485),10(585),11(324),12(468),13(364),14(377),15(370)",
+        "body_green_pixels total=957"
+      ],
+      "checks_summary": {
+        "frames-512-v4": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 6732,
+          "strong_spill_total": 2000,
+          "body_green_total": 957,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 705
+        },
+        "frames-256-v4": {
+          "present": 16,
+          "empty": 0,
+          "bad_size": 0,
+          "edge_hits_total": 0,
+          "spill_total": 1686,
+          "strong_spill_total": 496,
+          "body_green_total": 213,
+          "worst_spill_frame": 8,
+          "worst_spill_count": 175
+        },
+        "spritesheet-512-4x4-v4.png": {
+          "size": [
+            2048,
+            2048
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "spritesheet-256-4x4-v4.png": {
+          "size": [
+            1024,
+            1024
+          ],
+          "size_ok": true,
+          "mismatches": 0
+        },
+        "frame_order_lines": 16,
+        "preview_gif": {
+          "size": [
+            256,
+            256
+          ],
+          "n_frames": 16,
+          "durations_ms_sample": [
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        "contact_sheet": {
+          "size": [
+            1024,
+            1144
+          ],
+          "spill": {
+            "fringe_pixels": 0,
+            "spill_pixels": 0,
+            "strong_spill_pixels": 0,
+            "body_green_pixels": 415,
+            "spill_ratio_of_fringe": 0.0,
+            "mean_green_excess": 0.0,
+            "max_green_excess": 0.0,
+            "max_g_on_spill": 0
+          }
+        }
+      }
+    }
+  ]
+}

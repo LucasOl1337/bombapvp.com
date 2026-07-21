@@ -1,0 +1,16 @@
+00: poise
+01: reach-daggers
+02: draw
+03: coil
+04: left-slash
+05: right-slash
+06: cross-setup
+07: cross-slash
+08: double-arc
+09: follow-through
+10: spin-cut
+11: recovery-turn
+12: blade-lower
+13: settle
+14: ready-reset
+15: poise-return

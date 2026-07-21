@@ -1,0 +1,64 @@
+{
+  "id": "hit-slash",
+  "round": "2026-07-21T02:55:00-03:00",
+  "category": "hit-impacto",
+  "status": "Candidato",
+  "concept": "Arco diagonal ciano branco-quente atravessa um núcleo âmbar com faíscas e fragmentos, sem personagem ou arma.",
+  "selectionRationale": "A rodada alterna para hit/impacto e escolhe um golpe visualmente direcional, com pivô central e leitura rápida para colisões de bomba, empurrões ou contato de arena.",
+  "source": {
+    "tool": "image_gen integrado desta thread",
+    "prompt": "Pixel-art impact sprite sheet with a centered diagonal cyan-white slash sweeping from lower-left to upper-right through a tiny amber impact core, cyan shards and orange sparks, coherent 4x4 storyboard, dark navy tile interiors with vivid flat magenta chroma-key gutters, crisp hard pixel clusters, no character, weapon, arena or text.",
+    "nativeDimensions": "1254x1254",
+    "layout": "4x4 storyboard, row-major",
+    "files": [
+      "source-generated-grid.png",
+      "source-grid-1248.png",
+      "source-upscaled-2048.png"
+    ],
+    "upscaleNote": "source-upscaled-2048.png é derivado redimensionado; a fonte nativa entregue pelo image_gen tem 1254x1254."
+  },
+  "pipeline": {
+    "tools": [
+      "ImageMagick 7.1.2-Q16-HDRI",
+      "Invoke-GrokWorker.ps1"
+    ],
+    "grok": {
+      "mode": "act",
+      "scope": "GameMechanics/assets/animation-lab/2026-07-21/0255-hit-slash",
+      "requestedTask": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas sem tocar em outros paths.",
+      "status": "attempted-no-files",
+      "timeoutSeconds": 25,
+      "result": "O wrapper retornou exit code 1 após a mensagem inicial; nenhum arquivo foi criado pelo Grok. Grok Imagine não estava disponível no ambiente.",
+      "fallback": "Extração, organização, previews e validação concluídas localmente com ImageMagick."
+    }
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "frame-00.png até frame-15.png, row-major a partir da grade 4x4",
+    "frameDimensions": "312x312",
+    "runtimeDimensions": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true,
+    "sourceAtlas": "spritesheet-source-4x4-312-v2.png",
+    "runtimeAtlas": "spritesheet-runtime-4x4-256-v2.png",
+    "framesDirectory": "frames-312-v2/",
+    "runtimeFramesDirectory": "frames-runtime-256-v2/",
+    "preview": "preview/hit-slash-preview-v2.gif"
+  },
+  "validation": {
+    "sourceAtlasDimensions": "1248x1248",
+    "runtimeAtlasDimensions": "1024x1024",
+    "emptyFrames": 0,
+    "edgeAlphaHits": 0,
+    "badFrameDimensions": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "visualInspection": "Contact sheet inspecionado; o arco cresce, atinge o pico, dissipa em fragmentos e retorna ao impacto central.",
+    "runtimeIntegration": true
+  },
+  "externalResources": [],
+  "license": "Conteúdo visual gerado nesta thread; nenhum recurso externo ou pack foi adotado.",
+  "nextCategory": "power-up"
+}

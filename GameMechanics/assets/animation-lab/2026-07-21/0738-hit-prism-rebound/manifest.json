@@ -1,0 +1,67 @@
+{
+  "id": "hit-prism-rebound",
+  "round": "2026-07-21T07:38:24-03:00",
+  "category": "hit/impacto",
+  "status": "Candidato",
+  "concept": "Ricochete de prisma: uma ponta cristalina ciano colide num ponto violeta, abre placas de refração, rebate em diagonal e se desfaz em fragmentos azuis.",
+  "selectionRationale": "Entrega nova para hit/impacto, distinta de slash, impact cross, ground punch, armor rattle, recoil burst, parry clash, ricochet shards e kinetic slam por usar colisão direcional com prisma translúcido, placas de refração e rebate diagonal.",
+  "prompt": "Use case: stylized-concept. Asset type: high-resolution 4x4 sprite sheet for a Bomba PvP hit/impact VFX. Primary request: create a coherent sixteen-frame animation of a prism rebound impact, arranged as a clean 4x4 grid in row-major order. Scene/backdrop: perfectly flat solid #00ff00 chroma-key background only, with no shadows, gradients, texture, floor, or reflections. Subject: a sharp translucent cyan prism collides with a compact violet impact point, produces three offset angular refraction plates, rebounds diagonally with a short white trail, and collapses into a tiny blue shard spark. Style/medium: polished high-contrast game VFX, crisp cel-shaded 2.5D illustration, readable at small runtime size, consistent scale and lighting across all frames. Composition/framing: one centered impact per cell, generous padding, no overlap between cells, no clipping. Lighting/mood: precise crystalline arcade hit feedback, fast and directional. Color palette: ice cyan, cobalt blue, violet, white highlights, a small gold glint. Constraints: sixteen distinct sequential poses; frame 00 prism tip enters from upper-left, frames 01-04 contact and refraction plates, frames 05-08 rebound toward lower-right, frames 09-12 plates fragment, frames 13-15 shard spark settles; do not use #00ff00 in the subject. Avoid: text, UI, characters, weapons, logos, generic circular explosion rings, slash marks, smoke clouds, fire, water, extra objects, gradients or variation in the chroma-key background, watermark.",
+  "source": {
+    "tool": "image_gen integrado",
+    "file": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "grid": "4x4",
+    "frameOrder": "row-major, frame-00 through frame-15",
+    "note": "source-upscaled-2048.png é derivado por Lanczos e não uma fonte nativa 2048px"
+  },
+  "pipeline": {
+    "alphaPreparation": "remove_chroma_key.py com auto-key border, soft-matte, despill e edge-contract 1",
+    "frameExtraction": "ImageMagick: source-grid-1248 dividido em 16 células 232px, recortadas com margem interna de 40px, redimensionadas para 240px e centralizadas em 312px",
+    "dissipationCorrection": "A célula gerada frame-15 não tinha alpha útil; frame-15 final foi derivado de frame-14 a 55% com modulação de brilho para manter um estilhaço visível e eliminar célula vazia.",
+    "runtimeDerivatives": "frames-runtime-256-v2 e spritesheet-runtime-4x4-256-v2",
+    "tools": ["image_gen integrado", "remove_chroma_key.py", "ImageMagick 7.1.2-Q16-HDRI"]
+  },
+  "animation": {
+    "frameCount": 16,
+    "order": "row-major",
+    "frameDimensions": "312x312",
+    "runtimeFrameDimensions": "256x256",
+    "alpha": "RGBA; fundo chroma-key removido; borda interna transparente",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "loop": true
+  },
+  "files": {
+    "source": "source-generated-grid.png",
+    "alphaSource": "source-chromakey-removed.png",
+    "highResolutionDerivative": "source-upscaled-2048.png",
+    "normalizedGrid": "source-grid-1248.png",
+    "frames": "frames-312-v2/frame-00.png ... frame-15.png",
+    "runtimeFrames": "frames-runtime-256-v2/frame-00.png ... frame-15.png",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "contactSheet": "preview/contact-sheet-v2.png",
+    "previewGif": "preview/hit-prism-rebound-preview-v2.gif"
+  },
+  "delegation": {
+    "agent": "Grok",
+    "mode": "act",
+    "scope": "GameMechanics/assets/animation-lab/2026-07-21/0738-hit-prism-rebound",
+    "request": "Conferir grade 4x4, tentar extrair frames e validar alpha, ordem, timing e bordas internas sem tocar em outros paths, instalar ou fazer git.",
+    "result": "Invocação feita no diretório exclusivo; o wrapper encerrou com falha após reportar o escopo, sem gerar arquivos e sem produzir validação utilizável.",
+    "imagine": "Não disponível no ambiente Grok; a fonte foi criada pelo image_gen integrado.",
+    "fallback": "Extração, organização e validação concluídas localmente com ImageMagick."
+  },
+  "validation": {
+    "commandResult": "frames=16 empty=0 edgeHits=0 badDims=0 sourceSheet=1248x1248 runtimeSheet=1024x1024 contactSheet=1024x1024 gifFrames=16 timingCentiseconds=6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6",
+    "dimensionsDivisible": true,
+    "emptyCells": 0,
+    "alphaEdgeHits": 0,
+    "contactSheetLegible": true,
+    "previewInspected": true
+  },
+  "externalResources": [],
+  "license": "Arte gerada nesta thread pelo image_gen integrado; sem recurso externo.",
+  "runtimeIntegration": true,
+  "nextCategory": "power-up"
+}

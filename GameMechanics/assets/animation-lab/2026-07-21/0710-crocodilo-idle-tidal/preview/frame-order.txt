@@ -1,0 +1,16 @@
+00=neutral
+01=visor-glint
+02=breath-in
+03=breath-out
+04=shoulder-left
+05=shoulder-right
+06=tail-twitch
+07=visor-spark
+08=relaxed-crouch
+09=crouch-rise
+10=micro-breath
+11=tail-settle
+12=neutral
+13=breath-loop
+14=visor-rest
+15=idle-loop

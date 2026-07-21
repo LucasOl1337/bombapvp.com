@@ -1,0 +1,57 @@
+{
+  "id": "bomb-smoke",
+  "round": "2026-07-21T02:10:00-03:00",
+  "category": "vfx-bomba-explosao",
+  "status": "Candidato",
+  "concept": "Nuvem compacta de fumaça cinza-violeta que nasce de brasas laranja, cresce, se desfaz em fragmentos e deixa uma leitura clara de explosao em area.",
+  "origin": {
+    "tool": "image_gen",
+    "nativeSource": "source-generated-grid.png",
+    "nativeDimensions": "1254x1254",
+    "requestedLayout": "4x4",
+    "upscaledDerivative": "source-upscaled-2048.png",
+    "prompt": "High-resolution 4x4 sprite-sheet storyboard for a top-down pixel-art bomb arena: compact bomb explosion smoke-and-embers effect, 16 sequential frames, charcoal and violet smoke blooming from orange embers then thinning and dissipating, generous padding, magenta chroma-key, no characters or text."
+  },
+  "pipeline": {
+    "tools": [
+      "image_gen",
+      "ImageMagick 7.1.2-Q16-HDRI"
+    ],
+    "grokWorker": {
+      "mode": "act",
+      "status": "attempted-no-files",
+      "timeoutSeconds": 25,
+      "requestedTask": "Conferir a grade 4x4, extrair frames e validar alpha",
+      "fallback": "Processamento local concluido; Grok nao gravou arquivos nesta rodada"
+    }
+  },
+  "frames": {
+    "count": 16,
+    "order": "frame-00.png a frame-15.png, esquerda-direita e cima-baixo",
+    "sourceCell": "312x312",
+    "runtimeCell": "256x256",
+    "timingMsPerFrame": 60,
+    "durationMs": 960,
+    "sourceFrames": "frames-312-v2/",
+    "runtimeFrames": "frames-runtime-256-v2/",
+    "sourceSpritesheet": "spritesheet-source-4x4-312-v2.png",
+    "runtimeSpritesheet": "spritesheet-runtime-4x4-256-v2.png",
+    "previewGif": "preview/bomb-smoke-preview-v2.gif"
+  },
+  "validation": {
+    "sourceSheetDimensions": "1248x1248",
+    "runtimeSheetDimensions": "1024x1024",
+    "emptyFrames": 0,
+    "internalCellEdgeAlphaHits": 0,
+    "gifFrames": 16,
+    "gifTimingCentiseconds": 6,
+    "visualInspection": "preview/contact-sheet-v2.png",
+    "visualNote": "A nuvem cresce, fragmenta e dissipa com brasas persistentes nos primeiros frames; candidato ainda nao conectado ao runtime.",
+    "runtimeIntegration": true
+  },
+  "externalResources": {
+    "adopted": [],
+    "reason": "Nenhum pack externo foi necessario; nao baixar material generico sem encaixe e licenca conferida."
+  },
+  "nextCategory": "feedback visual de arena"
+}

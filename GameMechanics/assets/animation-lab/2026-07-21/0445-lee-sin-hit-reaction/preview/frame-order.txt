@@ -1,0 +1,16 @@
+00: ready
+01: impact-onset
+02: recoil
+03: torso-twist
+04: backward-stagger
+05: arms-open
+06: knee-buckle
+07: impact-flash
+08: flash-compression
+09: low-brace
+10: one-knee
+11: grounded-recover
+12: rise
+13: guard-reset
+14: ready-return
+15: neutral-ready
