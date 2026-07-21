@@ -2974,158 +2974,91 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(plantedUnder.state.slices.bombs.items).toHaveLength(1);
   });
 
-  it("chama: center-tile kill; edge-clip into neighbor flame survives (mechanics-v4)", () => {
-    const config = localDuel("flame-center-tile");
+  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v5)", () => {
+    const config = localDuel("flame-overlap-30");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
     const beta = config.seats[1]!.competitorId;
-    const seat0 = config.seats[0]!.seatId;
     const base = program.initial(config);
+    const flameTile = freezeTile({ x: 3, y: 1 });
+    const y = tileCenter({ x: 2, y: 1 }).y;
+    const bodySpan = BODY_HALF_EXTENT * 2;
 
-    // Exact contact with flame tile (3,1): body right edge == tile left edge.
-    const exactPos = freezePosition({
-      x: 3 * UNITS_PER_TILE - BODY_HALF_EXTENT,
-      y: tileCenter({ x: 2, y: 1 }).y,
-    });
-    expect(bodyOverlapsTile(exactPos, { x: 3, y: 1 })).toBe(false);
-    const partialPos = freezePosition({ x: exactPos.x + 1, y: exactPos.y });
-    expect(bodyOverlapsTile(partialPos, { x: 3, y: 1 })).toBe(true);
-    // Body center still on tile 2 — must NOT die from clipping into flame on tile 3.
-    expect(tileOf(partialPos)).toEqual({ x: 2, y: 1 });
+    // Horizontal clip into flame tile (3,1): overlap width / bodySpan = fraction
+    // (body is square; full-height overlap ⇒ area fraction = width fraction).
+    // Area fraction = overlapWidth / bodySpan when the clip is full-height.
+    const atOverlapWidth = (width: number) =>
+      freezePosition({
+        x: 3 * UNITS_PER_TILE - BODY_HALF_EXTENT + width,
+        y,
+      });
 
-    // Edge-clip into future flame tile → survives (center-tile rule).
-    const clipWorld = asPlayingWorld(program, base, {
-      arena: {
-        width: 11,
-        height: 9,
-        solid: [...base.slices.arena.solid],
-        crates: [],
-      },
-      locomotion: {
-        entries: [
-          {
-            competitorId: alpha,
-            position: partialPos,
-            velocity: freezeVelocity({ x: 0, y: 0 }),
-            lastDirection: null,
-          },
-          locoAt(beta, 9, 7),
-        ],
-      },
-      bombs: {
-        nextId: 2,
-        items: [
-          {
-            id: 1,
-            ownerId: beta,
-            tile: freezeTile({ x: 5, y: 1 }),
-            fuseMs: 20,
-            flameRange: 2,
-          },
-        ],
-      },
-    });
-    const clipped = program.step(clipWorld, { commands: [] });
-    expect(clipped.events.some((e) => e.type === "bomb-exploded")).toBe(true);
+    const shallow = atOverlapWidth(Math.floor(0.1 * bodySpan)); // ~10%
+    const lethal = atOverlapWidth(Math.ceil(0.3 * bodySpan)); // ≥30%
+    const deep = atOverlapWidth(Math.ceil(0.35 * bodySpan));
+    expect(bodyTileOverlapArea(shallow, flameTile) / (bodySpan * bodySpan)).toBeLessThan(0.3);
+    expect(bodyTileOverlapArea(lethal, flameTile) / (bodySpan * bodySpan)).toBeGreaterThanOrEqual(0.3);
+    expect(bodyTileOverlapArea(deep, flameTile) / (bodySpan * bodySpan)).toBeGreaterThan(0.3);
+
+    const worldAt = (position: ReturnType<typeof freezePosition>) =>
+      asPlayingWorld(program, base, {
+        arena: {
+          width: 11,
+          height: 9,
+          solid: [...base.slices.arena.solid],
+          crates: [],
+        },
+        locomotion: {
+          entries: [
+            {
+              competitorId: alpha,
+              position,
+              velocity: freezeVelocity({ x: 0, y: 0 }),
+              lastDirection: null,
+            },
+            locoAt(beta, 9, 7),
+          ],
+        },
+        bombs: {
+          nextId: 2,
+          items: [
+            {
+              id: 1,
+              ownerId: beta,
+              tile: freezeTile({ x: 5, y: 1 }),
+              fuseMs: 20,
+              flameRange: 2,
+            },
+          ],
+        },
+      });
+
+    // ~10% into the cross arm → survives.
+    const shallowStep = program.step(worldAt(shallow), { commands: [] });
+    expect(shallowStep.events.some((e) => e.type === "bomb-exploded")).toBe(true);
     expect(
-      clipped.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+      shallowStep.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
     ).toBe(true);
 
-    // Center standing on the flame tile → dies.
-    const onFlame = tileCenter({ x: 3, y: 1 });
-    const dieWorld = asPlayingWorld(program, base, {
-      arena: {
-        width: 11,
-        height: 9,
-        solid: [...base.slices.arena.solid],
-        crates: [],
-      },
-      locomotion: {
-        entries: [
-          {
-            competitorId: alpha,
-            position: onFlame,
-            velocity: freezeVelocity({ x: 0, y: 0 }),
-            lastDirection: null,
-          },
-          locoAt(beta, 9, 7),
-        ],
-      },
-      bombs: {
-        nextId: 2,
-        items: [
-          {
-            id: 1,
-            ownerId: beta,
-            tile: freezeTile({ x: 5, y: 1 }),
-            fuseMs: 20,
-            flameRange: 2,
-          },
-        ],
-      },
-    });
-    const died = program.step(dieWorld, { commands: [] });
-    expect(died.events.some((e) => e.type === "bomb-exploded")).toBe(true);
-    expect(died.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
+    // ≥30% on the blast tile → dies.
+    const lethalStep = program.step(worldAt(lethal), { commands: [] });
+    expect(lethalStep.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
     expect(
-      died.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+      lethalStep.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
     ).toBe(false);
 
-    // Leave the flame tile on the explosion tick → locomotion first → survives.
-    // Start just inside the left edge of tile 3 so one step exits to tile 2.
-    const nearLeftOfFlame = freezePosition({
-      x: 3 * UNITS_PER_TILE + 10,
-      y: tileCenter({ x: 3, y: 1 }).y,
-    });
-    expect(tileOf(nearLeftOfFlame)).toEqual({ x: 3, y: 1 });
-    const escapeWorld = asPlayingWorld(program, base, {
-      arena: {
-        width: 11,
-        height: 9,
-        solid: [...base.slices.arena.solid],
-        crates: [],
-      },
-      locomotion: {
-        entries: [
-          {
-            competitorId: alpha,
-            position: nearLeftOfFlame,
-            velocity: freezeVelocity({ x: 0, y: 0 }),
-            lastDirection: null,
-          },
-          locoAt(beta, 9, 7),
-        ],
-      },
-      bombs: {
-        nextId: 2,
-        items: [
-          {
-            id: 1,
-            ownerId: beta,
-            tile: freezeTile({ x: 5, y: 1 }),
-            fuseMs: 20,
-            flameRange: 2,
-          },
-        ],
-      },
-    });
-    const escaped = program.step(escapeWorld, {
-      commands: [
-        {
-          tick: escapeWorld.tick,
-          sequence: 0,
-          seatId: seat0,
-          command: { type: "set-movement", direction: "left", pressed: true },
-        },
-      ],
-    });
-    expect(escaped.events.some((e) => e.type === "bomb-exploded")).toBe(true);
-    expect(
-      escaped.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
-    ).toBe(true);
-    expect(tileOf(escaped.state.slices.locomotion.entries[0]!.position).x).toBeLessThan(3);
+    // Fully on flame tile center → dies.
+    const centerStep = program.step(worldAt(tileCenter(flameTile)), { commands: [] });
+    expect(centerStep.events.some((e) => e.type === "competitor-eliminated")).toBe(true);
 
-    // Exact contact with active flame is allowed (no positive area).
+    // Exact edge contact (0 area) survives.
+    const exactPos = freezePosition({
+      x: 3 * UNITS_PER_TILE - BODY_HALF_EXTENT,
+      y,
+    });
+    expect(bodyOverlapsTile(exactPos, flameTile)).toBe(false);
+
+    // Exact contact with active flame is allowed (0 area → fraction 0).
     const exactWorld = asPlayingWorld(program, base, {
       arena: {
         width: 11,
@@ -3155,8 +3088,9 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
         ],
       },
     });
+    const exactStep = program.step(exactWorld, { commands: [] });
     expect(
-      exactWorld.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
+      exactStep.state.slices.vitals.entries.find((e) => e.competitorId === alpha)?.alive,
     ).toBe(true);
   });
 
@@ -4177,7 +4111,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     }
     // Versions for world-5 / kernel-0.10.0 (Slice 4A candidate).
     expect(matchModule.version).toBe("2.1.1");
-    expect(competitorsModule.version).toBe("3.2.0");
+    expect(competitorsModule.version).toBe("3.3.0");
     expect(arenaModule.version).toBe("2.4.0");
     expect(intentModule.version).toBe("2.1.0");
     expect(ordnanceModule.version).toBe("3.2.0");

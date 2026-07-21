@@ -1,4 +1,10 @@
-import type { CompetitorId, GameEvent, MatchConfig, SeatId } from "../../contracts.ts";
+import type {
+  CompetitorId,
+  GameEvent,
+  MatchConfig,
+  SeatId,
+  TileCoord,
+} from "../../contracts.ts";
 import {
   SPAWN_PROTECTION_MS,
   TICK_DURATION_MS,
@@ -12,30 +18,52 @@ import type {
 import {
   assertCompetitorOrder,
   assertInteger,
+  BODY_HALF_EXTENT,
   bodyOverlapsTile,
+  bodyTileOverlapArea,
   freezeTile,
   isFlameLethal,
   isGameplayActive,
-  tileOf,
   type FlameEntry,
   type MatchSlice,
   type RosterEntry,
   type RosterSlice,
   type VitalsEntry,
   type VitalsSlice,
+  type WorldPosition,
 } from "../../kernel/world-state.ts";
 
 /**
- * 3.2.0: flame lethality uses the body-center tile (tileOf), not AABB clip into
- * a neighboring flame tile — partial edge overlap no longer kills. Players
- * read "the tile under my feet/center"; AABB edge-kills felt unfair next to
- * dense champion sprites. Pressure impact still uses positive-area AABB.
+ * 3.3.0: flame kill requires ≥ {@link FLAME_LETHAL_BODY_OVERLAP_FRACTION} of the
+ * body AABB area on a lethal flame tile (default 30%). A ~10% edge clip into
+ * a cross arm no longer kills; you must be substantially on the blast tile.
+ * 3.2.0: brief tileOf-only experiment (superseded by overlap fraction).
  * 3.1.0: flames kill only inside the fresh lethal window (Decision 012);
  * residual flame fog is pure VFX.
  * 3.0.0: roster is identity-only (competitorId + seatId).
  * maxBombs/flameRange live solely in Powerups progression (Decision 009).
  */
-const MODULE_VERSION = "3.2.0";
+const MODULE_VERSION = "3.3.0";
+
+/**
+ * Minimum fraction of body AABB area that must overlap a lethal flame tile
+ * to eliminate. Product rule: ~10% clip into the cross is safe; ~30%+ kills.
+ */
+export const FLAME_LETHAL_BODY_OVERLAP_FRACTION = 0.3 as const;
+
+const BODY_AREA = (2 * BODY_HALF_EXTENT) * (2 * BODY_HALF_EXTENT);
+
+/** Fraction of body AABB overlapping `tile` in [0, 1]. */
+export function bodyFlameOverlapFraction(
+  position: WorldPosition,
+  tile: TileCoord,
+): number {
+  return bodyTileOverlapArea(position, tile) / BODY_AREA;
+}
+
+function isFlameLethalToBody(position: WorldPosition, tile: TileCoord): boolean {
+  return bodyFlameOverlapFraction(position, tile) >= FLAME_LETHAL_BODY_OVERLAP_FRACTION;
+}
 
 function freezeVitalsEntry(entry: VitalsEntry): VitalsEntry {
   return Object.freeze({
@@ -264,12 +292,12 @@ function runPressureImpactDamage(ctx: SystemRunContext): SystemRunResult {
 }
 
 /**
- * Simultaneous damage: every living unprotected competitor whose **body-center
- * tile** hosts a LETHAL flame is eliminated against the same pre-state.
- * Neighbor-tile AABB clips no longer kill (3.2.0) — that read as "I died on a
- * safe tile" with continuous locomotion. A flame is lethal only while fresh
- * (Decision 012); residual flame fog never kills. Protected competitors ignore
- * flames. Sole writer of vitals (with vitals-cycle).
+ * Simultaneous damage: every living unprotected competitor whose body overlaps
+ * a LETHAL flame tile by ≥ {@link FLAME_LETHAL_BODY_OVERLAP_FRACTION} of body
+ * area is eliminated. Shallow clips (~10%) into a cross arm are non-lethal;
+ * substantial presence on the blast tile (~30%+) kills. Flame is lethal only
+ * while fresh (Decision 012). Protected competitors ignore flames. Sole writer
+ * of vitals (with vitals-cycle).
  */
 function runDamage(ctx: SystemRunContext): SystemRunResult {
   const match = ctx.read("match");
@@ -312,14 +340,13 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
     if (immune.has(entry.competitorId)) continue;
     if (effectiveProtection(row) > 0) continue;
 
-    // Standing tile = floor(body center). Edge-clipping a neighbor flame is safe.
-    const bodyTile = tileOf(entry.position);
     const merged: FlameEntry["causes"][number][] = [];
     const seen = new Set<string>();
     for (const flame of flames.items) {
       // Residual flame fog (past the lethal window) is pure VFX — no kill.
       if (!isFlameLethal(flame.remainingMs)) continue;
-      if (flame.tile.x !== bodyTile.x || flame.tile.y !== bodyTile.y) continue;
+      // Need ≥30% of body area on this flame tile (shallow cross-edge clip is safe).
+      if (!isFlameLethalToBody(entry.position, flame.tile)) continue;
       for (const cause of flame.causes) {
         const key = `${cause.bombId}|${cause.ownerId}`;
         if (seen.has(key)) continue;
