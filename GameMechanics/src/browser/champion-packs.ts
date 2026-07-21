@@ -25,6 +25,11 @@ import {
   type IntegratedAnimationManifest,
   type IntegratedAnimationOverrides,
 } from "./champion-animation-selection.ts";
+export {
+  DEFAULT_P1_SLUG,
+  DEFAULT_P2_SLUG,
+  resolveChampionSlug,
+} from "./match-mode.ts";
 
 export type Facing = "south" | "north" | "east" | "west";
 
@@ -224,9 +229,6 @@ const PRESENTATIONS: readonly ChampPresentation[] = Object.freeze(
 const BY_SLUG = new Map(PRESENTATIONS.map((entry) => [entry.slug, entry]));
 const BY_ID = new Map(PRESENTATIONS.map((entry) => [entry.characterId, entry]));
 
-export const DEFAULT_P1_SLUG: ChampionSlug = "ranni";
-export const DEFAULT_P2_SLUG: ChampionSlug = "killer-bee";
-
 export function listChampionPresentations(): readonly ChampPresentation[] {
   return PRESENTATIONS;
 }
@@ -237,16 +239,6 @@ export function getChampionPresentation(slug: string): ChampPresentation | null 
 
 export function getChampionPresentationById(characterId: string): ChampPresentation | null {
   return BY_ID.get(characterId) ?? null;
-}
-
-export function resolveChampionSlug(raw: string | null | undefined, fallback: ChampionSlug): ChampionSlug {
-  if (!raw) return fallback;
-  const normalized = raw.trim().toLowerCase();
-  if (normalized in CHAMPION_MEMBERSHIP) return normalized as ChampionSlug;
-  // Accept character UUID as well.
-  const byId = BY_ID.get(normalized);
-  if (byId) return byId.slug;
-  return fallback;
 }
 
 /** All portrait + sprite URLs for preload. */
