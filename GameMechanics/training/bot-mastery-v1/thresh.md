@@ -3,7 +3,7 @@
 - Private learner: V2 (`v2-mastery-v1`); fixed opponent: V3.
 - Matches: 96 executions; 48 evaluated matches and 48 exact replays.
 - Seeds: `mastery-thresh-v1-seed-01` through `mastery-thresh-v1-seed-12`, alternating learner side.
-- Versions: mastery schema 1, technique schema 1, `kernel-0.10.0`, `mechanics-v5`, `content-prototype-arena-v1`.
+- Compatibility: see the campaign record in [`README.md`](./README.md).
 
 ## Authored hypotheses and observed evidence
 

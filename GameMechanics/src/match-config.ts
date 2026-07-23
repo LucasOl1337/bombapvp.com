@@ -9,7 +9,7 @@ import type {
 import { isSkillId, TICK_DURATION_MS } from "./contracts.ts";
 
 /** Manual rules identifier. Bump when executable gameplay rules change. */
-export const DEFAULT_MECHANICS_REVISION = "mechanics-v5" as const;
+export const DEFAULT_MECHANICS_REVISION = "mechanics-v6" as const;
 
 /**
  * Content pack identifier. Pass-through metadata while no variable content

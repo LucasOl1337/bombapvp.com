@@ -8,6 +8,7 @@ import type {
 import {
   SPAWN_PROTECTION_MS,
   TICK_DURATION_MS,
+  ZED_LIVING_SHADOW_SKILL_ID,
 } from "../../contracts.ts";
 import { factsOfKind } from "../../kernel/facts.ts";
 import type {
@@ -28,12 +29,16 @@ import {
   type MatchSlice,
   type RosterEntry,
   type RosterSlice,
+  type SkillEntry,
+  type SkillsSlice,
   type VitalsEntry,
   type VitalsSlice,
   type WorldPosition,
 } from "../../kernel/world-state.ts";
 
 /**
+ * 3.4.0: Living Shadow free-move window is an explicit channel-immunity exception
+ * (Zed remains vulnerable to flames/skill-hit while the shadow is live).
  * 3.3.0: flame kill requires ≥ {@link FLAME_LETHAL_BODY_OVERLAP_FRACTION} of the
  * body AABB area on a lethal flame tile (default 30%). A ~10% edge clip into
  * a cross arm no longer kills; you must be substantially on the blast tile.
@@ -43,7 +48,21 @@ import {
  * 3.0.0: roster is identity-only (competitorId + seatId).
  * maxBombs/flameRange live solely in Powerups progression (Decision 009).
  */
-const MODULE_VERSION = "3.3.0";
+const MODULE_VERSION = "3.4.0";
+
+/**
+ * Competitors currently immune via skill channel. Living Shadow is intentionally
+ * excluded so free-move dual presence cannot face-tank bombs or skill hits.
+ */
+function channelImmuneCompetitorIds(skills: SkillsSlice): Set<CompetitorId> {
+  return new Set(
+    skills.entries
+      .filter((entry: SkillEntry) =>
+        entry.phase === "channeling" && entry.skillId !== ZED_LIVING_SHADOW_SKILL_ID
+      )
+      .map((entry) => entry.competitorId),
+  );
+}
 
 /**
  * Minimum fraction of body AABB area that must overlap a lethal flame tile
@@ -209,11 +228,7 @@ function runPressureImpactDamage(ctx: SystemRunContext): SystemRunResult {
   const locomotion = ctx.read("locomotion");
   const vitals = ctx.read("vitals");
   const skills = ctx.read("skills");
-  const immune = new Set(
-    skills.entries
-      .filter((entry) => entry.phase === "channeling")
-      .map((entry) => entry.competitorId),
-  );
+  const immune = channelImmuneCompetitorIds(skills);
 
   type Hit = Readonly<{
     competitorId: CompetitorId;
@@ -309,11 +324,7 @@ function runDamage(ctx: SystemRunContext): SystemRunResult {
   const locomotion = ctx.read("locomotion");
   const vitals = ctx.read("vitals");
   const skills = ctx.read("skills");
-  const immune = new Set(
-    skills.entries
-      .filter((entry) => entry.phase === "channeling")
-      .map((entry) => entry.competitorId),
-  );
+  const immune = channelImmuneCompetitorIds(skills);
 
   // Effective protection: sudden-death is always unprotected even if residual.
   const effectiveProtection = (entry: VitalsEntry): number => {

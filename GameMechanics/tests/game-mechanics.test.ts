@@ -8,6 +8,7 @@ import {
   SPAWN_PROTECTION_MS,
   TICK_DURATION_MS,
   RANNI_ICE_BLINK_SKILL_ID,
+  ZED_LIVING_SHADOW_SKILL_ID,
   type CompetitorId,
   type Direction,
   type GameCommand,
@@ -16,6 +17,12 @@ import {
   type MatchConfig,
   type SeatId,
 } from "../src/contracts.ts";
+import {
+  ZED_CHANNEL_MS,
+  ZED_COOLDOWN_MS,
+  ZED_FAIL_COOLDOWN_MS,
+  ZED_SHADOW_RANGE,
+} from "../src/modules/skills/index.ts";
 import { createGameMechanics, MAX_ADVANCE_MS } from "../src/game-mechanics.ts";
 import {
   createFourSeatMatchConfig,
@@ -120,6 +127,18 @@ function ranniDuel(seed = "ranni-skill"): MatchConfig {
       seatId: seat.seatId,
       competitorId: seat.competitorId,
       ...(index === 0 ? { skillId: RANNI_ICE_BLINK_SKILL_ID } : {}),
+    })),
+  });
+}
+
+function zedDuel(seed = "zed-skill"): MatchConfig {
+  const base = localDuel(seed);
+  return createMatchConfig({
+    ...base,
+    seats: base.seats.map((seat, index) => ({
+      seatId: seat.seatId,
+      competitorId: seat.competitorId,
+      ...(index === 0 ? { skillId: ZED_LIVING_SHADOW_SKILL_ID } : {}),
     })),
   });
 }
@@ -2977,7 +2996,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(plantedUnder.state.slices.bombs.items).toHaveLength(1);
   });
 
-  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v5)", () => {
+  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v6)", () => {
     const config = localDuel("flame-overlap-30");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
@@ -4114,7 +4133,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     }
     // Versions for world-5 / kernel-0.10.0 (Slice 4A candidate).
     expect(matchModule.version).toBe("2.1.1");
-    expect(competitorsModule.version).toBe("3.3.0");
+    expect(competitorsModule.version).toBe("3.4.0");
     expect(arenaModule.version).toBe("2.4.0");
     expect(intentModule.version).toBe("2.1.0");
     expect(ordnanceModule.version).toBe("3.2.0");
@@ -5392,6 +5411,398 @@ describe("Ranni Ice Blink", () => {
     const reordered = run(reversed);
     expect(replayed).toEqual(first);
     expect(reordered).toEqual(first);
+  });
+});
+
+// ── Zed Living Shadow (mechanics-only skill id; no public champion) ───────────
+
+describe("Zed Living Shadow", () => {
+  function useSkill(state: WorldState, config: MatchConfig, sequence = 0) {
+    return {
+      tick: state.tick,
+      sequence,
+      seatId: config.seats[0]!.seatId,
+      command: { type: "use-skill" as const },
+    };
+  }
+
+  function press(
+    state: WorldState,
+    config: MatchConfig,
+    direction: Direction,
+    sequence = 0,
+  ) {
+    return {
+      tick: state.tick,
+      sequence,
+      seatId: config.seats[0]!.seatId,
+      command: { type: "set-movement" as const, direction, pressed: true },
+    };
+  }
+
+  function release(
+    state: WorldState,
+    config: MatchConfig,
+    direction: Direction,
+    sequence = 0,
+  ) {
+    return {
+      tick: state.tick,
+      sequence,
+      seatId: config.seats[0]!.seatId,
+      command: { type: "set-movement" as const, direction, pressed: false },
+    };
+  }
+
+  it("places a fixed projection on the furthest free cardinal tile up to range 3", () => {
+    const config = zedDuel("zed-place");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+    const bodyTile = tileOf(body);
+
+    const activated = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    });
+    state = activated.state;
+    expect(activated.rejections).toEqual([]);
+    const skill = state.slices.skills.entries[0]!;
+    expect(skill).toMatchObject({
+      skillId: ZED_LIVING_SHADOW_SKILL_ID,
+      phase: "channeling",
+      channelRemainingMs: ZED_CHANNEL_MS - TICK_DURATION_MS,
+      cooldownRemainingMs: 0,
+    });
+    // Placement is resolved from body tile before locomotion (skills phase first).
+    expect(skill.projection).toEqual(
+      tileCenter({ x: bodyTile.x + ZED_SHADOW_RANGE, y: bodyTile.y }),
+    );
+    // Free-move window: body is not rooted and may advance with the aim press.
+    expect(findLocomotion(state.slices.locomotion, alpha)!.position.x).toBeGreaterThanOrEqual(
+      body.x,
+    );
+    // Shadow is not a teleport yet — body is not at the projection tile.
+    expect(findLocomotion(state.slices.locomotion, alpha)!.position).not.toEqual(skill.projection);
+  });
+
+  it("stops placement ray on solid/crate and rejects when no free tile exists", () => {
+    const config = zedDuel("zed-ray-block");
+    const program = createDefaultMechanicsProgram();
+    const initial = program.initial(config);
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(initial.slices.locomotion, alpha)!.position;
+    const bodyTile = tileOf(body);
+    // Wall two tiles ahead → furthest place is 1 tile.
+    let state = asPlayingWorld(program, initial, {
+      arena: {
+        crates: [],
+        solid: [{ x: bodyTile.x + 2, y: bodyTile.y }],
+      },
+    });
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    expect(state.slices.skills.entries[0]!.projection).toEqual(
+      tileCenter({ x: bodyTile.x + 1, y: bodyTile.y }),
+    );
+
+    // Crate immediately adjacent blocks all placement → reject, stay idle.
+    const blocked = asPlayingWorld(program, initial, {
+      arena: {
+        crates: [{ x: bodyTile.x + 1, y: bodyTile.y }],
+        solid: [],
+      },
+    });
+    const rejected = program.step(blocked, {
+      commands: [press(blocked, config, "right"), useSkill(blocked, config, 1)],
+    });
+    expect(rejected.rejections).toContainEqual(
+      expect.objectContaining({ reason: "skill-unavailable" }),
+    );
+    expect(rejected.state.slices.skills.entries[0]!.phase).toBe("idle");
+    expect(rejected.state.slices.skills.entries[0]!.projection).toBeNull();
+    // Body is free even on reject (not rooted by a failed cast).
+    expect(findLocomotion(rejected.state.slices.locomotion, alpha)!.position.x).toBeGreaterThanOrEqual(
+      body.x,
+    );
+  });
+
+  it("allows placement through and onto bomb tiles (bombs do not block ray)", () => {
+    const config = zedDuel("zed-bomb-place");
+    const program = createDefaultMechanicsProgram();
+    const base = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const body = findLocomotion(base.slices.locomotion, alpha)!.position;
+    const bodyTile = tileOf(body);
+    const draft = cloneDraft(base);
+    draft.slices.bombs = {
+      nextId: 3,
+      items: [
+        {
+          id: 1,
+          ownerId: beta,
+          tile: { x: bodyTile.x + 1, y: bodyTile.y },
+          fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+          flameRange: 2,
+        },
+        {
+          id: 2,
+          ownerId: beta,
+          tile: { x: bodyTile.x + 3, y: bodyTile.y },
+          fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+          flameRange: 2,
+        },
+      ],
+    };
+    let state = program.restore(draft);
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    // Furthest free tile is still range 3 even with bombs on the path.
+    expect(state.slices.skills.entries[0]!.projection).toEqual(
+      tileCenter({ x: bodyTile.x + ZED_SHADOW_RANGE, y: bodyTile.y }),
+    );
+    // Bombs are untouched (no fuse rewrite, no extra plant).
+    expect(state.slices.bombs.items).toHaveLength(2);
+    expect(state.slices.bombs.items.map((b) => b.fuseMs)).toEqual([
+      BOMB_FUSE_MS - TICK_DURATION_MS * 2,
+      BOMB_FUSE_MS - TICK_DURATION_MS * 2,
+    ]);
+  });
+
+  it("keeps the body freely movable during the shadow window", () => {
+    const config = zedDuel("zed-free-move");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+    const bodyTile = tileOf(body);
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    const projection = state.slices.skills.entries[0]!.projection!;
+    expect(projection).toEqual(tileCenter({ x: bodyTile.x + ZED_SHADOW_RANGE, y: bodyTile.y }));
+
+    // Keep moving right for several ticks; body advances, projection stays fixed.
+    for (let i = 0; i < 8; i += 1) {
+      state = program.step(state, { commands: [] }).state;
+    }
+    const after = findLocomotion(state.slices.locomotion, alpha)!.position;
+    expect(after.x).toBeGreaterThan(body.x);
+    expect(state.slices.skills.entries[0]!.projection).toEqual(projection);
+    expect(state.slices.skills.entries[0]!.phase).toBe("channeling");
+  });
+
+  it("swaps body to projection on valid recast, clears projection, starts full CD", () => {
+    const config = zedDuel("zed-swap-valid");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    const projection = state.slices.skills.entries[0]!.projection!;
+    // Stop movement so body stays put; then recast.
+    state = program.step(state, {
+      commands: [release(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+
+    expect(findLocomotion(state.slices.locomotion, alpha)!.position).toEqual(projection);
+    expect(state.slices.skills.entries[0]).toMatchObject({
+      phase: "cooldown",
+      channelRemainingMs: 0,
+      cooldownRemainingMs: ZED_COOLDOWN_MS,
+      projection: null,
+    });
+  });
+
+  it("invalid recast does not teleport and uses fail cooldown", () => {
+    const config = zedDuel("zed-swap-invalid");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+    const solidTile = state.slices.arena.solid[0]!;
+
+    const draft = cloneDraft(state);
+    draft.slices.skills.entries[0] = {
+      competitorId: alpha,
+      skillId: ZED_LIVING_SHADOW_SKILL_ID,
+      phase: "channeling",
+      channelRemainingMs: TICK_DURATION_MS * 10,
+      cooldownRemainingMs: 0,
+      projection: { ...tileCenter(solidTile) },
+      bombEgressKeys: [],
+      aimDirection: "right",
+    };
+    state = program.restore(draft);
+    const completed = program.step(state, { commands: [useSkill(state, config)] });
+    expect(findLocomotion(completed.state.slices.locomotion, alpha)!.position).toEqual(body);
+    expect(completed.state.slices.skills.entries[0]).toMatchObject({
+      phase: "cooldown",
+      cooldownRemainingMs: ZED_FAIL_COOLDOWN_MS,
+      projection: null,
+    });
+  });
+
+  it("timeout without swap clears projection with fail CD and no teleport", () => {
+    const config = zedDuel("zed-timeout");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    // Activation-inclusive ticks: ZED_CHANNEL_MS / TICK = 100.
+    for (let tick = 2; tick < ZED_CHANNEL_MS / TICK_DURATION_MS; tick += 1) {
+      state = program.step(state, { commands: [] }).state;
+      expect(state.slices.skills.entries[0]!.phase).toBe("channeling");
+    }
+    const completed = program.step(state, { commands: [] });
+    // Free-move may have advanced body if intent stuck; release intent first.
+    // After timeout, skill is on fail CD and projection is cleared.
+    expect(completed.state.slices.skills.entries[0]).toMatchObject({
+      phase: "cooldown",
+      cooldownRemainingMs: ZED_FAIL_COOLDOWN_MS,
+      projection: null,
+    });
+    // Without a swap press, body never jumps to the projection tile.
+    const projectionTarget = tileCenter({
+      x: tileOf(body).x + ZED_SHADOW_RANGE,
+      y: tileOf(body).y,
+    });
+    expect(findLocomotion(completed.state.slices.locomotion, alpha)!.position).not.toEqual(
+      projectionTarget,
+    );
+  });
+
+  it("emits no skill-hit and does not plant a second bomb on activate", () => {
+    const config = zedDuel("zed-no-damage");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+
+    // Place rival on the shadow landing tile; shadow must not kill them.
+    const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+    const landing = tileCenter({
+      x: tileOf(body).x + ZED_SHADOW_RANGE,
+      y: tileOf(body).y,
+    });
+    const draft = cloneDraft(state);
+    const betaEntry = draft.slices.locomotion.entries.find((e) => e.competitorId === beta)!;
+    betaEntry.position = { ...landing };
+    state = program.restore(draft);
+
+    const activated = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    });
+    expect(activated.rejections).toEqual([]);
+    expect(findVitals(activated.state.slices.vitals, beta)?.alive).toBe(true);
+    expect(activated.state.slices.bombs.items).toHaveLength(0);
+    // Complete swap onto rival body (bodies never block) — still no skill-hit.
+    const swapped = program.step(activated.state, {
+      commands: [useSkill(activated.state, config)],
+    });
+    expect(findVitals(swapped.state.slices.vitals, beta)?.alive).toBe(true);
+    expect(swapped.events.every((e) => e.type !== "competitor-eliminated")).toBe(true);
+    expect(findLocomotion(swapped.state.slices.locomotion, alpha)!.position).toEqual(landing);
+  });
+
+  it("has no channel immunity during the free-move window (Ranni remains immune)", () => {
+    // Zed vulnerable while channeling.
+    {
+      const config = zedDuel("zed-no-immunity");
+      const program = createDefaultMechanicsProgram();
+      const alpha = config.seats[0]!.competitorId;
+      const beta = config.seats[1]!.competitorId;
+      let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+      const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+      const bodyTile = tileOf(body);
+      const draft = cloneDraft(state);
+      draft.slices.flames.items = [{
+        tile: bodyTile,
+        remainingMs: 600,
+        causes: [{ bombId: 7, ownerId: beta }],
+      }];
+      // Clear spawn protection so flame can kill.
+      draft.slices.vitals.entries = draft.slices.vitals.entries.map((row) =>
+        row.competitorId === alpha
+          ? { ...row, spawnProtectionRemainingMs: 0 }
+          : row
+      );
+      state = program.restore(draft);
+
+      const activated = program.step(state, {
+        commands: [useSkill(state, config)],
+      });
+      expect(activated.state.slices.skills.entries[0]).toMatchObject({
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: ZED_FAIL_COOLDOWN_MS,
+        projection: null,
+      });
+      expect(findVitals(activated.state.slices.vitals, alpha)?.alive).toBe(false);
+      expect(activated.events.some((event) =>
+        event.type === "competitor-eliminated" && event.competitorId === alpha
+      )).toBe(true);
+    }
+
+    // Ranni still immune while channeling (no global regression).
+    {
+      const config = ranniDuel("ranni-still-immune");
+      const program = createDefaultMechanicsProgram();
+      const alpha = config.seats[0]!.competitorId;
+      const beta = config.seats[1]!.competitorId;
+      let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+      const body = findLocomotion(state.slices.locomotion, alpha)!.position;
+      const bodyTile = tileOf(body);
+      const draft = cloneDraft(state);
+      draft.slices.flames.items = [{
+        tile: bodyTile,
+        remainingMs: 600,
+        causes: [{ bombId: 8, ownerId: beta }],
+      }];
+      draft.slices.vitals.entries = draft.slices.vitals.entries.map((row) =>
+        row.competitorId === alpha
+          ? { ...row, spawnProtectionRemainingMs: 0 }
+          : row
+      );
+      state = program.restore(draft);
+
+      const activated = program.step(state, {
+        commands: [useSkill(state, config)],
+      });
+      expect(activated.state.slices.skills.entries[0]!.phase).toBe("channeling");
+      expect(findVitals(activated.state.slices.vitals, alpha)?.alive).toBe(true);
+    }
+  });
+
+  it("restores channel/cooldown and rejects reuse during fail CD", () => {
+    const config = zedDuel("zed-restore-cd");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    // Timeout path → fail CD.
+    state = stepN(program, state, ZED_CHANNEL_MS / TICK_DURATION_MS);
+    expect(state.slices.skills.entries[0]!.phase).toBe("cooldown");
+    expect(state.slices.skills.entries[0]!.cooldownRemainingMs).toBeLessThanOrEqual(
+      ZED_FAIL_COOLDOWN_MS,
+    );
+    expect(program.restore(JSON.parse(JSON.stringify(state)))).toEqual(state);
+
+    const rejected = program.step(state, { commands: [useSkill(state, config)] });
+    expect(rejected.rejections).toContainEqual(
+      expect.objectContaining({ reason: "skill-unavailable" }),
+    );
   });
 });
 

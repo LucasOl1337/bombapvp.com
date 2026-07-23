@@ -276,6 +276,24 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).not.toContain("holdFrameIndex");
   });
 
+  it("limits dual-body projection presentation to Ice Blink and Living Shadow", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    const capability = main.match(
+      /const DUAL_BODY_PROJECTION_SKILL_IDS[\s\S]*?new Set\(\[([\s\S]*?)\]\);/,
+    );
+
+    expect(capability).not.toBeNull();
+    expect(capability?.[1]).toContain("RANNI_ICE_BLINK_SKILL_ID");
+    expect(capability?.[1]).toContain("ZED_LIVING_SHADOW_SKILL_ID");
+    expect(capability?.[1]).not.toContain("KILLER_BEE_WING_DASH_SKILL_ID");
+    expect(main).toMatch(
+      /DUAL_BODY_PROJECTION_SKILL_IDS\.has\(competitor\.skill\.id\)/,
+    );
+    expect(main).toContain("Living Shadow");
+    expect(main).toContain("projectionSkillId === RANNI_ICE_BLINK_SKILL_ID");
+    expect(main).toContain("projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID");
+  });
+
   it("does not tree-walk into legacy original-game asset roots", () => {
     const sources = walkFiles(join(ROOT, "src", "browser"))
       .filter((f) => f.endsWith(".ts") || f.endsWith(".css"))

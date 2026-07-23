@@ -13,6 +13,7 @@ import {
   RANNI_ICE_BLINK_SKILL_ID,
   THRESH_DEATH_SENTENCE_SKILL_ID,
   TICK_DURATION_MS,
+  ZED_LIVING_SHADOW_SKILL_ID,
 } from "../../contracts.ts";
 import type { CommandRejection } from "../../kernel/commands.ts";
 import type { TickFact } from "../../kernel/facts.ts";
@@ -73,7 +74,17 @@ export const THRESH_COOLDOWN_MS = 8_000 as const;
 export const THRESH_HOOK_RANGE = 4 as const;
 export const THRESH_MISS_COOLDOWN_MS = 4_000 as const;
 
-const MODULE_VERSION = "2.1.0";
+/**
+ * Living Shadow: place a fixed projection, free-move body for the window,
+ * recast swap. Success CD 7s; timeout / invalid swap fail CD 4s.
+ * Body stays vulnerable (no channel immunity) during the free-move window.
+ */
+export const ZED_CHANNEL_MS = 2_000 as const;
+export const ZED_COOLDOWN_MS = 7_000 as const;
+export const ZED_FAIL_COOLDOWN_MS = 4_000 as const;
+export const ZED_SHADOW_RANGE = 3 as const;
+
+const MODULE_VERSION = "2.2.0";
 const DIRECTIONS = new Set<Direction>(["up", "down", "left", "right"]);
 const PHASES = new Set<SkillEntry["phase"]>(["idle", "channeling", "cooldown"]);
 
@@ -82,6 +93,7 @@ const COOLDOWN_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
   [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_COOLDOWN_MS,
   [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_COOLDOWN_MS,
   [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_COOLDOWN_MS,
+  [ZED_LIVING_SHADOW_SKILL_ID]: ZED_COOLDOWN_MS,
 });
 
 const CHANNEL_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
@@ -89,6 +101,7 @@ const CHANNEL_BY_SKILL: Readonly<Record<SkillId, number>> = Object.freeze({
   [KILLER_BEE_WING_DASH_SKILL_ID]: KILLER_BEE_CHANNEL_MS,
   [CROCODILO_EMERALD_SURGE_SKILL_ID]: CROCODILO_CHANNEL_MS,
   [THRESH_DEATH_SENTENCE_SKILL_ID]: THRESH_CHANNEL_MS,
+  [ZED_LIVING_SHADOW_SKILL_ID]: ZED_CHANNEL_MS,
 });
 
 export function skillCooldownMs(skillId: SkillId): number {
@@ -190,6 +203,33 @@ function computeDashLanding(
     tile = next;
   }
   return tileCenter(lastGood);
+}
+
+/**
+ * Living Shadow placement: furthest free cardinal tile within range.
+ * Solids/crates stop the ray; bombs never block placement.
+ * Returns null when no valid tile exists (e.g. wall immediately adjacent).
+ */
+function computeShadowPlacement(
+  from: WorldPosition,
+  dir: Direction,
+  maxTiles: number,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+): WorldPosition | null {
+  let tile = tileOf(from);
+  let lastGood: TileCoord | null = null;
+  for (let step = 0; step < maxTiles; step += 1) {
+    const next = wrapTile({
+      x: tile.x + DIRECTION_DELTA[dir].x,
+      y: tile.y + DIRECTION_DELTA[dir].y,
+    });
+    const key = tileKey(next);
+    if (solid.has(key) || crates.has(key)) break;
+    lastGood = next;
+    tile = next;
+  }
+  return lastGood ? tileCenter(lastGood) : null;
 }
 
 /** Free tiles along a ray until wall/crate (and optional bomb). */
@@ -428,6 +468,21 @@ function beginSkill(
         rejections,
       };
     }
+    case ZED_LIVING_SHADOW_SKILL_ID: {
+      const landing = computeShadowPlacement(
+        loco.position, aim, ZED_SHADOW_RANGE, solid, crates,
+      );
+      if (!landing) {
+        rejections.push(reject(command, "skill-unavailable"));
+        return { entry, facts: [], rejections };
+      }
+      // Free-move window: do not suppress locomotion. Projection is fixed.
+      return {
+        entry: startChannel(entry, ZED_CHANNEL_MS, aim, landing),
+        facts: [],
+        rejections,
+      };
+    }
     default: {
       rejections.push(reject(command, "skill-unavailable"));
       return { entry, facts: [], rejections };
@@ -496,6 +551,10 @@ function completeSkill(
       }
       return { entry: cooldown(entry), facts, rejections: [] };
     }
+    case ZED_LIVING_SHADOW_SKILL_ID: {
+      // Completion is handled in tickChannel (swap vs timeout vs invalid).
+      return { entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS), facts, rejections: [] };
+    }
     default:
       return { entry: cooldown(entry), facts, rejections: [] };
   }
@@ -542,6 +601,57 @@ function tickChannel(
         ...entry,
         channelRemainingMs: remaining,
         projection: attempted,
+      }),
+      facts,
+      rejections,
+    };
+  }
+
+  // Zed Living Shadow: fixed projection, free-move body, recast swap.
+  if (entry.skillId === ZED_LIVING_SHADOW_SKILL_ID) {
+    const projection = entry.projection;
+    if (!projection) {
+      return { entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS), facts, rejections };
+    }
+    const canCompleteManually = entry.channelRemainingMs < ZED_CHANNEL_MS;
+    const swapRequested = Boolean(command) && canCompleteManually;
+    if (command && !canCompleteManually) {
+      rejections.push(reject(command, "skill-unavailable"));
+    }
+    const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
+
+    if (swapRequested) {
+      if (projectionCanFinish(ctx, projection, entry.bombEgressKeys)) {
+        // Valid swap: body teleports to projection; clear projection; full CD.
+        facts.push(movementFact(entry.competitorId, true, projection));
+        return {
+          entry: cooldown(entry, ZED_COOLDOWN_MS),
+          facts,
+          rejections,
+        };
+      }
+      // Invalid swap: no teleport; fail CD (half of success window policy).
+      return {
+        entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
+        facts,
+        rejections,
+      };
+    }
+
+    if (remaining === 0) {
+      // Timeout without swap: clear projection, fail CD, no teleport.
+      return {
+        entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
+        facts,
+        rejections,
+      };
+    }
+
+    // Free-move window: no skill-movement suppress; projection stays fixed.
+    return {
+      entry: freezeEntry({
+        ...entry,
+        channelRemainingMs: remaining,
       }),
       facts,
       rejections,
@@ -613,6 +723,27 @@ function initialSkills(config: MatchConfig): SkillsSlice {
 function runSkillsReset(ctx: SystemRunContext): SystemRunResult {
   if (factsOfKind(ctx.facts, "round-reset").length === 0) return {};
   return { writes: { skills: initialSkills(ctx.config) } };
+}
+
+function runSkillsDeathCleanup(ctx: SystemRunContext): SystemRunResult {
+  const skills = ctx.read("skills");
+  const vitals = ctx.read("vitals");
+  let changed = false;
+  const entries = skills.entries.map((entry) => {
+    if (
+      entry.skillId !== ZED_LIVING_SHADOW_SKILL_ID
+      || entry.phase !== "channeling"
+      || findVitals(vitals, entry.competitorId)?.alive !== false
+    ) {
+      return entry;
+    }
+    changed = true;
+    return cooldown(entry, ZED_FAIL_COOLDOWN_MS);
+  });
+  if (!changed) return {};
+  return {
+    writes: { skills: Object.freeze({ entries: Object.freeze(entries) }) },
+  };
 }
 
 function runSkills(ctx: SystemRunContext): SystemRunResult {
@@ -805,6 +936,13 @@ export const skillsModule: ModuleSpec = Object.freeze({
       ] as const),
       writes: Object.freeze(["skills"] as const),
       run: runSkills,
+    }),
+    Object.freeze({
+      id: "skills-death-cleanup-system",
+      phase: "round" as const,
+      reads: Object.freeze(["skills", "vitals"] as const),
+      writes: Object.freeze(["skills"] as const),
+      run: runSkillsDeathCleanup,
     }),
   ]),
   codecs: Object.freeze({

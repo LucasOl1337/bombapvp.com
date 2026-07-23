@@ -22,5 +22,6 @@ replays. Numeric projection is advisory: the final curation gate rejected
 causally ambiguous or orientation-biased results. Only Ranni's danger blink is
 active in runtime knowledge.
 
-Compatibility for every artifact: mastery schema 1, technique schema 1,
-`kernel-0.10.0`, `mechanics-v5`, and `content-prototype-arena-v1`.
+Compatibility recorded by this campaign: mastery schema 1, technique schema 1,
+`kernel-0.10.0`, `mechanics-v5`, and `content-prototype-arena-v1`. Runtime promotion
+may require a separately reviewed compatibility refresh.
