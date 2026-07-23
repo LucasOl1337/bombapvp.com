@@ -13,7 +13,7 @@ import { findLocomotion } from "../src/kernel/world-state.ts";
 function skillDuel(skillId: SkillId, seed = `multi-${skillId}`): MatchConfig {
   return createMatchConfig({
     seed,
-    mechanicsRevision: "mechanics-v5",
+    mechanicsRevision: "mechanics-v6",
     contentRevision: "content-prototype-arena-v1",
     roundDurationMs: 90_000,
     targetRoundWins: 2,

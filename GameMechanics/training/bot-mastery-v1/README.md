@@ -23,4 +23,4 @@ causally ambiguous or orientation-biased results. Only Ranni's danger blink is
 active in runtime knowledge.
 
 Compatibility for every artifact: mastery schema 1, technique schema 1,
-`kernel-0.10.0`, `mechanics-v5`, and `content-prototype-arena-v1`.
+`kernel-0.10.0`, `mechanics-v6`, and `content-prototype-arena-v1`.

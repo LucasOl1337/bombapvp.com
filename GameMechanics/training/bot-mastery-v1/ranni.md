@@ -3,7 +3,7 @@
 - Private learner: Bomb (`bomb-mastery-v1`); fixed opponent: V3.
 - Matches: 96 executions; 48 evaluated matches and 48 exact replays.
 - Seeds: `mastery-ranni-v1-seed-01` through `mastery-ranni-v1-seed-12`, with learner side alternating 0/1.
-- Versions: mastery schema 1, technique schema 1, `kernel-0.10.0`, `mechanics-v5`, `content-prototype-arena-v1`.
+- Versions: mastery schema 1, technique schema 1, `kernel-0.10.0`, `mechanics-v6`, `content-prototype-arena-v1`.
 
 ## Authored hypotheses and observed evidence
 

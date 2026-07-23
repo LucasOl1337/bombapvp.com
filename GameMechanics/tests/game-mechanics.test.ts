@@ -2996,7 +2996,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(plantedUnder.state.slices.bombs.items).toHaveLength(1);
   });
 
-  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v5)", () => {
+  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v6)", () => {
     const config = localDuel("flame-overlap-30");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
