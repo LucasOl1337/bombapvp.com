@@ -1,4 +1,4 @@
-import { CHAMPION_MEMBERSHIP, type ChampionSlug } from "../../../../Champions/membership.ts";
+import { CHAMPION_MEMBERSHIP } from "../../../../Champions/membership.ts";
 import type { BotProfileId } from "../../bots/index.ts";
 import type {
   CompetitorId,
@@ -36,9 +36,15 @@ import type {
   TechniqueEvaluationSummary,
 } from "./contracts.ts";
 
+export type CampaignChampionSlug =
+  | "ranni"
+  | "killer-bee"
+  | "crocodilo-arcano"
+  | "thresh";
+
 export type CampaignCandidateSpec = Readonly<{
   campaignId: string;
-  championSlug: ChampionSlug;
+  championSlug: CampaignChampionSlug;
   learnerProfileId: BotProfileId;
   opponentProfileId: BotProfileId;
   candidate: TechniqueCandidate;
@@ -83,7 +89,7 @@ type PendingOpportunity = {
   opponentTile: TileCoord;
 };
 
-const CHANNEL_TICKS: Readonly<Record<ChampionSlug, number>> = Object.freeze({
+const CHANNEL_TICKS: Readonly<Record<CampaignChampionSlug, number>> = Object.freeze({
   ranni: 125,
   "killer-bee": 12,
   "crocodilo-arcano": 80,
@@ -118,7 +124,7 @@ function competitor(snapshot: GameSnapshot, id: CompetitorId) {
 }
 
 function opportunitySucceeded(
-  slug: ChampionSlug,
+  slug: CampaignChampionSlug,
   pending: PendingOpportunity,
   snapshot: GameSnapshot,
   learnerId: CompetitorId,

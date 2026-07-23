@@ -680,8 +680,8 @@ const championActionAnims = new Map<CompetitorId, TimedChampionAction>();
 /** Previous skill phase for detecting a new skill presentation sequence. */
 const prevChampionSkillPhase = new Map<CompetitorId, string>();
 /**
- * Previous skill projection pose for dual-body presentation
- * (Ice Blink spirit, Living Shadow clone, future projection skills).
+ * Previous skill projection pose for the explicitly allowlisted dual-body skills:
+ * Ice Blink's spirit and Living Shadow's clone. Other projections stay hidden.
  * Map key kept as ranniProjectionPose for existing visual-adapter tests.
  */
 const ranniProjectionPose = new Map<CompetitorId, {
@@ -2860,9 +2860,8 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       // Soft accent silhouette glow — pops spectral sprites on light stone.
       context.save();
       if (entry.spectral) {
-        // Spectral projection: dual-body ghost from skill.projection state.
-        // Ice Blink keeps cool spirit tint; Living Shadow (and fallback) uses
-        // a darker crimson recolor so future Zed art can share this seam.
+        // Spectral projection: dual-body ghost from allowlisted skill.projection state.
+        // Ice Blink keeps its cool spirit tint; Living Shadow uses crimson.
         const iceSpirit = entry.projectionSkillId === RANNI_ICE_BLINK_SKILL_ID;
         const shadowClone = entry.projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID;
         context.globalCompositeOperation = "lighter";

@@ -50,6 +50,7 @@ const PRESENTATION_BY_SLUG: Partial<Record<ChampionSlug, LauncherPresentation>> 
   "killer-bee": Object.freeze({ scale: 1.38, offsetXPercent: 0, offsetYPercent: 4 }),
   "crocodilo-arcano": Object.freeze({ scale: 1.3, offsetXPercent: 0, offsetYPercent: 2 }),
   thresh: Object.freeze({ scale: 0.86, offsetXPercent: 0, offsetYPercent: -1 }),
+  zed: Object.freeze({ scale: 0.9, offsetXPercent: 0, offsetYPercent: 0 }),
 };
 
 // Vite requires static glob strings (no runtime template interpolation).

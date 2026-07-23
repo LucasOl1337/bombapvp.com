@@ -24,7 +24,7 @@ O laboratorio mostra perfil, versao do modelo, maestria, tecnica selecionada, co
 
 Pausa e retomada usam o facade atual; `Reiniciar` repete a mesma seed, recria sink/memoria/PRNG e o transcript volta a ser reproduzivel, enquanto `Nova partida` avanca para uma nova seed deterministica. A velocidade 1x/2x/4x multiplica apenas quantos ticks fixos o adaptador consome por tempo de parede e nunca altera a duracao ou o estado interno de um tick.
 
-Campanhas offline usam `GameMechanics/scripts/run-bot-mastery-campaign.ts`, segmentos JSONL single-writer e o mesmo driver/GameMechanics. O projetor numerico nunca grava o modelo: `project-bot-mastery-campaign.ts` reaplica gates e a curadoria revisada e uma mudanca normal de fonte. O primeiro ciclo esta documentado em `GameMechanics/training/bot-mastery-v1/`; somente `ranni.danger-blink.v1` passou a curadoria causal final.
+Campanhas offline usam `GameMechanics/scripts/run-bot-mastery-campaign.ts`, segmentos JSONL single-writer e o mesmo driver/GameMechanics. O projetor numerico nunca grava o modelo: `project-bot-mastery-campaign.ts` reaplica gates e a curadoria revisada e uma mudanca normal de fonte. O primeiro ciclo esta documentado em `GameMechanics/training/bot-mastery-v1/`; somente `ranni.danger-blink.v1` passou a curadoria causal final. Zed fica fora das campanhas deste vertical slice, e a politica base dos bots nao faz o recast de Living Shadow.
 
 O hostname mantem o contrato existente: `bombapvp.com` usa PT-BR e `bombpvp.com` usa EN.
 
@@ -43,14 +43,19 @@ com um segundo `R` ou ao final da janela de 2,5 segundos. A projecao se move a
 metade da velocidade normal; a habilidade continua exigindo um destino final
 valido.
 
-## Zed: Living Shadow (mecanica apenas; fora do elenco publico)
+## Zed: Living Shadow (vertical slice local / playtest)
 
-Skill id `zed-living-shadow`. Primeiro `R` coloca uma projecao fixa no tile
-cardinal livre mais distante ate alcance 3 (solidos e caixas param o raio;
-bombas nao bloqueiam a colocacao). O corpo continua livre por 2000 ms e
-**nao** recebe imunidade de canalizacao. Segundo `R` troca o corpo para a
-projecao se o destino for valido e entra em cooldown de 7000 ms; troca invalida
-ou timeout sem troca limpam a projecao e usam cooldown de falha de 4000 ms.
-A sombra sozinha nao causa `skill-hit`, nao altera fusivel de bomba e nao planta
-segunda bomba na v1. O id existe no motor para testes/config; nao ha Champion
-Zed no elenco publico/default.
+Skill id `zed-living-shadow`. Champion slug `zed` em `Champions/zed/` — selecionavel
+para jogadores humanos no character select ou via `?p1=zed` / `?p2=zed`. **Nao**
+e seat default do lancamento (`ranni` / `killer-bee` permanecem). A postura de
+uso e publicacao fica em `Champions/zed/README.md`.
+
+Primeiro `R` coloca uma projecao fixa no tile cardinal livre mais distante ate
+alcance 3 (solidos e caixas param o raio; bombas nao bloqueiam a colocacao). O
+corpo continua livre por 2000 ms e **nao** recebe imunidade de canalizacao.
+Segundo `R` troca o corpo para a projecao se o destino for valido e entra em
+cooldown de 7000 ms; troca invalida, timeout sem troca ou **morte** limpam a
+projecao e usam cooldown de falha de 4000 ms. A sombra sozinha nao causa
+`skill-hit`, nao altera fusivel de bomba e nao planta segunda bomba na v1.
+Apresentacao dual-body carmesim so para seats com `zed-living-shadow` — projecao
+generica de outros Champions nao cria fantasma de Zed.

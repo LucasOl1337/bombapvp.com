@@ -36,7 +36,7 @@ export const SKILL_IDS = [
   "killer-bee-wing-dash",
   "crocodilo-emerald-surge",
   "thresh-death-sentence",
-  /** Mechanics-only; not registered on the public roster until art/IP ship gate. */
+  /** Living Shadow skill for the Zed vertical slice (not a default seat). */
   "zed-living-shadow",
 ] as const;
 
