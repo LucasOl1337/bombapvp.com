@@ -24,7 +24,7 @@ O laboratorio mostra perfil, versao do modelo, maestria, tecnica selecionada, co
 
 Pausa e retomada usam o facade atual; `Reiniciar` repete a mesma seed, recria sink/memoria/PRNG e o transcript volta a ser reproduzivel, enquanto `Nova partida` avanca para uma nova seed deterministica. A velocidade 1x/2x/4x multiplica apenas quantos ticks fixos o adaptador consome por tempo de parede e nunca altera a duracao ou o estado interno de um tick.
 
-Campanhas offline usam `GameMechanics/scripts/run-bot-mastery-campaign.ts`, segmentos JSONL single-writer e o mesmo driver/GameMechanics. O projetor numerico nunca grava o modelo: `project-bot-mastery-campaign.ts` reaplica gates e a curadoria revisada e uma mudanca normal de fonte. O primeiro ciclo esta documentado em `GameMechanics/training/bot-mastery-v1/`; somente `ranni.danger-blink.v1` passou a curadoria causal final.
+Campanhas offline usam `GameMechanics/scripts/run-bot-mastery-campaign.ts`, segmentos JSONL single-writer e o mesmo driver/GameMechanics. O projetor numerico nunca grava o modelo: `project-bot-mastery-campaign.ts` reaplica gates e a curadoria revisada e uma mudanca normal de fonte. O primeiro ciclo esta documentado em `GameMechanics/training/bot-mastery-v1/`; somente `ranni.danger-blink.v1` passou a curadoria causal final. Zed fica fora das campanhas deste vertical slice, e a politica base dos bots nao faz o recast de Living Shadow.
 
 O hostname mantem o contrato existente: `bombapvp.com` usa PT-BR e `bombpvp.com` usa EN.
 
@@ -46,9 +46,9 @@ valido.
 ## Zed: Living Shadow (vertical slice local / playtest)
 
 Skill id `zed-living-shadow`. Champion slug `zed` em `Champions/zed/` — selecionavel
-no character select ou via `?p1=zed` / `?p2=zed`. **Nao** e seat default do
-lancamento (`ranni` / `killer-bee` permanecem). Postura: protótipo fan restrito
-nao monetizado; nao autoriza deploy/publicidade comercial sem ordem separada.
+para jogadores humanos no character select ou via `?p1=zed` / `?p2=zed`. **Nao**
+e seat default do lancamento (`ranni` / `killer-bee` permanecem). A postura de
+uso e publicacao fica em `Champions/zed/README.md`.
 
 Primeiro `R` coloca uma projecao fixa no tile cardinal livre mais distante ate
 alcance 3 (solidos e caixas param o raio; bombas nao bloqueiam a colocacao). O

@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { getLauncherPreview } from "../../Champions/launcher-previews.ts";
 import { CHAMPION_MEMBERSHIP } from "../../Champions/membership.ts";
 import {
   createBrowserMatchConfiguration,
@@ -53,6 +54,20 @@ describe("Zed Living Shadow playable package", () => {
     expect(animationFiles.some((f) => f.startsWith("attack-"))).toBe(true);
     // Attack frames are body-only (bomb is engine-drawn); filenames never encode bomb art.
     expect(animationFiles.every((f) => !f.includes("bomb"))).toBe(true);
+
+    const launcher = getLauncherPreview(CHAMPION_MEMBERSHIP.zed.characterId);
+    expect(launcher?.presentation).toEqual({
+      scale: 0.9,
+      offsetXPercent: 0,
+      offsetYPercent: 0,
+    });
+    expect(launcher?.clips.map(({ name, frames }) => [name, frames.length])).toEqual([
+      ["idle", 6],
+      ["walk", 8],
+      ["run", 8],
+      ["cast", 8],
+      ["attack", 8],
+    ]);
   });
 
   it("is selectable via URL without changing default ranni/killer-bee seats", () => {

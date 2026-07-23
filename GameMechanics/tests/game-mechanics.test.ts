@@ -5414,7 +5414,7 @@ describe("Ranni Ice Blink", () => {
   });
 });
 
-// ── Zed Living Shadow (mechanics-only skill id; no public champion) ───────────
+// ── Zed Living Shadow mechanics ─────────────────────────────────────────────
 
 describe("Zed Living Shadow", () => {
   function useSkill(state: WorldState, config: MatchConfig, sequence = 0) {
