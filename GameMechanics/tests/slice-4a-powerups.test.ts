@@ -965,6 +965,7 @@ describe("Slice 4A — powerups profundos e progressao unica (Decision 009)", ()
               tile: freezeTile({ x: 1, y: 1 }),
               fuseMs: 1_000,
               flameRange: 1,
+          echo: false,
             },
           ],
         },

@@ -113,6 +113,7 @@ function tacticalSnapshot(
           tile: Object.freeze({ ...selfTile }),
           fuseMs: 1_000,
           flameRange: 2,
+          echo: false,
         })])
       : Object.freeze([]),
   });

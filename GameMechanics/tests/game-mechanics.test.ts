@@ -56,6 +56,7 @@ import {
   bodyOverlapsTile,
   bodyTileOverlapArea,
   centralMirrorTile,
+  countActiveBombs,
   createArenaTiles,
   freezePosition,
   freezeTile,
@@ -1928,6 +1929,7 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
             tile: freezeTile({ x: 1, y: 1 }),
             fuseMs: 20,
             flameRange: 2,
+          echo: false,
           },
           {
             id: 2,
@@ -1935,6 +1937,7 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
             tile: freezeTile({ x: 2, y: 1 }),
             fuseMs: 1_000,
             flameRange: 2,
+          echo: false,
           },
           {
             id: 3,
@@ -1942,6 +1945,7 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
             tile: freezeTile({ x: 4, y: 1 }),
             fuseMs: 1_000,
             flameRange: 2,
+          echo: false,
           },
         ],
       },
@@ -2030,6 +2034,7 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
             tile: freezeTile({ x: 1, y: 1 }),
             fuseMs: 20,
             flameRange: 2,
+          echo: false,
           },
           {
             id: 2,
@@ -2037,6 +2042,7 @@ describe("Slice 1 — kernel puro MechanicsProgram", () => {
             tile: freezeTile({ x: 3, y: 1 }),
             fuseMs: 20,
             flameRange: 2,
+          echo: false,
           },
         ],
       },
@@ -3050,6 +3056,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
               tile: freezeTile({ x: 5, y: 1 }),
               fuseMs: 20,
               flameRange: 2,
+          echo: false,
             },
           ],
         },
@@ -3223,6 +3230,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
                     tile: freezeTile({ x: 4, y: 1 }),
                     fuseMs: TICK_DURATION_MS,
                     flameRange: 1,
+          echo: false,
                   },
                 ],
               },
@@ -3607,6 +3615,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
             tile: freezeTile(tile),
             fuseMs: 20,
             flameRange: 2,
+          echo: false,
           },
         ],
       },
@@ -3952,6 +3961,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: freezeTile({ x: 2, y: 1 }),
           fuseMs: 40,
           flameRange: 1,
+          echo: false,
         }],
       };
       draft.slices.intent.entries[0]!.pressedDirections = ["right"];
@@ -4422,6 +4432,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: { x: path0.x, y: path0.y },
           fuseMs: 1_000,
           flameRange: 2,
+          echo: false,
         }],
       },
     });
@@ -4458,6 +4469,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: bombTile!,
           fuseMs: 20,
           flameRange: 2,
+          echo: false,
         }],
       },
     });
@@ -4550,6 +4562,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: origin!,
           fuseMs: 20,
           flameRange: 2,
+          echo: false,
         }],
       },
       locomotion: {
@@ -4590,6 +4603,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: { x: path0.x, y: path0.y },
           fuseMs: 1_800,
           flameRange: 2,
+          echo: false,
         }],
       },
     });
@@ -4930,6 +4944,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
           tile: { x: path0.x, y: path0.y },
           fuseMs: 20,
           flameRange: 2,
+          echo: false,
         }],
       },
     });
@@ -5286,6 +5301,7 @@ describe("Ranni Ice Blink", () => {
         // Restored active bombs have already consumed the activation tick.
         fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
         flameRange: 2,
+          echo: false,
       }],
     };
     draft.slices.skills.entries[0] = {
@@ -5546,6 +5562,7 @@ describe("Zed Living Shadow", () => {
           tile: { x: bodyTile.x + 1, y: bodyTile.y },
           fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
           flameRange: 2,
+          echo: false,
         },
         {
           id: 2,
@@ -5553,6 +5570,7 @@ describe("Zed Living Shadow", () => {
           tile: { x: bodyTile.x + 3, y: bodyTile.y },
           fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
           flameRange: 2,
+          echo: false,
         },
       ],
     };
@@ -5803,6 +5821,204 @@ describe("Zed Living Shadow", () => {
     expect(rejected.rejections).toContainEqual(
       expect.objectContaining({ reason: "skill-unavailable" }),
     );
+  });
+
+  it("plants a free echo bomb at the projection tile with shared owner and fuse", () => {
+    const config = zedDuel("zed-echo-plant");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const seatId = config.seats[0]!.seatId;
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    // Stop so body stays put for a clean body-tile plant.
+    state = program.step(state, {
+      commands: [release(state, config, "right")],
+    }).state;
+    const bodyTile = tileOf(findLocomotion(state.slices.locomotion, alpha)!.position);
+    const projection = state.slices.skills.entries[0]!.projection!;
+    const shadowTile = tileOf(projection);
+
+    const planted = program.step(state, {
+      commands: [{
+        tick: state.tick,
+        sequence: 0,
+        seatId,
+        command: { type: "place-bomb" },
+      }],
+    });
+    state = planted.state;
+    expect(planted.rejections).toEqual([]);
+    expect(state.slices.bombs.items).toHaveLength(2);
+    const bodyBomb = state.slices.bombs.items.find((b) =>
+      b.tile.x === bodyTile.x && b.tile.y === bodyTile.y
+    );
+    const echoBomb = state.slices.bombs.items.find((b) =>
+      b.tile.x === shadowTile.x && b.tile.y === shadowTile.y
+    );
+    // Fuse advances once in the same tick after placement (bomb-fuse system).
+    const fuseAfterPlace = BOMB_FUSE_MS - TICK_DURATION_MS;
+    expect(bodyBomb).toMatchObject({
+      ownerId: alpha,
+      fuseMs: fuseAfterPlace,
+      echo: false,
+    });
+    expect(echoBomb).toMatchObject({
+      ownerId: alpha,
+      fuseMs: fuseAfterPlace,
+      flameRange: bodyBomb!.flameRange,
+      echo: true,
+    });
+    // Free echo does not consume a second capacity slot (maxBombs default 1).
+    expect(countActiveBombs(state.slices.bombs, alpha)).toBe(1);
+    expect(planted.events.filter((e) => e.type === "bomb-placed")).toHaveLength(2);
+  });
+
+  it("skips illegal echo without cancelling the body plant", () => {
+    const config = zedDuel("zed-echo-blocked");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const beta = config.seats[1]!.competitorId;
+    const seatId = config.seats[0]!.seatId;
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    state = program.step(state, {
+      commands: [release(state, config, "right")],
+    }).state;
+    const bodyTile = tileOf(findLocomotion(state.slices.locomotion, alpha)!.position);
+    const shadowTile = tileOf(state.slices.skills.entries[0]!.projection!);
+
+    // Occupy the shadow tile with a rival bomb so echo is illegal.
+    const draft = cloneDraft(state);
+    draft.slices.bombs = {
+      nextId: 2,
+      items: [{
+        id: 1,
+        ownerId: beta,
+        tile: { ...shadowTile },
+        fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+        flameRange: 2,
+        echo: false,
+      }],
+    };
+    state = program.restore(draft);
+
+    const planted = program.step(state, {
+      commands: [{
+        tick: state.tick,
+        sequence: 0,
+        seatId,
+        command: { type: "place-bomb" },
+      }],
+    });
+    expect(planted.rejections).toEqual([]);
+    expect(planted.state.slices.bombs.items).toHaveLength(2);
+    const bodyBomb = planted.state.slices.bombs.items.find((b) =>
+      b.ownerId === alpha
+    );
+    expect(bodyBomb).toMatchObject({
+      tile: bodyTile,
+      echo: false,
+      fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+    });
+    // Rival bomb still on shadow tile; no second alpha bomb.
+    expect(
+      planted.state.slices.bombs.items.filter((b) => b.ownerId === alpha),
+    ).toHaveLength(1);
+    expect(countActiveBombs(planted.state.slices.bombs, alpha)).toBe(1);
+  });
+
+  it("keeps echo bombs through swap and chains like normal ordnance", () => {
+    const config = zedDuel("zed-echo-swap-chain");
+    const program = createDefaultMechanicsProgram();
+    let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+    const alpha = config.seats[0]!.competitorId;
+    const seatId = config.seats[0]!.seatId;
+
+    state = program.step(state, {
+      commands: [press(state, config, "right"), useSkill(state, config, 1)],
+    }).state;
+    state = program.step(state, {
+      commands: [release(state, config, "right")],
+    }).state;
+    const projection = state.slices.skills.entries[0]!.projection!;
+
+    state = program.step(state, {
+      commands: [{
+        tick: state.tick,
+        sequence: 0,
+        seatId,
+        command: { type: "place-bomb" },
+      }],
+    }).state;
+    expect(state.slices.bombs.items).toHaveLength(2);
+
+    // Valid swap does not clear existing bombs.
+    state = program.step(state, {
+      commands: [useSkill(state, config)],
+    }).state;
+    expect(findLocomotion(state.slices.locomotion, alpha)!.position).toEqual(projection);
+    expect(state.slices.skills.entries[0]!.projection).toBeNull();
+    expect(state.slices.bombs.items).toHaveLength(2);
+    expect(state.slices.bombs.items.every((b) => b.ownerId === alpha)).toBe(true);
+
+    // Advance fuse until both detonate; both produce explosions.
+    let exploded = 0;
+    for (let i = 0; i < BOMB_FUSE_MS / TICK_DURATION_MS + 2; i += 1) {
+      const stepped = program.step(state, { commands: [] });
+      state = stepped.state;
+      exploded += stepped.events.filter((e) => e.type === "bomb-exploded").length;
+    }
+    expect(exploded).toBeGreaterThanOrEqual(2);
+    expect(state.slices.bombs.items).toHaveLength(0);
+  });
+
+  it("does not echo plants for non-Living-Shadow seats or outside channel", () => {
+    // Killer Bee / Ranni-style: no dual plant.
+    {
+      const config = ranniDuel("ranni-no-echo");
+      const program = createDefaultMechanicsProgram();
+      let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+      const alpha = config.seats[0]!.competitorId;
+      const seatId = config.seats[0]!.seatId;
+      state = program.step(state, {
+        commands: [useSkill(state, config, 1)],
+      }).state;
+      expect(state.slices.skills.entries[0]!.phase).toBe("channeling");
+      state = program.step(state, {
+        commands: [{
+          tick: state.tick,
+          sequence: 0,
+          seatId,
+          command: { type: "place-bomb" },
+        }],
+      }).state;
+      expect(state.slices.bombs.items).toHaveLength(1);
+      expect(state.slices.bombs.items[0]!.echo).toBe(false);
+      expect(countActiveBombs(state.slices.bombs, alpha)).toBe(1);
+    }
+    // Zed outside channel: body only.
+    {
+      const config = zedDuel("zed-no-channel-echo");
+      const program = createDefaultMechanicsProgram();
+      let state = asPlayingWorld(program, program.initial(config), { arena: { crates: [] } });
+      const seatId = config.seats[0]!.seatId;
+      state = program.step(state, {
+        commands: [{
+          tick: state.tick,
+          sequence: 0,
+          seatId,
+          command: { type: "place-bomb" },
+        }],
+      }).state;
+      expect(state.slices.bombs.items).toHaveLength(1);
+      expect(state.slices.bombs.items[0]!.echo).toBe(false);
+    }
   });
 });
 

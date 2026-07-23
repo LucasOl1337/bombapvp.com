@@ -56,6 +56,11 @@ corpo continua livre por 2000 ms e **nao** recebe imunidade de canalizacao.
 Segundo `R` troca o corpo para a projecao se o destino for valido e entra em
 cooldown de 7000 ms; troca invalida, timeout sem troca ou **morte** limpam a
 projecao e usam cooldown de falha de 4000 ms. A sombra sozinha nao causa
-`skill-hit`, nao altera fusivel de bomba e nao planta segunda bomba na v1.
-Apresentacao dual-body carmesim so para seats com `zed-living-shadow` — projecao
-generica de outros Champions nao cria fantasma de Zed.
+`skill-hit` e nao reescreve fusivel de bomba. Enquanto a canalizacao estiver
+ativa, cada plantio de bomba aceite no corpo tambem tenta um plantio eco no tile
+da sombra no mesmo tick: mesmo dono e fusivel inicial, comportamento normal de
+explosao/chama/cadeia, sem consumir slot extra de `maxBombs`. Eco ilegal (bomba,
+solido, caixa ou tile invalido) e ignorado e nao cancela o plantio do corpo.
+Apresentacao dual-body carmesim so para seats com `zed-living-shadow` — a sombra
+fixa espelha facing e familia de acao do corpo (idle/cast/plant/walk) sem
+transladar; projecao generica de outros Champions nao cria fantasma de Zed.

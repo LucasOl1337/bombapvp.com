@@ -10,21 +10,22 @@ Assassino de sombra com presença dupla — máscara clássica, fendas âmbar, p
 
 ## Animation density (installed)
 
-O pacote parte de `bombpvp-highframe-league-roster-v1`; as lacunas direcionais
-foram preenchidas e normalizadas no bundle final.
+Pacote 160×160 com poses limpas, fundo transparente e fases de membro legíveis
+(edit-chain a partir da identidade aprovada). QA exige energia de movimento e
+integridade single-pose em `GameMechanics/tests/zed-sprite-assets.test.ts`.
 
 | Slot | Frames / dir | Notes |
 | --- | --- | --- |
-| idle | 6 | S/E/N/W, normalizado sobre os estáticos direcionais aprovados |
-| walk | 8 | S/E/N/W, ciclo direcional normalizado |
-| run | 8 | S/E/N/W, ciclo direcional acelerado |
-| cast | 8 | S/E/N/W, pulso direcional da projeção |
-| attack | 8 | S/E/N/W, avanço direcional sem bomba |
-| death | 8 | S/E/N/W, queda direcional com dissipação |
+| idle | 6 | S/E/N/W, bob / micro-fase |
+| walk | 8 | S/E/N/W, passadas alternadas legíveis |
+| run | 8 | S/E/N/W, ciclo acelerado |
+| cast | 8 | S/E/N/W, antecipação → ação → recuperação |
+| attack | 8 | S/E/N/W, plantio/golpe sem sprite de bomba |
+| death | 8 | S/E/N/W, queda / dissipação |
 
-A apresentação de Living Shadow recolore os frames do corpo em carmesim no
-canvas, sem um segundo PNG de identidade. Frames de ataque/plantio não contêm a
-bomba, que é desenhada pela engine.
+Living Shadow: projeção fixa no tile, carmesim no canvas, espelha facing e
+família de ação do corpo (idle/walk/run/cast/plant/recovery) sem transladar.
+Eco de bomba no tile da sombra enquanto canaliza — ver `docs/gameplay.md`.
 
 ## Posture
 

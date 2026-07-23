@@ -84,7 +84,7 @@ export const ZED_COOLDOWN_MS = 7_000 as const;
 export const ZED_FAIL_COOLDOWN_MS = 4_000 as const;
 export const ZED_SHADOW_RANGE = 3 as const;
 
-const MODULE_VERSION = "2.2.0";
+const MODULE_VERSION = "2.3.0";
 const DIRECTIONS = new Set<Direction>(["up", "down", "left", "right"]);
 const PHASES = new Set<SkillEntry["phase"]>(["idle", "channeling", "cooldown"]);
 
@@ -621,7 +621,16 @@ function tickChannel(
     const remaining = Math.max(0, entry.channelRemainingMs - TICK_DURATION_MS);
 
     if (swapRequested) {
-      if (projectionCanFinish(ctx, projection, entry.bombEgressKeys)) {
+      // Own bombs (body plant underfoot + free Living Shadow echo) never block
+      // the swap landing — same-owner ordnance is intentional on the shadow tile.
+      const ownBombKeys = ctx
+        .read("bombs")
+        .items.filter((bomb) => bomb.ownerId === entry.competitorId)
+        .map((bomb) => tileKey(bomb.tile));
+      const swapEgress = Object.freeze([
+        ...new Set([...entry.bombEgressKeys, ...ownBombKeys]),
+      ]);
+      if (projectionCanFinish(ctx, projection, swapEgress)) {
         // Valid swap: body teleports to projection; clear projection; full CD.
         facts.push(movementFact(entry.competitorId, true, projection));
         return {

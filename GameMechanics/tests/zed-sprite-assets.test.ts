@@ -169,4 +169,94 @@ describe("Zed sprite asset QA", () => {
       );
     }
   });
+
+  it("requires perceptible motion energy on locomotion and cast families", () => {
+    // Calibrated against shipped Killer Bee: distinct limb phases without multi-pose sheets.
+    // Mean consecutive opaque-sample channel delta must clear a readable floor.
+    const sequences: ReadonlyArray<{
+      action: (typeof ACTIONS)[number];
+      direction: (typeof DIRECTIONS)[number];
+      minMeanDelta: number;
+      minUnique: number;
+    }> = [
+      { action: "walk", direction: "south", minMeanDelta: 18, minUnique: 4 },
+      { action: "run", direction: "south", minMeanDelta: 18, minUnique: 4 },
+      { action: "cast", direction: "south", minMeanDelta: 16, minUnique: 3 },
+      { action: "attack", direction: "south", minMeanDelta: 16, minUnique: 3 },
+      { action: "walk", direction: "east", minMeanDelta: 16, minUnique: 3 },
+      { action: "cast", direction: "east", minMeanDelta: 16, minUnique: 3 },
+      { action: "walk", direction: "west", minMeanDelta: 16, minUnique: 3 },
+      { action: "walk", direction: "north", minMeanDelta: 12, minUnique: 3 },
+    ];
+
+    for (const { action, direction, minMeanDelta, minUnique } of sequences) {
+      const count = FRAME_COUNTS[action];
+      const frames: DecodedPng[] = [];
+      const hashes = new Set<string>();
+      for (let index = 0; index < count; index += 1) {
+        const path = join(ANIMATION_ROOT, `${action}-${direction}-${index}.png`);
+        const encoded = readFileSync(path);
+        hashes.add(encoded.toString("hex", 0, Math.min(encoded.length, 64)) + String(encoded.length));
+        frames.push(decodeRgbaPng(path));
+      }
+      expect(hashes.size, `${action}-${direction} unique frames`).toBeGreaterThanOrEqual(minUnique);
+
+      const deltas: number[] = [];
+      for (let index = 0; index < frames.length - 1; index += 1) {
+        const left = frames[index]!;
+        const right = frames[index + 1]!;
+        let sum = 0;
+        let samples = 0;
+        const pixels = left.width * left.height;
+        for (let pixel = 0; pixel < pixels; pixel += 1) {
+          const offset = pixel * 4;
+          const leftAlpha = left.rgba[offset + 3]!;
+          const rightAlpha = right.rgba[offset + 3]!;
+          if (leftAlpha <= 24 && rightAlpha <= 24) continue;
+          samples += 1;
+          sum +=
+            (Math.abs(left.rgba[offset]! - right.rgba[offset]!) +
+              Math.abs(left.rgba[offset + 1]! - right.rgba[offset + 1]!) +
+              Math.abs(left.rgba[offset + 2]! - right.rgba[offset + 2]!) +
+              Math.abs(leftAlpha - rightAlpha)) /
+            4;
+        }
+        deltas.push(samples === 0 ? 0 : sum / samples);
+      }
+      const meanDelta = deltas.reduce((a, b) => a + b, 0) / Math.max(1, deltas.length);
+      expect(meanDelta, `${action}-${direction} motion energy`).toBeGreaterThanOrEqual(minMeanDelta);
+    }
+
+    // Killer Bee remains a motion floor reference and must still look animated.
+    const kbRoot = join(process.cwd(), "Champions", "killer-bee", "assets", "animations");
+    const kbFrames: DecodedPng[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      kbFrames.push(decodeRgbaPng(join(kbRoot, `run-south-${index}.png`)));
+    }
+    let kbSum = 0;
+    let kbPairs = 0;
+    for (let index = 0; index < kbFrames.length - 1; index += 1) {
+      const left = kbFrames[index]!;
+      const right = kbFrames[index + 1]!;
+      let sum = 0;
+      let samples = 0;
+      const pixels = left.width * left.height;
+      for (let pixel = 0; pixel < pixels; pixel += 1) {
+        const offset = pixel * 4;
+        if (left.rgba[offset + 3]! <= 24 && right.rgba[offset + 3]! <= 24) continue;
+        samples += 1;
+        sum +=
+          (Math.abs(left.rgba[offset]! - right.rgba[offset]!) +
+            Math.abs(left.rgba[offset + 1]! - right.rgba[offset + 1]!) +
+            Math.abs(left.rgba[offset + 2]! - right.rgba[offset + 2]!) +
+            Math.abs(left.rgba[offset + 3]! - right.rgba[offset + 3]!)) /
+          4;
+      }
+      if (samples > 0) {
+        kbSum += sum / samples;
+        kbPairs += 1;
+      }
+    }
+    expect(kbSum / Math.max(1, kbPairs)).toBeGreaterThan(20);
+  });
 });
