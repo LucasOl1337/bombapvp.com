@@ -276,6 +276,19 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).not.toContain("holdFrameIndex");
   });
 
+  it("generalizes dual-body projection presentation for Living Shadow state", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    // Any channeling skill with projection draws a spectral second body.
+    expect(main).toContain("ZED_LIVING_SHADOW_SKILL_ID");
+    expect(main).toMatch(
+      /skill\?\.phase === "channeling" && competitor\.skill\.projection/,
+    );
+    expect(main).toContain("Living Shadow");
+    // Ranni-specific wisp stays gated; shadow uses its own tint path.
+    expect(main).toContain("projectionSkillId === RANNI_ICE_BLINK_SKILL_ID");
+    expect(main).toContain("projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID");
+  });
+
   it("does not tree-walk into legacy original-game asset roots", () => {
     const sources = walkFiles(join(ROOT, "src", "browser"))
       .filter((f) => f.endsWith(".ts") || f.endsWith(".css"))

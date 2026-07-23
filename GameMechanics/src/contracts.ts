@@ -36,6 +36,8 @@ export const SKILL_IDS = [
   "killer-bee-wing-dash",
   "crocodilo-emerald-surge",
   "thresh-death-sentence",
+  /** Mechanics-only; not registered on the public roster until art/IP ship gate. */
+  "zed-living-shadow",
 ] as const;
 
 export type SkillId = (typeof SKILL_IDS)[number];
@@ -44,6 +46,7 @@ export const RANNI_ICE_BLINK_SKILL_ID = "ranni-ice-blink" as const satisfies Ski
 export const KILLER_BEE_WING_DASH_SKILL_ID = "killer-bee-wing-dash" as const satisfies SkillId;
 export const CROCODILO_EMERALD_SURGE_SKILL_ID = "crocodilo-emerald-surge" as const satisfies SkillId;
 export const THRESH_DEATH_SENTENCE_SKILL_ID = "thresh-death-sentence" as const satisfies SkillId;
+export const ZED_LIVING_SHADOW_SKILL_ID = "zed-living-shadow" as const satisfies SkillId;
 
 const SKILL_ID_SET: ReadonlySet<string> = new Set(SKILL_IDS);
 

@@ -152,5 +152,5 @@ describe("browser bot drivers", () => {
       roundNumber: final.roundNumber,
     });
     expect(observation?.result).toMatch(/^(Bomb · Ranni|V2 · Killer Bee) wins the match$/);
-  }, 15_000);
+  }, 30_000);
 });

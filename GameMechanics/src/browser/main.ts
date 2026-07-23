@@ -84,10 +84,12 @@ import {
   RANNI_ICE_BLINK_SKILL_ID,
   THRESH_DEATH_SENTENCE_SKILL_ID,
   TICK_DURATION_MS,
+  ZED_LIVING_SHADOW_SKILL_ID,
   type CompetitorId,
   type Direction,
   type GameEvent,
   type GameSnapshot,
+  type SkillId,
   type TileCoord,
 } from "../contracts.ts";
 import {
@@ -672,12 +674,17 @@ const deathAnims = new Map<CompetitorId, DeathAnim>();
 const championActionAnims = new Map<CompetitorId, TimedChampionAction>();
 /** Previous skill phase for detecting a new skill presentation sequence. */
 const prevChampionSkillPhase = new Map<CompetitorId, string>();
-/** Previous Ice Blink projection pose, used to animate the wall-phasing spirit. */
+/**
+ * Previous skill projection pose for dual-body presentation
+ * (Ice Blink spirit, Living Shadow clone, future projection skills).
+ * Map key kept as ranniProjectionPose for existing visual-adapter tests.
+ */
 const ranniProjectionPose = new Map<CompetitorId, {
   x: number;
   y: number;
   facing: Facing;
   lastMoveMs: number;
+  skillId: SkillId | null;
 }>();
 /** Thresh hook projectile FX (visual only, kernel logic is authoritative). */
 const hookProjectileFx: HookProjectileFx[] = [];
@@ -2539,6 +2546,8 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
     spawnProtectionRemainingMs: number;
     channeling: boolean;
     spectral: boolean;
+    /** Skill that owns this spectral projection (presentation tint only). */
+    projectionSkillId: SkillId | null;
   };
   const renderables: Renderable[] = [];
 
@@ -2623,12 +2632,16 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       spawnProtectionRemainingMs: competitor.spawnProtectionRemainingMs,
       channeling,
       spectral: false,
+      projectionSkillId: null,
     });
 
-    const projection = competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
-      && competitor.skill.phase === "channeling"
-      ? competitor.skill.projection
-      : null;
+    // Dual-body projection: any channeling skill that exposes skill.projection
+    // (Ice Blink spirit, Living Shadow clone, future ports).
+    const projection =
+      competitor.skill?.phase === "channeling" && competitor.skill.projection
+        ? competitor.skill.projection
+        : null;
+    const projectionSkillId = projection && competitor.skill ? competitor.skill.id : null;
     if (projection) {
       const previousProjection = ranniProjectionPose.get(competitor.id);
       const projectionDx = previousProjection
@@ -2637,23 +2650,32 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const projectionDy = previousProjection
         ? wrapDelta(projection.y, previousProjection.y, WORLD_SPAN_Y)
         : 0;
-      const projectionFacing = facingFromVelocity(
-        projectionDx,
-        projectionDy,
-        previousProjection?.facing ?? facing,
-      );
+      // Living Shadow is a fixed clone — hold the caster's facing; Ice Blink
+      // steers its spirit and derives facing from projection velocity.
+      const projectionFacing =
+        projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID
+          ? facing
+          : facingFromVelocity(
+              projectionDx,
+              projectionDy,
+              previousProjection?.facing ?? facing,
+            );
       const projectionMoved = Math.abs(projectionDx) >= MOVE_SPEED_THRESHOLD
         || Math.abs(projectionDy) >= MOVE_SPEED_THRESHOLD;
       const lastProjectionMoveMs = projectionMoved
         ? animMs
         : previousProjection?.lastMoveMs ?? Number.NEGATIVE_INFINITY;
       // Keep the walk cycle alive between 50 Hz kernel ticks.
-      const projectionMoving = animMs - lastProjectionMoveMs < TICK_DURATION_MS * 2;
+      const projectionMoving =
+        projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID
+          ? false
+          : animMs - lastProjectionMoveMs < TICK_DURATION_MS * 2;
       ranniProjectionPose.set(competitor.id, {
         x: projection.x,
         y: projection.y,
         facing: projectionFacing,
         lastMoveMs: lastProjectionMoveMs,
+        skillId: projectionSkillId,
       });
       renderables.push({
         id: competitor.id,
@@ -2665,6 +2687,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
         spawnProtectionRemainingMs: 0,
         channeling: false,
         spectral: true,
+        projectionSkillId,
       });
     } else {
       ranniProjectionPose.delete(competitor.id);
@@ -2688,6 +2711,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       spawnProtectionRemainingMs: 0,
       channeling: false,
       spectral: false,
+      projectionSkillId: null,
     });
   }
 
@@ -2803,7 +2827,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const spriteX = cx - spriteWidth * 0.5;
       const spriteY = bodyBottom - spriteHeight + 1;
 
-      if (entry.spectral) {
+      if (entry.spectral && entry.projectionSkillId === RANNI_ICE_BLINK_SKILL_ID) {
         const wispImage = champ.pack.effects["spirit-wisp"]
           ? imageCache.get(champ.pack.effects["spirit-wisp"]!)
           : undefined;
@@ -2831,11 +2855,22 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       // Soft accent silhouette glow — pops spectral sprites on light stone.
       context.save();
       if (entry.spectral) {
-        // Spectral projection: the original directional walk cycle becomes
-        // Ranni's wall-phasing spirit without duplicating identity assets.
+        // Spectral projection: dual-body ghost from skill.projection state.
+        // Ice Blink keeps cool spirit tint; Living Shadow (and fallback) uses
+        // a darker crimson recolor so future Zed art can share this seam.
+        const iceSpirit = entry.projectionSkillId === RANNI_ICE_BLINK_SKILL_ID;
+        const shadowClone = entry.projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID;
         context.globalCompositeOperation = "lighter";
-        context.filter = "brightness(0.95) saturate(1.15) hue-rotate(8deg)";
-        context.shadowColor = "rgb(100 220 245 / 0.48)";
+        context.filter = iceSpirit
+          ? "brightness(0.95) saturate(1.15) hue-rotate(8deg)"
+          : shadowClone
+            ? "brightness(0.55) saturate(1.4) hue-rotate(-12deg)"
+            : "brightness(0.75) saturate(1.2)";
+        context.shadowColor = iceSpirit
+          ? "rgb(100 220 245 / 0.48)"
+          : shadowClone
+            ? "rgb(180 40 50 / 0.5)"
+            : `rgb(${accent} / 0.45)`;
         context.shadowBlur = 8 + 3 * pulse;
         for (const offset of [-7, -3]) {
           context.globalAlpha = offset === -7 ? 0.05 : 0.08;
@@ -2852,9 +2887,17 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
           );
         }
         context.globalCompositeOperation = "source-over";
-        context.globalAlpha = RANNI_SPIRIT_PRIMARY_ALPHA;
-        context.filter = "brightness(0.8) contrast(1.18) saturate(1.35) hue-rotate(8deg)";
-        context.shadowColor = "rgb(80 205 235 / 0.6)";
+        context.globalAlpha = iceSpirit ? RANNI_SPIRIT_PRIMARY_ALPHA : 0.45;
+        context.filter = iceSpirit
+          ? "brightness(0.8) contrast(1.18) saturate(1.35) hue-rotate(8deg)"
+          : shadowClone
+            ? "brightness(0.45) contrast(1.25) saturate(1.5) hue-rotate(-18deg)"
+            : "brightness(0.7) contrast(1.15) saturate(1.2)";
+        context.shadowColor = iceSpirit
+          ? "rgb(80 205 235 / 0.6)"
+          : shadowClone
+            ? "rgb(160 30 40 / 0.55)"
+            : `rgb(${accent} / 0.55)`;
         context.shadowBlur = 7 + 2 * pulse;
       } else if (entry.alive) {
         context.shadowColor = `rgb(${accent} / ${0.42 + 0.12 * pulse})`;
