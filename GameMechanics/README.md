@@ -8,7 +8,7 @@
 - A mesma configuracao, estado inicial e sequencia de comandos devem produzir o mesmo estado e os mesmos eventos.
 - O estado aceito pelo kernel e congelado; durante a simulacao, o hot path confia nesse estado e nos tipos do TypeScript.
 - Validacao profunda acontece somente nas fronteiras publicas `initial(config)` e `restore(raw)`. APIs internas nao repetem validacoes estruturais a cada tick.
-- Compatibilidade de replay/snapshot usa `mechanicsRevision = "mechanics-v1"`, revisao manual alterada quando uma mudanca altera a semantica da simulacao.
+- Compatibilidade de replay/snapshot usa a `mechanicsRevision` manual definida em `src/kernel/protocol.ts` e `src/match-config.ts`, alterada quando uma mudanca muda a semantica da simulacao.
 
 ## Escopo
 
