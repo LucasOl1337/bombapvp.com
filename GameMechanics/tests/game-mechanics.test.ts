@@ -3002,7 +3002,7 @@ describe("Slice 1 — ownership, reads, codecs e facade", () => {
     expect(plantedUnder.state.slices.bombs.items).toHaveLength(1);
   });
 
-  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v6)", () => {
+  it("chama: ≥30% body area on flame tile kills; ~10% edge clip survives (mechanics-v7)", () => {
     const config = localDuel("flame-overlap-30");
     const program = createDefaultMechanicsProgram();
     const alpha = config.seats[0]!.competitorId;
@@ -5931,6 +5931,49 @@ describe("Zed Living Shadow", () => {
       planted.state.slices.bombs.items.filter((b) => b.ownerId === alpha),
     ).toHaveLength(1);
     expect(countActiveBombs(planted.state.slices.bombs, alpha)).toBe(1);
+  });
+
+  it("restores echoes only for Living Shadow owners", () => {
+    const program = createDefaultMechanicsProgram();
+    const zedConfig = zedDuel("zed-echo-restore");
+    const zedState = asPlayingWorld(program, program.initial(zedConfig), {
+      arena: { crates: [] },
+    });
+    const echoOwner = zedConfig.seats[0]!.competitorId;
+    const zedDraft = cloneDraft(zedState);
+    zedDraft.slices.bombs = {
+      nextId: 2,
+      items: [{
+        id: 1,
+        ownerId: echoOwner,
+        tile: { x: 1, y: 1 },
+        fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+        flameRange: 1,
+        echo: true,
+      }],
+    };
+    expect(program.restore(zedDraft).slices.bombs.items[0]!.echo).toBe(true);
+
+    const ranniConfig = ranniDuel("ranni-echo-restore");
+    const ranniDraft = cloneDraft(asPlayingWorld(
+      program,
+      program.initial(ranniConfig),
+      { arena: { crates: [] } },
+    ));
+    ranniDraft.slices.bombs = {
+      nextId: 2,
+      items: [{
+        id: 1,
+        ownerId: ranniConfig.seats[0]!.competitorId,
+        tile: { x: 1, y: 1 },
+        fuseMs: BOMB_FUSE_MS - TICK_DURATION_MS,
+        flameRange: 1,
+        echo: true,
+      }],
+    };
+    expect(() => program.restore(ranniDraft)).toThrow(
+      /echo requires a zed-living-shadow owner/,
+    );
   });
 
   it("keeps echo bombs through swap and chains like normal ordnance", () => {

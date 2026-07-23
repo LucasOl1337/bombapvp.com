@@ -45,6 +45,7 @@ import {
   type Facing,
 } from "./champion-packs.ts";
 import {
+  didLivingShadowSwapSucceed,
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
@@ -72,7 +73,7 @@ import {
   RANNI_COOLDOWN_MS,
   THRESH_CHANNEL_MS,
   THRESH_HOOK_RANGE,
-  ZED_COOLDOWN_MS,
+  ZED_FAIL_COOLDOWN_MS,
 } from "../modules/skills/index.ts";
 import {
   initSoundUnlock,
@@ -2080,7 +2081,10 @@ function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): v
       && phase === "cooldown"
     ) {
       const cooldownMs = competitor.skill.cooldownRemainingMs;
-      const successSwap = cooldownMs >= ZED_COOLDOWN_MS - TICK_DURATION_MS;
+      const successSwap = didLivingShadowSwapSucceed(
+        cooldownMs,
+        ZED_FAIL_COOLDOWN_MS,
+      );
       const slot = slotForCompetitor(competitor.id);
       const recoveryAction = successSwap
         ? (bombAnimationAction(slot) ?? skillAnimationAction(slot) ?? "cast")

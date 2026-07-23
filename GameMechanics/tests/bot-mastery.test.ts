@@ -153,7 +153,7 @@ describe("private bot mastery models", () => {
       compatibility: { ...draft.compatibility, mechanicsRevision: "mechanics-old" },
     };
     expect(validateTechniqueCandidate(stale).issues).toContain(
-      "technique.compatibility.mechanicsRevision is stale or incompatible (expected mechanics-v6).",
+      "technique.compatibility.mechanicsRevision is stale or incompatible (expected mechanics-v7).",
     );
   });
 

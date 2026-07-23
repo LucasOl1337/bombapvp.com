@@ -1218,7 +1218,7 @@ describe("Slice 4A — powerups profundos e progressao unica (Decision 009)", ()
     const program = createDefaultMechanicsProgram();
     expect(WORLD_FORMAT_VERSION).toBe("world-5");
     expect(GAME_MECHANICS_VERSION).toBe("kernel-0.10.0");
-    expect(DEFAULT_MECHANICS_REVISION).toBe("mechanics-v6");
+    expect(DEFAULT_MECHANICS_REVISION).toBe("mechanics-v7");
 
     const world = program.initial(localDuel(FIXED_SEED));
     const snap = program.snapshot(world);

@@ -5,7 +5,7 @@ import type { TickFact } from "./facts.ts";
 import type { WorldSlices, WorldState } from "./world-state.ts";
 
 /** Manual rules identifier. Bump only when executable gameplay rules change. */
-export const MECHANICS_REVISION = "mechanics-v6" as const;
+export const MECHANICS_REVISION = "mechanics-v7" as const;
 
 /** Explicit barriers in the deterministic 20 ms schedule. */
 export const PHASE_ORDER = [

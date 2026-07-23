@@ -543,6 +543,11 @@ function restoreBombs(raw: unknown, config: MatchConfig): BombsSlice {
     throw new Error("slices.bombs.items must be an array.");
   }
   const seatSet = new Set(config.seats.map((seat) => seat.competitorId));
+  const echoOwnerSet = new Set(
+    config.seats
+      .filter((seat) => seat.skillId === ZED_LIVING_SHADOW_SKILL_ID)
+      .map((seat) => seat.competitorId),
+  );
   const bombItems = bombsRaw.items.map((item, index) => {
     if (!item || typeof item !== "object") {
       throw new Error(`slices.bombs.items[${index}] is invalid.`);
@@ -568,6 +573,11 @@ function restoreBombs(raw: unknown, config: MatchConfig): BombsSlice {
     }
     if (row.echo !== undefined && typeof row.echo !== "boolean") {
       throw new Error(`slices.bombs.items[${index}].echo must be a boolean when present.`);
+    }
+    if (row.echo === true && !echoOwnerSet.has(row.ownerId as CompetitorId)) {
+      throw new Error(
+        `slices.bombs.items[${index}].echo requires a zed-living-shadow owner.`,
+      );
     }
     return Object.freeze({
       id,

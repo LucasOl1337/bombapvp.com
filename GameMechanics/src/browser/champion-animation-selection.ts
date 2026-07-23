@@ -72,6 +72,13 @@ export function selectBombAnimationAction(
   return available.cast ? "cast" : null;
 }
 
+export function didLivingShadowSwapSucceed(
+  cooldownRemainingMs: number,
+  failCooldownMs: number,
+): boolean {
+  return cooldownRemainingMs > failCooldownMs;
+}
+
 /** Maps an elapsed presentation clock onto a finite, non-looping sequence. */
 export function timedAnimationFrameIndex(
   frameCount: number,

@@ -300,7 +300,8 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("ZED_CAST_BUILD_MS");
     expect(main).toContain("ZED_SWAP_RECOVERY_MS");
     expect(main).toContain("ZED_SHADOW_CANCEL_MS");
-    expect(main).toContain("ZED_COOLDOWN_MS");
+    expect(main).toContain("ZED_FAIL_COOLDOWN_MS");
+    expect(main).toContain("didLivingShadowSwapSucceed");
     // Cast start uses channel-length telegraph for Living Shadow only.
     expect(main).toMatch(
       /competitor\.skill\?\.id === ZED_LIVING_SHADOW_SKILL_ID[\s\S]{0,120}ZED_CAST_TELEGRAPH_MS/,

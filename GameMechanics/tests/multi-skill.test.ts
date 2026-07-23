@@ -5,7 +5,10 @@ import {
   type MatchConfig,
   type SkillId,
 } from "../src/contracts.ts";
-import { createMatchConfig } from "../src/match-config.ts";
+import {
+  createMatchConfig,
+  DEFAULT_MECHANICS_REVISION,
+} from "../src/match-config.ts";
 import { createDefaultMechanicsProgram } from "../src/composition.ts";
 import type { WorldState } from "../src/kernel/world-state.ts";
 import { findLocomotion } from "../src/kernel/world-state.ts";
@@ -13,7 +16,7 @@ import { findLocomotion } from "../src/kernel/world-state.ts";
 function skillDuel(skillId: SkillId, seed = `multi-${skillId}`): MatchConfig {
   return createMatchConfig({
     seed,
-    mechanicsRevision: "mechanics-v6",
+    mechanicsRevision: DEFAULT_MECHANICS_REVISION,
     contentRevision: "content-prototype-arena-v1",
     roundDurationMs: 90_000,
     targetRoundWins: 2,
