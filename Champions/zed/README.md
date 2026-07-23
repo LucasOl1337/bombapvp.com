@@ -15,12 +15,12 @@ Primeiro `R`: projeta sombra no tile cardinal livre mais distante (alcance 3; s�
 
 | Slot | Frames / dir | Notes |
 | --- | --- | --- |
-| idle | 6 | south high-frame; E/N/W bob sintético sobre estáticos |
-| walk | 8 | S/E/N/W high-frame (west = mirror east no pacote) |
-| run | 8 | south high-frame; E/N/W reutilizam walk da mesma direção |
-| cast | 8 | S/E/W high-frame; north reutiliza south |
-| attack | 8 | south high-frame; E/N copiam south; west espelha east |
-| death | 8 | south high-frame; E/N copiam south; west espelha east |
+| idle | 6 | S/E/N/W, normalizado sobre os estáticos direcionais aprovados |
+| walk | 8 | S/E/N/W, ciclo direcional normalizado |
+| run | 8 | S/E/N/W, ciclo direcional acelerado |
+| cast | 8 | S/E/N/W, pulso direcional da projeção |
+| attack | 8 | S/E/N/W, avanço direcional sem bomba |
+| death | 8 | S/E/N/W, queda direcional com dissipação |
 
 Living Shadow presentation uses canvas crimson recolor of body frames (not a second identity PNG). Attack/plant frames must not draw a bomb (engine draws the bomb).
 
