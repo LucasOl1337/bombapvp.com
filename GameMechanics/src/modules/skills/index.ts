@@ -725,6 +725,27 @@ function runSkillsReset(ctx: SystemRunContext): SystemRunResult {
   return { writes: { skills: initialSkills(ctx.config) } };
 }
 
+function runSkillsDeathCleanup(ctx: SystemRunContext): SystemRunResult {
+  const skills = ctx.read("skills");
+  const vitals = ctx.read("vitals");
+  let changed = false;
+  const entries = skills.entries.map((entry) => {
+    if (
+      entry.skillId !== ZED_LIVING_SHADOW_SKILL_ID
+      || entry.phase !== "channeling"
+      || findVitals(vitals, entry.competitorId)?.alive !== false
+    ) {
+      return entry;
+    }
+    changed = true;
+    return cooldown(entry, ZED_FAIL_COOLDOWN_MS);
+  });
+  if (!changed) return {};
+  return {
+    writes: { skills: Object.freeze({ entries: Object.freeze(entries) }) },
+  };
+}
+
 function runSkills(ctx: SystemRunContext): SystemRunResult {
   const skills = ctx.read("skills");
   const match = ctx.read("match");
@@ -915,6 +936,13 @@ export const skillsModule: ModuleSpec = Object.freeze({
       ] as const),
       writes: Object.freeze(["skills"] as const),
       run: runSkills,
+    }),
+    Object.freeze({
+      id: "skills-death-cleanup-system",
+      phase: "round" as const,
+      reads: Object.freeze(["skills", "vitals"] as const),
+      writes: Object.freeze(["skills"] as const),
+      run: runSkillsDeathCleanup,
     }),
   ]),
   codecs: Object.freeze({

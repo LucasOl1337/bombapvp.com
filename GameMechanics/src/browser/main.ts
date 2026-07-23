@@ -214,6 +214,11 @@ const ACCENT_RGB: Readonly<Record<ChampAccent, string>> = Object.freeze({
   orange: "255 140 48",
 });
 
+const DUAL_BODY_PROJECTION_SKILL_IDS: ReadonlySet<SkillId> = new Set([
+  RANNI_ICE_BLINK_SKILL_ID,
+  ZED_LIVING_SHADOW_SKILL_ID,
+]);
+
 function accentRgb(accent: ChampAccent): string {
   return ACCENT_RGB[accent];
 }
@@ -2635,10 +2640,10 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       projectionSkillId: null,
     });
 
-    // Dual-body projection: any channeling skill that exposes skill.projection
-    // (Ice Blink spirit, Living Shadow clone, future ports).
     const projection =
-      competitor.skill?.phase === "channeling" && competitor.skill.projection
+      competitor.skill?.phase === "channeling"
+        && DUAL_BODY_PROJECTION_SKILL_IDS.has(competitor.skill.id)
+        && competitor.skill.projection
         ? competitor.skill.projection
         : null;
     const projectionSkillId = projection && competitor.skill ? competitor.skill.id : null;

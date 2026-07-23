@@ -276,15 +276,20 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).not.toContain("holdFrameIndex");
   });
 
-  it("generalizes dual-body projection presentation for Living Shadow state", () => {
+  it("limits dual-body projection presentation to Ice Blink and Living Shadow", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
-    // Any channeling skill with projection draws a spectral second body.
-    expect(main).toContain("ZED_LIVING_SHADOW_SKILL_ID");
+    const capability = main.match(
+      /const DUAL_BODY_PROJECTION_SKILL_IDS[\s\S]*?new Set\(\[([\s\S]*?)\]\);/,
+    );
+
+    expect(capability).not.toBeNull();
+    expect(capability?.[1]).toContain("RANNI_ICE_BLINK_SKILL_ID");
+    expect(capability?.[1]).toContain("ZED_LIVING_SHADOW_SKILL_ID");
+    expect(capability?.[1]).not.toContain("KILLER_BEE_WING_DASH_SKILL_ID");
     expect(main).toMatch(
-      /skill\?\.phase === "channeling" && competitor\.skill\.projection/,
+      /DUAL_BODY_PROJECTION_SKILL_IDS\.has\(competitor\.skill\.id\)/,
     );
     expect(main).toContain("Living Shadow");
-    // Ranni-specific wisp stays gated; shadow uses its own tint path.
     expect(main).toContain("projectionSkillId === RANNI_ICE_BLINK_SKILL_ID");
     expect(main).toContain("projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID");
   });

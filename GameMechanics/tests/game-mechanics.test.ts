@@ -5742,7 +5742,12 @@ describe("Zed Living Shadow", () => {
       const activated = program.step(state, {
         commands: [useSkill(state, config)],
       });
-      expect(activated.state.slices.skills.entries[0]!.phase).toBe("channeling");
+      expect(activated.state.slices.skills.entries[0]).toMatchObject({
+        phase: "cooldown",
+        channelRemainingMs: 0,
+        cooldownRemainingMs: ZED_FAIL_COOLDOWN_MS,
+        projection: null,
+      });
       expect(findVitals(activated.state.slices.vitals, alpha)?.alive).toBe(false);
       expect(activated.events.some((event) =>
         event.type === "competitor-eliminated" && event.competitorId === alpha
