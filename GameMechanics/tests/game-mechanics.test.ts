@@ -4146,7 +4146,7 @@ describe("Slice 3A — ciclo competitivo first-to-K (Decision 007)", () => {
     expect(competitorsModule.version).toBe("3.4.0");
     expect(arenaModule.version).toBe("2.4.0");
     expect(intentModule.version).toBe("2.1.0");
-    expect(ordnanceModule.version).toBe("3.2.0");
+    expect(ordnanceModule.version).toBe("3.3.0");
     expect(locomotionModule.version).toBe("3.2.0");
     expect(pressureModule.version).toBe("1.1.1");
     expect(powerupsModule.version).toBe("1.0.0");

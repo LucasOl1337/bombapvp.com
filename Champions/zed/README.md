@@ -23,9 +23,8 @@ integridade single-pose em `GameMechanics/tests/zed-sprite-assets.test.ts`.
 | attack | 8 | S/E/N/W, plantio/golpe sem sprite de bomba |
 | death | 8 | S/E/N/W, queda / dissipação |
 
-Living Shadow: projeção fixa no tile, carmesim no canvas, espelha facing e
-família de ação do corpo (idle/walk/run/cast/plant/recovery) sem transladar.
-Eco de bomba no tile da sombra enquanto canaliza — ver `docs/gameplay.md`.
+As regras e a apresentação de Living Shadow estão descritas em
+[`docs/gameplay.md`](../../docs/gameplay.md).
 
 ## Posture
 
