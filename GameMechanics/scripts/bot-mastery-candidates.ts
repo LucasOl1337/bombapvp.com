@@ -1,14 +1,16 @@
-import type { ChampionSlug } from "../../Champions/membership.ts";
 import type { BotProfileId } from "../src/bots/index.ts";
 import {
   currentTechniqueCompatibility,
   type TechniqueCandidate,
   type TechniquePredicate,
 } from "../src/browser/bot-mastery/index.ts";
-import type { CampaignCandidateSpec } from "../src/browser/bot-mastery/campaign.ts";
+import type {
+  CampaignCandidateSpec,
+  CampaignChampionSlug,
+} from "../src/browser/bot-mastery/campaign.ts";
 
 function candidate(
-  championSlug: ChampionSlug,
+  championSlug: CampaignChampionSlug,
   learnerProfileId: BotProfileId,
   opponentProfileId: BotProfileId,
   id: string,
