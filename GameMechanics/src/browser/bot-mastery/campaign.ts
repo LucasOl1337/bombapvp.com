@@ -88,6 +88,8 @@ const CHANNEL_TICKS: Readonly<Record<ChampionSlug, number>> = Object.freeze({
   "killer-bee": 12,
   "crocodilo-arcano": 80,
   thresh: 15,
+  /** Living Shadow free-move window: ZED_CHANNEL_MS / TICK_DURATION_MS. */
+  zed: 100,
 });
 
 function stripTechniques(model: BotModel): BotModel {

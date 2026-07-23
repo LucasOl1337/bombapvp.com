@@ -31,6 +31,15 @@ export const CHAMPION_MEMBERSHIP = Object.freeze({
     defaultSlot: undefined,
     skillCooldownMs: 8_000,
   }),
+  /** Local/test Living Shadow vertical slice — not a default public seat. */
+  zed: Object.freeze({
+    characterId: "14fdf68c-c822-4d25-aee8-38b2d30739eb",
+    skillId: "zed-living-shadow",
+    name: "Zed",
+    rosterOrder: 4,
+    defaultSlot: undefined,
+    skillCooldownMs: 7_000,
+  }),
 } as const);
 
 export type ChampionSlug = keyof typeof CHAMPION_MEMBERSHIP;

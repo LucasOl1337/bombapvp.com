@@ -98,6 +98,8 @@ const ARENA_OPTICAL_SCALE: Readonly<Record<ChampionSlug, number>> = Object.freez
   "killer-bee": 1,
   "crocodilo-arcano": 0.96,
   thresh: 0.78,
+  /** Dense full-cell high-frame pack — match Thresh-class optical footprint. */
+  zed: 0.82,
 });
 
 const FACING_FROM_DIR = {
