@@ -128,6 +128,11 @@ export type BombEntry = Readonly<{
   tile: TileCoord;
   fuseMs: number;
   flameRange: number;
+  /**
+   * Living Shadow echo plant: real ordnance that shares owner/fuse rules but
+   * does not consume a maxBombs capacity slot.
+   */
+  echo: boolean;
 }>;
 
 export type FlameEntry = Readonly<{
@@ -898,7 +903,10 @@ export function findVitals(
 }
 
 export function countActiveBombs(bombs: BombsSlice, competitorId: CompetitorId): number {
-  return bombs.items.filter((bomb) => bomb.ownerId === competitorId).length;
+  // Echo bombs are free extras and must not fill maxBombs capacity.
+  return bombs.items.filter(
+    (bomb) => bomb.ownerId === competitorId && !bomb.echo,
+  ).length;
 }
 
 export function competitorIdBySeat(config: MatchConfig, seatId: SeatId): CompetitorId | undefined {

@@ -45,6 +45,7 @@ import {
   type Facing,
 } from "./champion-packs.ts";
 import {
+  didLivingShadowSwapSucceed,
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
@@ -72,6 +73,7 @@ import {
   RANNI_COOLDOWN_MS,
   THRESH_CHANNEL_MS,
   THRESH_HOOK_RANGE,
+  ZED_FAIL_COOLDOWN_MS,
 } from "../modules/skills/index.ts";
 import {
   initSoundUnlock,
@@ -172,6 +174,16 @@ const CAST_FRAME_MS = 100;
 const RANNI_FROZEN_ULTIMATE_FRAME = 3;
 /** Fast six-frame build-up before the full prison is held. */
 const RANNI_FREEZE_BUILD_MS = 240;
+/**
+ * Living Shadow cast telegraph: build through cast frames, then release so
+ * free-move locomotion can read while the 2000 ms channel continues.
+ */
+const ZED_CAST_TELEGRAPH_MS = 1_000;
+const ZED_CAST_BUILD_MS = 700;
+/** Readable swap recovery after a valid Living Shadow teleport. */
+const ZED_SWAP_RECOVERY_MS = 720;
+/** Short cancel/fail pose after timeout, invalid swap, or death cleanup. */
+const ZED_SHADOW_CANCEL_MS = 420;
 /** Dark enough to remain legible over the arena's pale floor. */
 const RANNI_SPIRIT_PRIMARY_ALPHA = 0.5;
 const RANNI_SPIRIT_WISP_FRAME_MS = 120;
@@ -2062,6 +2074,28 @@ function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): v
       championActionAnims.delete(competitor.id);
       continue;
     }
+    // Living Shadow: channeling → cooldown is either valid swap or fail/timeout/death.
+    if (
+      competitor.skill?.id === ZED_LIVING_SHADOW_SKILL_ID
+      && previous === "channeling"
+      && phase === "cooldown"
+    ) {
+      const cooldownMs = competitor.skill.cooldownRemainingMs;
+      const successSwap = didLivingShadowSwapSucceed(
+        cooldownMs,
+        ZED_FAIL_COOLDOWN_MS,
+      );
+      const slot = slotForCompetitor(competitor.id);
+      const recoveryAction = successSwap
+        ? (bombAnimationAction(slot) ?? skillAnimationAction(slot) ?? "cast")
+        : (skillAnimationAction(slot) ?? "cast");
+      championActionAnims.set(competitor.id, {
+        action: recoveryAction,
+        startMs: nowMs,
+        durationMs: successSwap ? ZED_SWAP_RECOVERY_MS : ZED_SHADOW_CANCEL_MS,
+      });
+      continue;
+    }
     if (phase !== "channeling" || previous === "channeling") continue;
     const action = skillAnimationAction(slotForCompetitor(competitor.id));
     if (action) {
@@ -2073,7 +2107,12 @@ function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): v
               durationMs: RANNI_CHANNEL_MS,
               buildMs: RANNI_FREEZE_BUILD_MS,
             }
-          : {}),
+          : competitor.skill?.id === ZED_LIVING_SHADOW_SKILL_ID
+            ? {
+                durationMs: ZED_CAST_TELEGRAPH_MS,
+                buildMs: ZED_CAST_BUILD_MS,
+              }
+            : {}),
       });
     }
   }
@@ -2655,8 +2694,9 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const projectionDy = previousProjection
         ? wrapDelta(projection.y, previousProjection.y, WORLD_SPAN_Y)
         : 0;
-      // Living Shadow is a fixed clone — hold the caster's facing; Ice Blink
-      // steers its spirit and derives facing from projection velocity.
+      // Living Shadow is a fixed clone — hold the caster's facing and mirror
+      // the body's action family (idle/walk/run/cast/plant) without translating.
+      // Ice Blink steers its spirit and derives facing from projection velocity.
       const projectionFacing =
         projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID
           ? facing
@@ -2670,10 +2710,11 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       const lastProjectionMoveMs = projectionMoved
         ? animMs
         : previousProjection?.lastMoveMs ?? Number.NEGATIVE_INFINITY;
-      // Keep the walk cycle alive between 50 Hz kernel ticks.
+      // Keep the walk cycle alive between 50 Hz kernel ticks for moving spirits.
+      // Living Shadow stays spatially fixed but mirrors the body's locomotion family.
       const projectionMoving =
         projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID
-          ? false
+          ? moving
           : animMs - lastProjectionMoveMs < TICK_DURATION_MS * 2;
       ranniProjectionPose.set(competitor.id, {
         x: projection.x,
@@ -2682,12 +2723,16 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
         lastMoveMs: lastProjectionMoveMs,
         skillId: projectionSkillId,
       });
+      const projectionFrameUrl =
+        projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID
+          ? (actionFrame ?? championFrameUrl(slot, projectionFacing, projectionMoving, animMs))
+          : championFrameUrl(slot, projectionFacing, projectionMoving, animMs);
       renderables.push({
         id: competitor.id,
         slot,
         position: projection,
         facing: projectionFacing,
-        frameUrl: championFrameUrl(slot, projectionFacing, projectionMoving, animMs),
+        frameUrl: projectionFrameUrl,
         alive: true,
         spawnProtectionRemainingMs: 0,
         channeling: false,

@@ -4,6 +4,7 @@ import type {
   MatchConfig,
   TileCoord,
 } from "../../contracts.ts";
+import { ZED_LIVING_SHADOW_SKILL_ID } from "../../contracts.ts";
 import type { CommandRejection } from "../../kernel/commands.ts";
 import { factsOfKind } from "../../kernel/facts.ts";
 import type {
@@ -38,12 +39,14 @@ import {
 } from "../../kernel/world-state.ts";
 
 /**
+ * 3.3.0: Living Shadow free echo plant at the fixed projection tile while
+ * channeling (capacity-exempt, same owner/fuse; illegal echo never rejects body).
  * 3.2.0: placement no longer rejects when a rival body overlaps the tile —
  * pre-overlap geometric egress lets them walk off (Decision 012).
  * 3.1.0: blast walk stops at grid bounds — flames never wrap the torus
  * (Decision 011). 3.0.0: placement/capacity/range read Powerups progression.
  */
-const MODULE_VERSION = "3.2.0";
+const MODULE_VERSION = "3.3.0";
 
 /** Reachable active fuse after a complete tick (post fuse-system, pre explosion). */
 const MIN_ACTIVE_FUSE_MS = TICK_DURATION_MS;
@@ -100,12 +103,34 @@ function mergeFlame(
   });
 }
 
+function canPlaceBombOnTile(
+  tile: TileCoord,
+  occupied: ReadonlySet<string>,
+  solid: ReadonlySet<string>,
+  crates: ReadonlySet<string>,
+): boolean {
+  if (
+    tile.x < 0
+    || tile.y < 0
+    || tile.x >= ARENA_WIDTH
+    || tile.y >= ARENA_HEIGHT
+  ) {
+    return false;
+  }
+  const key = tileKey(tile);
+  if (occupied.has(key) || solid.has(key) || crates.has(key)) return false;
+  return true;
+}
+
 function runBombPlace(ctx: SystemRunContext): SystemRunResult {
   const match = ctx.read("match");
   const bombs = ctx.read("bombs");
   const locomotion = ctx.read("locomotion");
   const progression = ctx.read("progression");
   const vitals = ctx.read("vitals");
+  const skills = ctx.read("skills");
+  const arena = ctx.read("arena");
+  const pressure = ctx.read("pressure");
   const rejections: CommandRejection[] = [];
   const events: GameEvent[] = [];
   const placeCommands = ctx.commands.filter(
@@ -127,9 +152,11 @@ function runBombPlace(ctx: SystemRunContext): SystemRunResult {
 
   let nextId = bombs.nextId;
   const items: BombEntry[] = bombs.items.map((bomb) =>
-    Object.freeze({ ...bomb, tile: freezeTile(bomb.tile) }),
+    Object.freeze({ ...bomb, tile: freezeTile(bomb.tile), echo: bomb.echo === true }),
   );
   const occupied = new Set(items.map((bomb) => tileKey(bomb.tile)));
+  const solid = effectiveSolidKeySet(arena, pressure);
+  const crates = new Set(arena.crates.map(tileKey));
 
   for (const resolved of placeCommands) {
     const { envelope, competitorId } = resolved;
@@ -157,7 +184,10 @@ function runBombPlace(ctx: SystemRunContext): SystemRunResult {
       continue;
     }
 
-    const active = items.filter((bomb) => bomb.ownerId === competitorId).length;
+    // Capacity counts only non-echo bombs (Living Shadow free echo).
+    const active = items.filter(
+      (bomb) => bomb.ownerId === competitorId && !bomb.echo,
+    ).length;
     if (active >= progressionRow.maxBombs) {
       rejections.push(
         Object.freeze({
@@ -194,6 +224,7 @@ function runBombPlace(ctx: SystemRunContext): SystemRunResult {
       tile: freezeTile(placeTile),
       fuseMs: BOMB_FUSE_MS,
       flameRange: progressionRow.flameRange,
+      echo: false,
     });
     nextId += 1;
     items.push(bomb);
@@ -206,6 +237,39 @@ function runBombPlace(ctx: SystemRunContext): SystemRunResult {
         at: freezeTile(bomb.tile),
       }),
     );
+
+    // Living Shadow free echo: same tick, same owner/fuse, projection tile only.
+    // Illegal echo never cancels the already-accepted body plant.
+    const skill = skills.entries.find((entry) => entry.competitorId === competitorId);
+    if (
+      skill
+      && skill.skillId === ZED_LIVING_SHADOW_SKILL_ID
+      && skill.phase === "channeling"
+      && skill.projection
+    ) {
+      const shadowTile = tileOf(skill.projection);
+      if (canPlaceBombOnTile(shadowTile, occupied, solid, crates)) {
+        const echo: BombEntry = Object.freeze({
+          id: nextId,
+          ownerId: competitorId,
+          tile: freezeTile(shadowTile),
+          fuseMs: BOMB_FUSE_MS,
+          flameRange: progressionRow.flameRange,
+          echo: true,
+        });
+        nextId += 1;
+        items.push(echo);
+        occupied.add(tileKey(shadowTile));
+        events.push(
+          Object.freeze({
+            type: "bomb-placed",
+            bombId: echo.id,
+            competitorId,
+            at: freezeTile(echo.tile),
+          }),
+        );
+      }
+    }
   }
 
   items.sort((left, right) => left.id - right.id);
@@ -479,6 +543,11 @@ function restoreBombs(raw: unknown, config: MatchConfig): BombsSlice {
     throw new Error("slices.bombs.items must be an array.");
   }
   const seatSet = new Set(config.seats.map((seat) => seat.competitorId));
+  const echoOwnerSet = new Set(
+    config.seats
+      .filter((seat) => seat.skillId === ZED_LIVING_SHADOW_SKILL_ID)
+      .map((seat) => seat.competitorId),
+  );
   const bombItems = bombsRaw.items.map((item, index) => {
     if (!item || typeof item !== "object") {
       throw new Error(`slices.bombs.items[${index}] is invalid.`);
@@ -502,12 +571,21 @@ function restoreBombs(raw: unknown, config: MatchConfig): BombsSlice {
         `slices.bombs.items[${index}].fuseMs must be in [${MIN_ACTIVE_FUSE_MS}, ${MAX_ACTIVE_FUSE_MS}].`,
       );
     }
+    if (row.echo !== undefined && typeof row.echo !== "boolean") {
+      throw new Error(`slices.bombs.items[${index}].echo must be a boolean when present.`);
+    }
+    if (row.echo === true && !echoOwnerSet.has(row.ownerId as CompetitorId)) {
+      throw new Error(
+        `slices.bombs.items[${index}].echo requires a zed-living-shadow owner.`,
+      );
+    }
     return Object.freeze({
       id,
       ownerId: row.ownerId as CompetitorId,
       tile: assertTile(row.tile, `slices.bombs.items[${index}].tile`),
       fuseMs,
       flameRange: assertInteger(row.flameRange, `slices.bombs.items[${index}].flameRange`, 1),
+      echo: row.echo === true,
     });
   });
 
@@ -629,6 +707,9 @@ export const ordnanceModule: ModuleSpec = Object.freeze({
         "progression",
         "vitals",
         "match",
+        "skills",
+        "arena",
+        "pressure",
       ] as const),
       writes: Object.freeze(["bombs"] as const),
       run: runBombPlace,

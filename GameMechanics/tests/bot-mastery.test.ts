@@ -113,6 +113,7 @@ function tacticalSnapshot(
           tile: Object.freeze({ ...selfTile }),
           fuseMs: 1_000,
           flameRange: 2,
+          echo: false,
         })])
       : Object.freeze([]),
   });
@@ -152,7 +153,7 @@ describe("private bot mastery models", () => {
       compatibility: { ...draft.compatibility, mechanicsRevision: "mechanics-old" },
     };
     expect(validateTechniqueCandidate(stale).issues).toContain(
-      "technique.compatibility.mechanicsRevision is stale or incompatible (expected mechanics-v6).",
+      "technique.compatibility.mechanicsRevision is stale or incompatible (expected mechanics-v7).",
     );
   });
 

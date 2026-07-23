@@ -294,6 +294,38 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID");
   });
 
+  it("drives Zed cast telegraph, mirrored shadow action, and swap recovery", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    expect(main).toContain("ZED_CAST_TELEGRAPH_MS");
+    expect(main).toContain("ZED_CAST_BUILD_MS");
+    expect(main).toContain("ZED_SWAP_RECOVERY_MS");
+    expect(main).toContain("ZED_SHADOW_CANCEL_MS");
+    expect(main).toContain("ZED_FAIL_COOLDOWN_MS");
+    expect(main).toContain("didLivingShadowSwapSucceed");
+    // Cast start uses channel-length telegraph for Living Shadow only.
+    expect(main).toMatch(
+      /competitor\.skill\?\.id === ZED_LIVING_SHADOW_SKILL_ID[\s\S]{0,120}ZED_CAST_TELEGRAPH_MS/,
+    );
+    // Shadow mirrors body action frame family while staying fixed in position.
+    expect(main).toMatch(
+      /projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID[\s\S]{0,200}actionFrame \?\? championFrameUrl/,
+    );
+    // Success swap recovery vs fail cancel by cooldown magnitude.
+    expect(main).toMatch(/successSwap[\s\S]{0,80}ZED_SWAP_RECOVERY_MS/);
+    expect(main).toMatch(/ZED_SHADOW_CANCEL_MS/);
+  });
+
+  it("keeps Living Shadow dual-body gated away from roster defaults", () => {
+    const main = readFileSync(BROWSER_MAIN, "utf8");
+    expect(main).not.toMatch(
+      /DUAL_BODY_PROJECTION_SKILL_IDS[\s\S]{0,200}KILLER_BEE/,
+    );
+    expect(main).toContain("ZED_LIVING_SHADOW_SKILL_ID");
+    expect(main).toMatch(
+      /DUAL_BODY_PROJECTION_SKILL_IDS[\s\S]*?ZED_LIVING_SHADOW_SKILL_ID/,
+    );
+  });
+
   it("does not tree-walk into legacy original-game asset roots", () => {
     const sources = walkFiles(join(ROOT, "src", "browser"))
       .filter((f) => f.endsWith(".ts") || f.endsWith(".css"))

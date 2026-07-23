@@ -12,7 +12,7 @@ export const RANNI_DANGER_BLINK_TECHNIQUE = Object.freeze({
   status: "active",
   compatibility: Object.freeze({
     gameVersion: "kernel-0.10.0",
-    mechanicsRevision: "mechanics-v6",
+    mechanicsRevision: "mechanics-v7",
     contentRevision: "content-prototype-arena-v1",
     championSlug: "ranni",
     characterId: champion.characterId,

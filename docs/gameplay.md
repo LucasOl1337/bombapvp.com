@@ -54,8 +54,18 @@ Primeiro `R` coloca uma projecao fixa no tile cardinal livre mais distante ate
 alcance 3 (solidos e caixas param o raio; bombas nao bloqueiam a colocacao). O
 corpo continua livre por 2000 ms e **nao** recebe imunidade de canalizacao.
 Segundo `R` troca o corpo para a projecao se o destino for valido e entra em
-cooldown de 7000 ms; troca invalida, timeout sem troca ou **morte** limpam a
-projecao e usam cooldown de falha de 4000 ms. A sombra sozinha nao causa
-`skill-hit`, nao altera fusivel de bomba e nao planta segunda bomba na v1.
-Apresentacao dual-body carmesim so para seats com `zed-living-shadow` — projecao
+cooldown de 7000 ms; bombas do proprio Zed nao bloqueiam esse pouso. Troca
+invalida, timeout sem troca ou **morte** limpam a projecao e usam cooldown de
+falha de 4000 ms. A sombra sozinha nao causa `skill-hit` e nao reescreve fusivel
+de bomba. Enquanto a canalizacao estiver ativa, cada plantio de bomba aceite no
+corpo tambem tenta um plantio eco no tile da sombra no mesmo tick: mesmo dono e
+fusivel inicial, comportamento normal de explosao/chama/cadeia, sem consumir
+slot extra de `maxBombs`; o HUD contabiliza apenas bombas nao eco. Eco ilegal
+(bomba, solido, caixa ou tile invalido) e ignorado e nao cancela o plantio do
+corpo.
+
+Apresentacao dual-body carmesim so para seats com `zed-living-shadow`. Enquanto
+ativa, a sombra fica no tile e espelha facing, locomocao (idle/walk/run) e acao
+(cast/attack/plant) do corpo sem transladar. A troca valida toca recuperacao; a
+falha ou o timeout tocam cancelamento, e a morte limpa a projecao. Projecao
 generica de outros Champions nao cria fantasma de Zed.

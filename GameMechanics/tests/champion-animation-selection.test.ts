@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectIntegratedAnimationOverrides,
+  didLivingShadowSwapSucceed,
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
@@ -61,6 +62,13 @@ describe("champion animation selection", () => {
       idle: "south",
     });
     expect(overrides.has("discarded")).toBe(false);
+  });
+
+  it("classifies Living Shadow recovery after batched simulation ticks", () => {
+    expect(didLivingShadowSwapSucceed(6_600, 4_000)).toBe(true);
+    expect(didLivingShadowSwapSucceed(4_020, 4_000)).toBe(true);
+    expect(didLivingShadowSwapSucceed(4_000, 4_000)).toBe(false);
+    expect(didLivingShadowSwapSucceed(3_600, 4_000)).toBe(false);
   });
 
   it("spreads a finite sequence over the kernel-owned skill duration", () => {
