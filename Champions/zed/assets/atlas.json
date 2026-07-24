@@ -1,0 +1,1921 @@
+{
+  "slug": "zed",
+  "atlas": "atlas.webp",
+  "atlasWidth": 2041,
+  "atlasHeight": 1260,
+  "frameCount": 188,
+  "footprint": {
+    "width": 99,
+    "height": 140,
+    "sourceWidth": 160,
+    "sourceHeight": 160
+  },
+  "counts": {
+    "attack-east": 8,
+    "attack-north": 8,
+    "attack-south": 8,
+    "attack-west": 8,
+    "cast-east": 8,
+    "cast-north": 8,
+    "cast-south": 8,
+    "cast-west": 8,
+    "death-east": 8,
+    "death-north": 8,
+    "death-south": 8,
+    "death-west": 8,
+    "idle-east": 6,
+    "idle-north": 6,
+    "idle-south": 6,
+    "idle-west": 6,
+    "run-east": 8,
+    "run-north": 8,
+    "run-south": 8,
+    "run-west": 8,
+    "walk-east": 8,
+    "walk-north": 8,
+    "walk-south": 8,
+    "walk-west": 8
+  },
+  "frames": {
+    "attack-east-0": {
+      "x": 0,
+      "y": 0,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-1": {
+      "x": 66,
+      "y": 0,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-2": {
+      "x": 132,
+      "y": 0,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-3": {
+      "x": 251,
+      "y": 0,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-4": {
+      "x": 370,
+      "y": 0,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-5": {
+      "x": 489,
+      "y": 0,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-6": {
+      "x": 576,
+      "y": 0,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-east-7": {
+      "x": 635,
+      "y": 0,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-0": {
+      "x": 694,
+      "y": 0,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-1": {
+      "x": 816,
+      "y": 0,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-2": {
+      "x": 931,
+      "y": 0,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-3": {
+      "x": 1046,
+      "y": 0,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-4": {
+      "x": 1161,
+      "y": 0,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-5": {
+      "x": 1276,
+      "y": 0,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-6": {
+      "x": 1391,
+      "y": 0,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-north-7": {
+      "x": 1513,
+      "y": 0,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-0": {
+      "x": 1635,
+      "y": 0,
+      "w": 107,
+      "h": 140,
+      "offsetX": 27,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-1": {
+      "x": 1742,
+      "y": 0,
+      "w": 107,
+      "h": 140,
+      "offsetX": 27,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-2": {
+      "x": 1849,
+      "y": 0,
+      "w": 120,
+      "h": 111,
+      "offsetX": 20,
+      "offsetY": 36,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-3": {
+      "x": 0,
+      "y": 140,
+      "w": 120,
+      "h": 111,
+      "offsetX": 20,
+      "offsetY": 36,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-4": {
+      "x": 120,
+      "y": 140,
+      "w": 120,
+      "h": 111,
+      "offsetX": 20,
+      "offsetY": 36,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-5": {
+      "x": 240,
+      "y": 140,
+      "w": 60,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-6": {
+      "x": 300,
+      "y": 140,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-south-7": {
+      "x": 409,
+      "y": 140,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-0": {
+      "x": 518,
+      "y": 140,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-1": {
+      "x": 584,
+      "y": 140,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-2": {
+      "x": 650,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-3": {
+      "x": 769,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-4": {
+      "x": 888,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-5": {
+      "x": 1007,
+      "y": 140,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-6": {
+      "x": 1094,
+      "y": 140,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "attack-west-7": {
+      "x": 1153,
+      "y": 140,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-0": {
+      "x": 1212,
+      "y": 140,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-1": {
+      "x": 1278,
+      "y": 140,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-2": {
+      "x": 1344,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-3": {
+      "x": 1463,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-4": {
+      "x": 1582,
+      "y": 140,
+      "w": 119,
+      "h": 109,
+      "offsetX": 20,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-5": {
+      "x": 1701,
+      "y": 140,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-6": {
+      "x": 1788,
+      "y": 140,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-east-7": {
+      "x": 1847,
+      "y": 140,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-0": {
+      "x": 1906,
+      "y": 140,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-1": {
+      "x": 0,
+      "y": 280,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-2": {
+      "x": 115,
+      "y": 280,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-3": {
+      "x": 230,
+      "y": 280,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-4": {
+      "x": 345,
+      "y": 280,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-5": {
+      "x": 460,
+      "y": 280,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-6": {
+      "x": 575,
+      "y": 280,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-north-7": {
+      "x": 697,
+      "y": 280,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-0": {
+      "x": 819,
+      "y": 280,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-1": {
+      "x": 928,
+      "y": 280,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-2": {
+      "x": 1037,
+      "y": 280,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-3": {
+      "x": 1145,
+      "y": 280,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-4": {
+      "x": 1253,
+      "y": 280,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-5": {
+      "x": 1361,
+      "y": 280,
+      "w": 60,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-6": {
+      "x": 1421,
+      "y": 280,
+      "w": 60,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-south-7": {
+      "x": 1481,
+      "y": 280,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-0": {
+      "x": 1590,
+      "y": 280,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-1": {
+      "x": 1656,
+      "y": 280,
+      "w": 66,
+      "h": 140,
+      "offsetX": 47,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-2": {
+      "x": 1722,
+      "y": 280,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-3": {
+      "x": 1841,
+      "y": 280,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-4": {
+      "x": 0,
+      "y": 420,
+      "w": 119,
+      "h": 109,
+      "offsetX": 21,
+      "offsetY": 39,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-5": {
+      "x": 119,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-6": {
+      "x": 206,
+      "y": 420,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "cast-west-7": {
+      "x": 265,
+      "y": 420,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-0": {
+      "x": 324,
+      "y": 420,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-1": {
+      "x": 383,
+      "y": 420,
+      "w": 88,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-2": {
+      "x": 471,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-3": {
+      "x": 558,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-4": {
+      "x": 645,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-5": {
+      "x": 732,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-6": {
+      "x": 819,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-east-7": {
+      "x": 906,
+      "y": 420,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-0": {
+      "x": 993,
+      "y": 420,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-1": {
+      "x": 1115,
+      "y": 420,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-2": {
+      "x": 1230,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-3": {
+      "x": 1345,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-4": {
+      "x": 1460,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-5": {
+      "x": 1575,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-6": {
+      "x": 1690,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-north-7": {
+      "x": 1805,
+      "y": 420,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-0": {
+      "x": 1920,
+      "y": 420,
+      "w": 109,
+      "h": 140,
+      "offsetX": 25,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-1": {
+      "x": 0,
+      "y": 560,
+      "w": 97,
+      "h": 120,
+      "offsetX": 32,
+      "offsetY": 28,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-2": {
+      "x": 97,
+      "y": 560,
+      "w": 97,
+      "h": 120,
+      "offsetX": 32,
+      "offsetY": 28,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-3": {
+      "x": 194,
+      "y": 560,
+      "w": 97,
+      "h": 120,
+      "offsetX": 32,
+      "offsetY": 28,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-4": {
+      "x": 291,
+      "y": 560,
+      "w": 78,
+      "h": 99,
+      "offsetX": 41,
+      "offsetY": 48,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-5": {
+      "x": 369,
+      "y": 560,
+      "w": 78,
+      "h": 99,
+      "offsetX": 41,
+      "offsetY": 48,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-6": {
+      "x": 447,
+      "y": 560,
+      "w": 78,
+      "h": 99,
+      "offsetX": 41,
+      "offsetY": 48,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-south-7": {
+      "x": 525,
+      "y": 560,
+      "w": 78,
+      "h": 99,
+      "offsetX": 41,
+      "offsetY": 48,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-0": {
+      "x": 603,
+      "y": 560,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-1": {
+      "x": 662,
+      "y": 560,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-2": {
+      "x": 749,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-3": {
+      "x": 835,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-4": {
+      "x": 921,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-5": {
+      "x": 1007,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-6": {
+      "x": 1093,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "death-west-7": {
+      "x": 1179,
+      "y": 560,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-0": {
+      "x": 1265,
+      "y": 560,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-1": {
+      "x": 1324,
+      "y": 560,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-2": {
+      "x": 1383,
+      "y": 560,
+      "w": 88,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-3": {
+      "x": 1471,
+      "y": 560,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-4": {
+      "x": 1530,
+      "y": 560,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-east-5": {
+      "x": 1589,
+      "y": 560,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-0": {
+      "x": 1676,
+      "y": 560,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-1": {
+      "x": 1798,
+      "y": 560,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-2": {
+      "x": 1913,
+      "y": 560,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-3": {
+      "x": 0,
+      "y": 700,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-4": {
+      "x": 122,
+      "y": 700,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-north-5": {
+      "x": 244,
+      "y": 700,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-0": {
+      "x": 359,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-1": {
+      "x": 468,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-2": {
+      "x": 577,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-3": {
+      "x": 686,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-4": {
+      "x": 795,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-south-5": {
+      "x": 904,
+      "y": 700,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-0": {
+      "x": 1013,
+      "y": 700,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-1": {
+      "x": 1072,
+      "y": 700,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-2": {
+      "x": 1131,
+      "y": 700,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-3": {
+      "x": 1218,
+      "y": 700,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-4": {
+      "x": 1277,
+      "y": 700,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "idle-west-5": {
+      "x": 1336,
+      "y": 700,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-0": {
+      "x": 1422,
+      "y": 700,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-1": {
+      "x": 1509,
+      "y": 700,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-2": {
+      "x": 1596,
+      "y": 700,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-3": {
+      "x": 1682,
+      "y": 700,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-4": {
+      "x": 1768,
+      "y": 700,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-5": {
+      "x": 1855,
+      "y": 700,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-6": {
+      "x": 1942,
+      "y": 700,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-east-7": {
+      "x": 0,
+      "y": 840,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-0": {
+      "x": 86,
+      "y": 840,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-1": {
+      "x": 208,
+      "y": 840,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-2": {
+      "x": 323,
+      "y": 840,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-3": {
+      "x": 438,
+      "y": 840,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-4": {
+      "x": 553,
+      "y": 840,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-5": {
+      "x": 675,
+      "y": 840,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-6": {
+      "x": 790,
+      "y": 840,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-north-7": {
+      "x": 905,
+      "y": 840,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-0": {
+      "x": 1020,
+      "y": 840,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-1": {
+      "x": 1129,
+      "y": 840,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-2": {
+      "x": 1237,
+      "y": 840,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-3": {
+      "x": 1346,
+      "y": 840,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-4": {
+      "x": 1455,
+      "y": 840,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-5": {
+      "x": 1564,
+      "y": 840,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-6": {
+      "x": 1650,
+      "y": 840,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-south-7": {
+      "x": 1759,
+      "y": 840,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-0": {
+      "x": 1867,
+      "y": 840,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-1": {
+      "x": 1954,
+      "y": 840,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-2": {
+      "x": 0,
+      "y": 980,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-3": {
+      "x": 86,
+      "y": 980,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-4": {
+      "x": 172,
+      "y": 980,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-5": {
+      "x": 259,
+      "y": 980,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-6": {
+      "x": 346,
+      "y": 980,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "run-west-7": {
+      "x": 432,
+      "y": 980,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "static-east": {
+      "x": 518,
+      "y": 980,
+      "w": 60,
+      "h": 140,
+      "offsetX": 49,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "static-north": {
+      "x": 578,
+      "y": 980,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "static-south": {
+      "x": 700,
+      "y": 980,
+      "w": 109,
+      "h": 140,
+      "offsetX": 25,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "static-west": {
+      "x": 809,
+      "y": 980,
+      "w": 60,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-0": {
+      "x": 869,
+      "y": 980,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-1": {
+      "x": 928,
+      "y": 980,
+      "w": 88,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-2": {
+      "x": 1016,
+      "y": 980,
+      "w": 88,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-3": {
+      "x": 1104,
+      "y": 980,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-4": {
+      "x": 1191,
+      "y": 980,
+      "w": 59,
+      "h": 140,
+      "offsetX": 50,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-5": {
+      "x": 1250,
+      "y": 980,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-6": {
+      "x": 1337,
+      "y": 980,
+      "w": 87,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-east-7": {
+      "x": 1424,
+      "y": 980,
+      "w": 88,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-0": {
+      "x": 1512,
+      "y": 980,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-1": {
+      "x": 1634,
+      "y": 980,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-2": {
+      "x": 1749,
+      "y": 980,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-3": {
+      "x": 1864,
+      "y": 980,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-4": {
+      "x": 0,
+      "y": 1120,
+      "w": 122,
+      "h": 140,
+      "offsetX": 19,
+      "offsetY": 6,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-5": {
+      "x": 122,
+      "y": 1120,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-6": {
+      "x": 237,
+      "y": 1120,
+      "w": 115,
+      "h": 117,
+      "offsetX": 23,
+      "offsetY": 31,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-north-7": {
+      "x": 352,
+      "y": 1120,
+      "w": 115,
+      "h": 130,
+      "offsetX": 23,
+      "offsetY": 18,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-0": {
+      "x": 467,
+      "y": 1120,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-1": {
+      "x": 576,
+      "y": 1120,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-2": {
+      "x": 684,
+      "y": 1120,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-3": {
+      "x": 792,
+      "y": 1120,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-4": {
+      "x": 901,
+      "y": 1120,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-5": {
+      "x": 1010,
+      "y": 1120,
+      "w": 109,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-6": {
+      "x": 1119,
+      "y": 1120,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-south-7": {
+      "x": 1205,
+      "y": 1120,
+      "w": 108,
+      "h": 140,
+      "offsetX": 26,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-0": {
+      "x": 1313,
+      "y": 1120,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-1": {
+      "x": 1372,
+      "y": 1120,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-2": {
+      "x": 1459,
+      "y": 1120,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-3": {
+      "x": 1546,
+      "y": 1120,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-4": {
+      "x": 1632,
+      "y": 1120,
+      "w": 59,
+      "h": 140,
+      "offsetX": 51,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-5": {
+      "x": 1691,
+      "y": 1120,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-6": {
+      "x": 1777,
+      "y": 1120,
+      "w": 86,
+      "h": 140,
+      "offsetX": 37,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    },
+    "walk-west-7": {
+      "x": 1863,
+      "y": 1120,
+      "w": 87,
+      "h": 140,
+      "offsetX": 36,
+      "offsetY": 8,
+      "sourceW": 160,
+      "sourceH": 160
+    }
+  }
+}

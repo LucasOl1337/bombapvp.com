@@ -39,6 +39,7 @@ import {
   collectChampionAssetUrls,
   getChampionPresentation,
   listChampionPresentations,
+  resolveAtlasFrame,
   type ChampAccent,
   type ChampPack,
   type ChampPresentation,
@@ -751,7 +752,11 @@ function loadImage(url: string): HTMLImageElement {
   return image;
 }
 
-function preloadAll(): void {
+/**
+ * Arena, HUD and effect bitmaps — everything a match needs regardless of who is
+ * playing. Champion atlases are deliberately excluded; see `preloadChampion`.
+ */
+function preloadScene(): void {
   const urls = new Set<string>([
     brandMarkUrl,
     ...FLOOR_BASE_URLS,
@@ -772,8 +777,23 @@ function preloadAll(): void {
     hudFlameIconUrl,
     ...ANIMATION_LAB_PACKS.map((pack) => pack.atlasUrl),
   ]);
-  for (const url of collectChampionAssetUrls()) urls.add(url);
   for (const url of urls) loadImage(url);
+}
+
+/**
+ * Fetch one champion's atlas + portrait. Idempotent — `loadImage` caches by
+ * URL, so calling this on every seat change costs nothing after the first hit.
+ */
+function preloadChampion(slug: string): void {
+  const entry = getChampionPresentation(slug);
+  if (!entry) return;
+  for (const url of collectChampionAssetUrls([entry])) loadImage(url);
+}
+
+/** Warm the champions the current seats actually use. */
+function preloadSelectedChampions(): void {
+  preloadChampion(selectedP1);
+  preloadChampion(selectedP2);
 }
 
 function drawImageUrl(
@@ -848,6 +868,48 @@ function getSpriteTrimBounds(image: HTMLImageElement): SpriteTrimBounds | null {
     spriteTrimCache.set(image, fallback);
     return fallback;
   }
+}
+
+export type SpriteSource = Readonly<{
+  image: HTMLImageElement;
+  srcX: number;
+  srcY: number;
+  srcW: number;
+  srcH: number;
+}>;
+
+/**
+ * Resolve a frame token into an image plus source rect.
+ *
+ * Champion frames are atlas references whose opaque bounds were measured at
+ * build time; everything else is a plain URL that still needs a runtime trim.
+ * Returns null while the bitmap is still decoding.
+ */
+function resolveSpriteSource(token: string): SpriteSource | null {
+  const atlasFrame = resolveAtlasFrame(token);
+  if (atlasFrame) {
+    const image = loadImage(atlasFrame.url);
+    if (!image.complete || image.naturalWidth <= 0) return null;
+    const { region } = atlasFrame;
+    return {
+      image,
+      srcX: region.x,
+      srcY: region.y,
+      srcW: region.w,
+      srcH: region.h,
+    };
+  }
+
+  const image = loadImage(token);
+  if (!image.complete || image.naturalWidth <= 0) return null;
+  const trim = getSpriteTrimBounds(image);
+  return {
+    image,
+    srcX: trim?.x ?? 0,
+    srcY: trim?.y ?? 0,
+    srcW: trim?.width ?? image.naturalWidth,
+    srcH: trim?.height ?? image.naturalHeight,
+  };
 }
 
 function acceptsGameplayInput(phase: GameSnapshot["phase"] = game.snapshot().phase): boolean {
@@ -1230,6 +1292,8 @@ function paintPickColumn(
 ): void {
   const champ = getChampionPresentation(slug);
   if (!champ) return;
+  // Warm the highlighted champion so confirming the pick never waits on a fetch.
+  preloadChampion(slug);
   const playerIndex = side === "p1" ? 0 : 1;
   const isBot = pickMode === "bot-lab" || (pickMode === "bot-training" && playerIndex === 1);
   const profileId = side === "p1" ? pickBotP1 : pickBotP2;
@@ -1348,6 +1412,7 @@ function applyConfigurationAndRestart(
   speedButton.textContent = "1×";
   selectedP1 = configuration.players[0].championSlug;
   selectedP2 = configuration.players[1].championSlug;
+  preloadSelectedChampions();
   pickP1 = selectedP1;
   pickP2 = selectedP2;
   pickMode = configuration.mode;
@@ -2864,15 +2929,9 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       context.restore();
     }
 
-    const image = loadImage(entry.frameUrl);
-    if (image.complete && image.naturalWidth > 0) {
-      const fullW = image.naturalWidth;
-      const fullH = image.naturalHeight;
-      const trim = getSpriteTrimBounds(image);
-      const srcX = trim?.x ?? 0;
-      const srcY = trim?.y ?? 0;
-      const srcW = trim?.width ?? fullW;
-      const srcH = trim?.height ?? fullH;
+    const sprite = resolveSpriteSource(entry.frameUrl);
+    if (sprite) {
+      const { image, srcX, srcY, srcW, srcH } = sprite;
       const spriteWidth = Math.min(maxSpriteWidth, spriteHeight * (srcW / srcH));
       const spriteX = cx - spriteWidth * 0.5;
       const spriteY = bodyBottom - spriteHeight + 1;
@@ -3799,7 +3858,8 @@ window.addEventListener("pagehide", () => {
   delete window.get_bot_lab_experience;
 }, { once: true });
 
-preloadAll();
+preloadScene();
+preloadSelectedChampions();
 preloadSounds();
 initSoundUnlock(window);
 updateDevOpen();

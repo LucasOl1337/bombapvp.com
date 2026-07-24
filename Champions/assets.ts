@@ -1,4 +1,10 @@
 /// <reference types="vite/client" />
+import {
+  atlasFrameReferences,
+  atlasStaticReference,
+  getChampionAtlasManifest,
+} from "./atlas";
+
 export const CHAMPION_DIRECTIONS = ["up", "down", "left", "right"] as const;
 export const CHAMPION_ANIMATIONS = [
   "idle",
@@ -30,6 +36,59 @@ const MAP = {
   west: "left",
   east: "right",
 } as const;
+/**
+ * Build a champion's assets from its packed atlas.
+ *
+ * Frames are atlas references rather than per-file URLs, so a champion costs
+ * one bitmap request instead of ~150. Same public shape as the PNG-glob path it
+ * replaces, so consumers passing `readonly string[]` are unaffected.
+ */
+export function createChampionAtlasAssets(
+  slug: string,
+  portraitUrl: string,
+  size: { width: number; height: number },
+  disabledAnimations: readonly ChampionAnimation[] = [],
+  effects: Readonly<Record<string, string>> = {},
+): ChampionAssets {
+  const manifest = getChampionAtlasManifest(slug);
+  if (!manifest) {
+    throw new Error(
+      `Missing atlas for champion "${slug}". Run: npm run assets:champions`,
+    );
+  }
+
+  const staticSprites = { up: "", down: "", left: "", right: "" };
+  for (const facing of ["north", "south", "west", "east"] as const) {
+    staticSprites[MAP[facing]] = atlasStaticReference(slug, facing) ?? "";
+  }
+
+  const animations = Object.fromEntries(
+    CHAMPION_ANIMATIONS.map((animation) => [
+      animation,
+      Object.fromEntries(
+        (["north", "south", "west", "east"] as const).map((facing) => [
+          MAP[facing],
+          disabledAnimations.includes(animation)
+            ? Object.freeze([])
+            : atlasFrameReferences(slug, animation, facing),
+        ]),
+      ),
+    ]),
+  ) as unknown as Record<
+    ChampionAnimation,
+    Record<ChampionDirection, readonly string[]>
+  >;
+
+  return Object.freeze({
+    portraitUrl,
+    size: Object.freeze(size),
+    sourceFileCount: manifest.frameCount,
+    effects: Object.freeze({ ...effects }),
+    staticSprites: Object.freeze(staticSprites),
+    animations: Object.freeze(animations),
+  });
+}
+
 export function createChampionAssets(
   portraitUrl: string,
   size: { width: number; height: number },

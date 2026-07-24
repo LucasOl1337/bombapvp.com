@@ -18,6 +18,17 @@ import {
   type ChampionSlug,
 } from "../../../Champions/membership.ts";
 import type { CharacterDefinition } from "../../../Champions/contracts.ts";
+import {
+  championOpticalScale,
+  getChampionAtlasUrl,
+  resolveAtlasFrame,
+} from "../../../Champions/atlas.ts";
+/**
+ * Re-exported so the renderer resolves atlas frames without importing
+ * `Champions/` directly — this module is the single sanctioned bridge.
+ */
+export { resolveAtlasFrame };
+export type { ResolvedAtlasFrame } from "../../../Champions/atlas.ts";
 import { isSkillId, type SkillId } from "../contracts.ts";
 import {
   collectIntegratedAnimationOverrides,
@@ -88,19 +99,6 @@ const integratedManifestModules = import.meta.glob(
 const INTEGRATED_ANIMATIONS = collectIntegratedAnimationOverrides(
   Object.values(integratedManifestModules),
 );
-
-/**
- * Optical arena scale. Classic padded sprites stay at 1; dense full-cell packs
- * shrink so feet/body footprint match Ranni-class champions.
- */
-const ARENA_OPTICAL_SCALE: Readonly<Record<ChampionSlug, number>> = Object.freeze({
-  ranni: 1,
-  "killer-bee": 1,
-  "crocodilo-arcano": 0.96,
-  thresh: 0.78,
-  /** Dense full-cell high-frame pack — match Thresh-class optical footprint. */
-  zed: 0.82,
-});
 
 const FACING_FROM_DIR = {
   up: "north",
@@ -223,7 +221,7 @@ const PRESENTATIONS: readonly ChampPresentation[] = Object.freeze(
       description: locale.description,
       portrait: assets.portraitUrl,
       kernelSkillId: kernelSkillFor(slug),
-      arenaScale: ARENA_OPTICAL_SCALE[slug] ?? 1,
+      arenaScale: championOpticalScale(slug),
       pack: fullPack,
       integratedAnimations,
     });
@@ -245,7 +243,13 @@ export function getChampionPresentationById(characterId: string): ChampPresentat
   return BY_ID.get(characterId) ?? null;
 }
 
-/** All portrait + sprite URLs for preload. */
+/**
+ * Bitmap URLs backing a champion's presentation.
+ *
+ * Animation frames are atlas references, not URLs, so one atlas replaces the
+ * ~150 per-frame entries this used to return. Callers preload only the
+ * champions actually on screen.
+ */
 export function collectChampionAssetUrls(
   presentations: readonly ChampPresentation[] = PRESENTATIONS,
 ): readonly string[] {
@@ -254,16 +258,8 @@ export function collectChampionAssetUrls(
     urls.add(entry.portrait);
     const pack = entry.pack;
     for (const url of Object.values(pack.effects)) urls.add(url);
-    for (const facing of ["south", "north", "east", "west"] as const) {
-      urls.add(pack.static[facing]);
-      for (const frame of pack.idle[facing]) urls.add(frame);
-      for (const frame of pack.walk[facing]) urls.add(frame);
-      for (const frame of pack.run[facing]) urls.add(frame);
-      for (const frame of pack.cast[facing]) urls.add(frame);
-      for (const frame of pack.attack[facing]) urls.add(frame);
-      for (const frame of pack.ultimate[facing]) urls.add(frame);
-      for (const frame of pack.death[facing]) urls.add(frame);
-    }
+    const atlasUrl = getChampionAtlasUrl(entry.slug);
+    if (atlasUrl) urls.add(atlasUrl);
     // Preload hook projectile sprites when present.
     if (pack.hookProjectile) {
       for (const url of Object.values(pack.hookProjectile.head)) urls.add(url);
