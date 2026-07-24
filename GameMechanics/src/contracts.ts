@@ -54,6 +54,16 @@ export function isSkillId(value: string): value is SkillId {
   return SKILL_ID_SET.has(value);
 }
 
+/**
+ * How a channel ended. The kernel is the sole authority here: adapters must
+ * never re-derive it from cooldown magnitude or phase edges.
+ *
+ * - `hit`: the skill landed its effect (targets struck, teleport committed).
+ * - `miss`: the skill resolved normally but affected nothing.
+ * - `cancelled`: the channel was aborted before it could resolve.
+ */
+export type SkillOutcome = "hit" | "miss" | "cancelled";
+
 /** Competitive Match phases + adapter-only `paused` overlay in the facade snapshot. */
 export type MatchPhase =
   | "round-start"
@@ -341,6 +351,38 @@ export type GameEvent =
       type: "match-ended";
       winner: CompetitorId;
       scores: readonly ScoreEntry[];
+    }>
+  /**
+   * A channel opened. Carries the aim and origin the kernel actually used, so
+   * adapters never have to sample them from a snapshot mid-channel.
+   */
+  | Readonly<{
+      type: "skill-channel-started";
+      competitorId: CompetitorId;
+      skillId: SkillId;
+      aim: Direction;
+      origin: TileCoord;
+      channelMs: number;
+    }>
+  /**
+   * A channel ended. `outcome` is authoritative — the kernel knows whether the
+   * hook caught someone or the shadow swap committed, so no adapter should
+   * infer it from `cooldownRemainingMs`.
+   */
+  | Readonly<{
+      type: "skill-resolved";
+      competitorId: CompetitorId;
+      skillId: SkillId;
+      outcome: SkillOutcome;
+      aim: Direction;
+      /**
+       * Tile the skill resolved *from* — where the caster stood at resolution,
+       * which is not always where the channel opened (Living Shadow may resolve
+       * from a tile the caster walked to mid-channel).
+       */
+      origin: TileCoord;
+      /** Competitors struck or displaced by this skill, in stable order. */
+      targets: readonly CompetitorId[];
     }>
   | Readonly<{ type: "phase-changed"; phase: "playing" | "paused" }>
   /** Full session restart (facade). Alias kept for browser compatibility. */

@@ -6,6 +6,7 @@ const ROOT = join(process.cwd(), "GameMechanics");
 const BROWSER_MAIN = join(ROOT, "src", "browser", "main.ts");
 const BROWSER_STYLES = join(ROOT, "src", "browser", "styles.css");
 const BROWSER_PACKS = join(ROOT, "src", "browser", "champion-packs.ts");
+const BROWSER_HUD_PANEL = join(ROOT, "src", "browser", "hud-panel.ts");
 const INDEX_HTML = join(ROOT, "index.html");
 const ASSETS_DIR = join(ROOT, "assets");
 const RANNI_SPIRIT_WISP = join(
@@ -113,22 +114,25 @@ describe("browser visual adapter (product arena)", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
     const styles = readFileSync(BROWSER_STYLES, "utf8");
     const html = readFileSync(INDEX_HTML, "utf8");
+    const hudPanel = readFileSync(BROWSER_HUD_PANEL, "utf8");
 
     // Product shell markers
     expect(main).toContain("arena-app");
     expect(main).toContain("arena-hud");
     expect(main).toContain("arena-timer-shell");
-    expect(main).toContain("arena-player-card");
     expect(main).toContain("arena-hud__bar");
     expect(styles).toContain(".arena-app");
     expect(styles).toContain(".arena-hud");
     expect(styles).toContain(".arena-hud__bar");
 
+    // Player cards are built by the HUD panel module, not inline in the renderer.
+    expect(hudPanel).toContain("arena-player-card");
+    expect(hudPanel).toContain("lol-hud");
+
     // LoL dual HUD + character select
-    expect(main).toContain("lol-hud");
     expect(main).toContain("char-select");
     expect(main).toContain("listChampionPresentations");
-    expect(main).toContain("createLolHudPanel");
+    expect(main).toContain("createHudPanel");
     expect(styles).toContain(".lol-hud");
     expect(styles).toContain(".char-select");
     expect(styles).toContain(".lol-hud--p1");
@@ -166,7 +170,7 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("KeyO");
     expect(main).toContain("KeyP");
     expect(main).toContain('type: "use-skill"');
-    expect(main).toMatch(/lol-hud__spell--r|hud-ult/);
+    expect(hudPanel).toMatch(/lol-hud__spell--r|hud-ult/);
     expect(main).toContain("Escape");
     expect(main).toContain("KeyT");
   });
@@ -271,7 +275,8 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).not.toContain("Ice Blink soul tether");
     expect(main).toContain("RANNI_SPIRIT_PRIMARY_ALPHA");
     expect(existsSync(RANNI_SPIRIT_WISP)).toBe(true);
-    expect(main).toContain("RANNI_FREEZE_BUILD_MS");
+    // Build timing itself is asserted in combat-presentation.test.ts; the frame
+    // walk from a build duration is the renderer's own job.
     expect(main).toMatch(/Math\.floor\(age \/ \(timed\.buildMs \/ frames\.length\)\)/);
     expect(main).not.toContain("holdFrameIndex");
   });
@@ -294,25 +299,18 @@ describe("browser visual adapter (product arena)", () => {
     expect(main).toContain("projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID");
   });
 
-  it("drives Zed cast telegraph, mirrored shadow action, and swap recovery", () => {
+  /**
+   * Cast telegraph and swap-recovery timings are asserted through the combat
+   * presentation module's interface in combat-presentation.test.ts. What remains
+   * here is the part that genuinely lives in the renderer: the shadow's sprite.
+   */
+  it("mirrors the body's action frames onto the stationary shadow", () => {
     const main = readFileSync(BROWSER_MAIN, "utf8");
-    expect(main).toContain("ZED_CAST_TELEGRAPH_MS");
-    expect(main).toContain("ZED_CAST_BUILD_MS");
-    expect(main).toContain("ZED_SWAP_RECOVERY_MS");
-    expect(main).toContain("ZED_SHADOW_CANCEL_MS");
-    expect(main).toContain("ZED_FAIL_COOLDOWN_MS");
-    expect(main).toContain("didLivingShadowSwapSucceed");
-    // Cast start uses channel-length telegraph for Living Shadow only.
-    expect(main).toMatch(
-      /competitor\.skill\?\.id === ZED_LIVING_SHADOW_SKILL_ID[\s\S]{0,120}ZED_CAST_TELEGRAPH_MS/,
-    );
-    // Shadow mirrors body action frame family while staying fixed in position.
     expect(main).toMatch(
       /projectionSkillId === ZED_LIVING_SHADOW_SKILL_ID[\s\S]{0,200}actionFrame \?\? championFrameUrl/,
     );
-    // Success swap recovery vs fail cancel by cooldown magnitude.
-    expect(main).toMatch(/successSwap[\s\S]{0,80}ZED_SWAP_RECOVERY_MS/);
-    expect(main).toMatch(/ZED_SHADOW_CANCEL_MS/);
+    // Outcome now arrives as a kernel event; nothing infers it from cooldown.
+    expect(main).not.toContain("didLivingShadowSwapSucceed");
   });
 
   it("keeps Living Shadow dual-body gated away from roster defaults", () => {

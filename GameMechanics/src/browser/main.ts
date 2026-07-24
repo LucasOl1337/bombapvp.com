@@ -45,8 +45,28 @@ import {
   type ChampPresentation,
   type Facing,
 } from "./champion-packs.ts";
+import { createCombatPresentation } from "./combat-presentation.ts";
+import { createHudPanel } from "./hud-panel.ts";
+import type {
+  HudPanel,
+  HudPanelChampion,
+  HudPanelController,
+  HudPanelSide,
+  HudPanelState,
+} from "./hud-panel.ts";
+import type {
+  BlinkTrailFx,
+  ChainSparkFx,
+  CrateBreakFx,
+  DeathAnim,
+  HookProjectileFx,
+  HookPullFx,
+  PresentationFx,
+  PressureWarnFx,
+  RecentExplosion,
+  TimedChampionAction,
+} from "./combat-presentation.ts";
 import {
-  didLivingShadowSwapSucceed,
   selectBombAnimationAction,
   selectFacingFrames,
   selectSkillAnimationAction,
@@ -74,7 +94,6 @@ import {
   RANNI_COOLDOWN_MS,
   THRESH_CHANNEL_MS,
   THRESH_HOOK_RANGE,
-  ZED_FAIL_COOLDOWN_MS,
 } from "../modules/skills/index.ts";
 import {
   initSoundUnlock,
@@ -173,18 +192,6 @@ const DEATH_FRAME_MS = 90;
 const CAST_FRAME_MS = 100;
 /** Full ice-prison frame held for Ranni's physical body during Ice Blink. */
 const RANNI_FROZEN_ULTIMATE_FRAME = 3;
-/** Fast six-frame build-up before the full prison is held. */
-const RANNI_FREEZE_BUILD_MS = 240;
-/**
- * Living Shadow cast telegraph: build through cast frames, then release so
- * free-move locomotion can read while the 2000 ms channel continues.
- */
-const ZED_CAST_TELEGRAPH_MS = 1_000;
-const ZED_CAST_BUILD_MS = 700;
-/** Readable swap recovery after a valid Living Shadow teleport. */
-const ZED_SWAP_RECOVERY_MS = 720;
-/** Short cancel/fail pose after timeout, invalid swap, or death cleanup. */
-const ZED_SHADOW_CANCEL_MS = 420;
 /** Dark enough to remain legible over the arena's pale floor. */
 const RANNI_SPIRIT_PRIMARY_ALPHA = 0.5;
 const RANNI_SPIRIT_WISP_FRAME_MS = 120;
@@ -243,87 +250,11 @@ type SpriteTrimBounds = Readonly<{
   height: number;
 }>;
 
-type PresentationFx = {
-  kind: "power-reveal" | "power-collect";
-  tileX: number;
-  tileY: number;
-  powerUpType: "bomb-up" | "flame-up";
-  label: string;
-  startMs: number;
-};
-
 type AnimationLabFx = Readonly<{
   packId: AnimationLabPackId;
   anchor: { tileX: number; tileY: number } | "hud";
   startMs: number;
 }>;
-
-type CrateBreakFx = {
-  tile: TileCoord;
-  startMs: number;
-};
-
-type ChainSparkFx = {
-  fromTile: TileCoord;
-  toTile: TileCoord;
-  startMs: number;
-};
-
-type BlinkTrailFx = {
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-  startMs: number;
-};
-
-type PressureWarnFx = {
-  tile: TileCoord;
-  startMs: number;
-  durationMs: number;
-};
-
-type DeathAnim = {
-  position: { x: number; y: number };
-  facing: Facing;
-  startMs: number;
-};
-
-type TimedChampionAction = Readonly<{
-  action: SkillAnimationAction;
-  startMs: number;
-  /** Optional kernel-owned duration used to keep presentation in lockstep. */
-  durationMs?: number;
-  /** Optional entrance animation duration before holding the action's last frame. */
-  buildMs?: number;
-}>;
-
-/** Thresh Death Sentence hook projectile visual state. */
-type HookProjectileFx = {
-  ownerId: CompetitorId;
-  originTile: TileCoord;
-  direction: Direction;
-  reachTiles: number;
-  hit: boolean;
-  startMs: number;
-};
-
-/** Thresh hook victim pull animation — victim slides along the chain. */
-type HookPullFx = {
-  victimId: CompetitorId;
-  /** Victim position before the teleport (fixed-point world units). */
-  fromPos: { x: number; y: number };
-  /** Victim position after the teleport (fixed-point world units). */
-  toPos: { x: number; y: number };
-  /** Thresh tile at the moment of the pull (chain origin). */
-  threshTile: TileCoord;
-  startMs: number;
-};
-
-type RecentExplosion = {
-  bombId: number;
-  tile: TileCoord;
-  flameTiles: readonly TileCoord[];
-  startMs: number;
-};
 
 /** Presentation-only local control slots. Not domain identity. */
 type LocalControlSlot = "control-a" | "control-b";
@@ -679,53 +610,9 @@ let trimProbeCanvas: HTMLCanvasElement | null = null;
 let trimProbeContext: CanvasRenderingContext2D | null = null;
 const pressedMovementCodes = new Set<string>();
 const eventMessages: string[] = [copy.ready];
-const presentationFx: PresentationFx[] = [];
 const animationLabFx: AnimationLabFx[] = [];
 let animationLabDemoIndex = 0;
 let animationLabDemoNextMs = 0;
-const crateBreakFx: CrateBreakFx[] = [];
-const chainSparkFx: ChainSparkFx[] = [];
-const blinkTrailFx: BlinkTrailFx[] = [];
-const pressureWarnFx: PressureWarnFx[] = [];
-const deathAnims = new Map<CompetitorId, DeathAnim>();
-/** Full presentation sequences started by skills or bomb placement. */
-const championActionAnims = new Map<CompetitorId, TimedChampionAction>();
-/** Previous skill phase for detecting a new skill presentation sequence. */
-const prevChampionSkillPhase = new Map<CompetitorId, string>();
-/**
- * Previous skill projection pose for the explicitly allowlisted dual-body skills:
- * Ice Blink's spirit and Living Shadow's clone. Other projections stay hidden.
- * Map key kept as ranniProjectionPose for existing visual-adapter tests.
- */
-const ranniProjectionPose = new Map<CompetitorId, {
-  x: number;
-  y: number;
-  facing: Facing;
-  lastMoveMs: number;
-  skillId: SkillId | null;
-}>();
-/** Thresh hook projectile FX (visual only, kernel logic is authoritative). */
-const hookProjectileFx: HookProjectileFx[] = [];
-/** Thresh hook victim pull animations. */
-const hookPullFx: HookPullFx[] = [];
-/** Track previous skill phase per competitor to detect channel→cooldown transitions. */
-const prevSkillPhase = new Map<CompetitorId, string>();
-/** Last known aim direction while channeling (kernel clears it on cooldown). */
-const lastChannelAim = new Map<CompetitorId, Direction>();
-/** Last known origin tile while channeling. */
-const lastChannelOrigin = new Map<CompetitorId, TileCoord>();
-/** Bomb tile by id from the latest snapshot (chain-spark origin lookup). */
-const bombTilesById = new Map<number, TileCoord>();
-/** Pop-in clock for freshly placed bombs. */
-const bombPlaceFx = new Map<number, number>();
-/** Pop-in clock for freshly revealed power-ups, keyed by tile. */
-const powerUpRevealFx = new Map<string, number>();
-/** Recent explosions for chain-reaction spark linking. */
-const recentExplosions: RecentExplosion[] = [];
-/** Last rendered pose per competitor (death capture + blink-jump detection). */
-const lastCompetitorPose = new Map<CompetitorId, { x: number; y: number; facing: Facing }>();
-let screenShakeUntilMs = 0;
-let screenShakeAmplitudePx = 0;
 const prefersReducedMotion = (() => {
   try {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -733,6 +620,49 @@ const prefersReducedMotion = (() => {
     return false;
   }
 })();
+/**
+ * All combat FX state lives behind this seam. The renderer below reads the
+ * containers and expires entries as it draws; the rules that create them are
+ * the module's, and are tested through `observe` rather than by reading source.
+ */
+const combatFx = createCombatPresentation({
+  bombActionFor: (competitorId) => bombAnimationAction(slotForCompetitor(competitorId)),
+  skillActionFor: (competitorId) => skillAnimationAction(slotForCompetitor(competitorId)),
+  powerUpLabel: (type) => powerUpLabel(type),
+  prefersReducedMotion,
+  queueLabFx: (category, anchor, startMs) => queueAnimationLabFx(category, anchor, startMs),
+  pulseHudStat: (competitorId, type) => pulseHudStat(competitorId, type),
+  resetLabRotation: () => {
+    animationLabFx.length = 0;
+    animationLabDemoIndex = 0;
+    animationLabDemoNextMs = 0;
+    resetAnimationLabRotation();
+  },
+});
+const {
+  presentationFx,
+  crateBreakFx,
+  chainSparkFx,
+  blinkTrailFx,
+  pressureWarnFx,
+  hookProjectileFx,
+  hookPullFx,
+  recentExplosions,
+  deathAnims,
+  championActionAnims,
+  bombTilesById,
+  bombPlaceFx,
+  powerUpRevealFx,
+} = combatFx;
+/**
+ * Previous skill projection pose for the explicitly allowlisted dual-body skills:
+ * Ice Blink's spirit and Living Shadow's clone. Other projections stay hidden.
+ * Alias kept as ranniProjectionPose for existing visual-adapter tests.
+ */
+const ranniProjectionPose = combatFx.projectionPoses;
+/** Last rendered pose per competitor (death capture + blink-jump detection). */
+const lastCompetitorPose = combatFx.competitorPoses;
+
 const lastFacing = new Map<CompetitorId, Facing>([
   [localCompetitorBySlot["control-a"], "south"],
   [localCompetitorBySlot["control-b"], "north"],
@@ -958,173 +888,76 @@ brand.append(brandImg, element(document, "span", undefined, "Bomba PvP"));
 
 // ── LoL-inspired dual HUD (P1 left · timer center · P2 right) ──
 
-type LolHudPanel = Readonly<{
-  root: HTMLElement;
-  portrait: HTMLImageElement;
-  name: HTMLElement;
-  tag: HTMLElement;
-  skillName: HTMLElement;
-  controller: HTMLElement;
-  status: HTMLElement;
-  statusBar: HTMLElement;
-  pips: HTMLElement;
-  bombs: HTMLElement;
-  range: HTMLElement;
-  bombChip: HTMLElement;
-  flameChip: HTMLElement;
-  spellQ: HTMLElement;
-  spellR: HTMLElement;
-  spellRLabel: HTMLElement;
-  spellRCd: HTMLElement;
-  portraitRing: HTMLElement;
-  competitorId: CompetitorId;
-  slot: LocalControlSlot;
-}>;
+/** Copy the panels print, narrowed from the arena's full copy table. */
+const HUD_PANEL_COPY = Object.freeze({
+  rivalOut: copy.rivalOut,
+  protected: copy.protected,
+  ultReady: copy.ultReady,
+  ultCast: copy.ultCast,
+  skillCooldown: copy.skillCooldown,
+});
 
-function createLolHudPanel(slot: LocalControlSlot): LolHudPanel {
-  const side = slot === "control-a" ? "p1" : "p2";
-  const root = element(
-    document,
-    "div",
-    `arena-player-card arena-player-card--${side} lol-hud lol-hud--${side}`,
-  );
-  root.dataset.slot = side;
-  root.dataset.accent = presentationFor(slot).accent;
+function hudSideFor(slot: LocalControlSlot): HudPanelSide {
+  return slot === "control-a" ? "p1" : "p2";
+}
 
-  const portraitWrap = element(document, "div", "lol-hud__portrait-wrap");
-  const portraitRing = element(document, "div", "lol-hud__portrait-ring");
-  const portrait = document.createElement("img");
-  portrait.className = "lol-hud__portrait";
-  portrait.alt = "";
-  portrait.decoding = "async";
-  portrait.src = presentationFor(slot).portrait;
-  portraitWrap.append(portraitRing, portrait);
-
-  const body = element(document, "div", "lol-hud__body");
-  const header = element(document, "div", "lol-hud__header");
-  const tag = element(document, "span", "lol-hud__tag", side === "p1" ? "P1" : "P2");
-  const name = element(document, "span", "lol-hud__name", championName(slot));
-  const pips = element(document, "div", "lol-hud__pips hud-pips");
-  header.append(tag, name, pips);
-  const controller = element(document, "div", "lol-hud__controller", "");
-
-  const statusRow = element(document, "div", "lol-hud__status-row");
-  const statusBar = element(document, "div", "lol-hud__hp");
-  const statusBarFill = element(document, "span", "lol-hud__hp-fill");
-  statusBarFill.style.width = "100%";
-  statusBar.append(statusBarFill);
-  const status = element(document, "span", "lol-hud__status", "");
-  statusRow.append(statusBar, status);
-
-  const skillName = element(
-    document,
-    "div",
-    "lol-hud__skill-name",
-    presentationFor(slot).skillName,
-  );
-
-  const powerRail = element(document, "div", "lol-hud__power hud-power");
-  const bombChip = element(document, "span", "hud-power__chip");
-  const bombIcon = document.createElement("img");
-  bombIcon.src = hudBombIconUrl;
-  bombIcon.alt = "";
-  const bombs = element(document, "span", "hud-power__value", "1/1");
-  bombChip.append(bombIcon, bombs);
-  const flameChip = element(document, "span", "hud-power__chip");
-  const flameIcon = document.createElement("img");
-  flameIcon.src = hudFlameIconUrl;
-  flameIcon.alt = "";
-  const range = element(document, "span", "hud-power__value", "1");
-  flameChip.append(flameIcon, range);
-  powerRail.append(bombChip, flameChip);
-
-  const spells = element(document, "div", "lol-hud__spells");
-  const spellQ = element(document, "div", "lol-hud__spell lol-hud__spell--q");
-  spellQ.title = slot === "control-a" ? "Q · Bomba" : "O · Bomba";
-  spellQ.append(element(document, "span", "lol-hud__spell-key", slot === "control-a" ? "Q" : "O"));
-  const spellQIcon = document.createElement("img");
-  spellQIcon.src = hudBombIconUrl;
-  spellQIcon.alt = "";
-  spellQ.append(spellQIcon);
-
-  const spellR = element(document, "div", "lol-hud__spell lol-hud__spell--r is-ready");
-  const skillKey = slot === "control-a" ? "R" : "I";
-  spellR.title = `${skillKey} · ${presentationFor(slot).skillName}`;
-  spellR.append(element(document, "span", "lol-hud__spell-key", skillKey));
-  const spellRLabel = element(
-    document,
-    "span",
-    "lol-hud__spell-label",
-    presentationFor(slot).skillName.slice(0, 1).toUpperCase(),
-  );
-  const spellRCd = element(document, "span", "lol-hud__spell-cd", "");
-  spellR.append(spellRLabel, spellRCd);
-  spells.append(spellQ, spellR);
-
-  body.append(header, controller, statusRow, skillName, powerRail, spells);
-  root.append(portraitWrap, body);
-
+/** The seat's champion, flattened to what a panel reads. */
+function hudChampionFor(slot: LocalControlSlot): HudPanelChampion {
+  const champ = presentationFor(slot);
   return {
-    root,
-    portrait,
-    name,
-    tag,
-    skillName,
-    controller,
-    status,
-    statusBar: statusBarFill,
-    pips,
-    bombs,
-    range,
-    bombChip,
-    flameChip,
-    spellQ,
-    spellR,
-    spellRLabel,
-    spellRCd,
-    portraitRing,
-    competitorId: localCompetitorBySlot[slot],
-    slot,
+    accent: champ.accent,
+    portrait: champ.portrait,
+    name: champ.name,
+    skillName: champ.skillName,
+    kernelSkillId: champ.kernelSkillId ?? null,
+    skillCooldownMs: champ.skillCooldownMs,
   };
 }
 
-function paintLolIdentity(panel: LolHudPanel): void {
-  const champ = presentationFor(panel.slot);
-  panel.root.dataset.accent = champ.accent;
-  panel.portrait.src = champ.portrait;
-  panel.name.textContent = champ.name;
-  panel.skillName.textContent = champ.skillName;
-  panel.spellR.title = `${panel.slot === "control-a" ? "R" : "I"} · ${champ.skillName}`;
-  panel.spellRLabel.textContent = champ.skillName.slice(0, 1).toUpperCase();
-  panel.spellR.classList.toggle("is-locked", !champ.kernelSkillId);
-  const profile = botProfileForPlayer(activeConfiguration, playerIndexForSlot(panel.slot));
-  panel.controller.textContent = profile
-    ? `${isEnglish ? "AI" : "IA"} · ${profile.label}`
-    : (isEnglish ? "HUMAN" : "HUMANO");
-  panel.root.classList.toggle("is-bot-controlled", profile !== null);
+/**
+ * Who drives this seat, worded here so the panel stays language-agnostic.
+ * `detail` carries live mastery/decision counters once a match is running.
+ */
+function hudControllerFor(slot: LocalControlSlot, detail = ""): HudPanelController {
+  const profile = botProfileForPlayer(activeConfiguration, playerIndexForSlot(slot));
+  if (!profile) return { label: isEnglish ? "HUMAN" : "HUMANO", isBot: false };
+  const prefix = `${isEnglish ? "AI" : "IA"} · ${profile.label}`;
+  return { label: detail ? `${prefix} · ${detail}` : prefix, isBot: true };
 }
 
-const p1Hud = createLolHudPanel("control-a");
-const p2Hud = createLolHudPanel("control-b");
+type ArenaHudSeat = Readonly<{
+  panel: HudPanel;
+  slot: LocalControlSlot;
+  competitorId: CompetitorId;
+}>;
+
+function createArenaHudSeat(slot: LocalControlSlot): ArenaHudSeat {
+  const panel = createHudPanel({
+    document,
+    side: hudSideFor(slot),
+    bombIconUrl: hudBombIconUrl,
+    flameIconUrl: hudFlameIconUrl,
+    copy: HUD_PANEL_COPY,
+    fallbackCooldownMs: RANNI_COOLDOWN_MS,
+  });
+  return { panel, slot, competitorId: localCompetitorBySlot[slot] };
+}
+
+/** Repaint a seat's identity — after a pick change or a controller swap. */
+function paintLolIdentity(seat: ArenaHudSeat): void {
+  seat.panel.paintIdentity(hudChampionFor(seat.slot), hudControllerFor(seat.slot));
+}
+
+const p1Hud = createArenaHudSeat("control-a");
+const p2Hud = createArenaHudSeat("control-b");
 paintLolIdentity(p1Hud);
 paintLolIdentity(p2Hud);
-/** @deprecated alias kept for pulseHudStat compatibility */
-const localPanel = p1Hud;
-const rivalPill = p2Hud;
 
 /** Brief pulse on the HUD power chip that just grew (pickup feedback). */
 function pulseHudStat(competitorId: CompetitorId, powerUpType: "bomb-up" | "flame-up"): void {
-  const panel =
-    competitorId === p1Hud.competitorId
-      ? p1Hud
-      : competitorId === p2Hud.competitorId
-        ? p2Hud
-        : null;
-  if (!panel) return;
-  const target = powerUpType === "bomb-up" ? panel.bombChip : panel.flameChip;
-  target.classList.remove("is-pulsed");
-  void target.offsetWidth;
-  target.classList.add("is-pulsed");
+  for (const seat of [p1Hud, p2Hud]) {
+    if (seat.competitorId === competitorId) seat.panel.pulseStat(powerUpType);
+  }
 }
 
 const timerShell = element(document, "div", "arena-timer-shell hud-meta");
@@ -1135,7 +968,7 @@ const sdMeterFill = element(document, "span", "hud-meta__sd-fill");
 sdMeter.append(sdMeterFill);
 timerShell.append(roundLabel, timeValue, sdMeter);
 
-hudBar.append(p1Hud.root, timerShell, p2Hud.root);
+hudBar.append(p1Hud.panel.root, timerShell, p2Hud.panel.root);
 hud.append(brand, hudBar);
 
 // ── Landing mode + competitor selection ───────────────────────
@@ -1429,7 +1262,6 @@ function applyConfigurationAndRestart(
   clearCombatPresentation();
   deathAnims.clear();
   championActionAnims.clear();
-  prevChampionSkillPhase.clear();
   lastFacing.set(localCompetitorBySlot["control-a"], "south");
   lastFacing.set(localCompetitorBySlot["control-b"], "north");
   prevTickPositions = null;
@@ -1636,7 +1468,6 @@ function startNewLabMatch(): void {
   clearCombatPresentation();
   deathAnims.clear();
   championActionAnims.clear();
-  prevChampionSkillPhase.clear();
   prevTickPositions = null;
   currTickPositions = null;
   accumulatorMs = 0;
@@ -1818,204 +1649,32 @@ function queueAnimationLabFx(
   animationLabFx.push({ packId: pack.id, anchor, startMs });
 }
 
+/**
+ * Reset every visible effect. The rules live in the combat presentation module;
+ * lab-pack rotation is reset through the dependency it was given.
+ */
 function clearCombatPresentation(): void {
-  presentationFx.length = 0;
-  animationLabFx.length = 0;
-  animationLabDemoIndex = 0;
-  animationLabDemoNextMs = 0;
-  resetAnimationLabRotation();
-  crateBreakFx.length = 0;
-  chainSparkFx.length = 0;
-  blinkTrailFx.length = 0;
-  pressureWarnFx.length = 0;
-  hookProjectileFx.length = 0;
-  hookPullFx.length = 0;
-  recentExplosions.length = 0;
-  deathAnims.clear();
-  bombTilesById.clear();
-  bombPlaceFx.clear();
-  powerUpRevealFx.clear();
-  lastCompetitorPose.clear();
-  ranniProjectionPose.clear();
-  prevSkillPhase.clear();
-  lastChannelAim.clear();
-  lastChannelOrigin.clear();
-  screenShakeUntilMs = 0;
-  screenShakeAmplitudePx = 0;
+  combatFx.clear();
 }
 
-function appendPresentationFx(events: readonly GameEvent[], nowMs: number): void {
-  for (const event of events) {
-    if (event.type === "power-up-revealed") {
-      presentationFx.push({
-        kind: "power-reveal",
-        tileX: event.at.x,
-        tileY: event.at.y,
-        powerUpType: event.powerUpType,
-        label: powerUpLabel(event.powerUpType),
-        startMs: nowMs,
-      });
-      powerUpRevealFx.set(tileKeyOf(event.at), nowMs);
-    } else if (event.type === "power-up-collected") {
-      presentationFx.push({
-        kind: "power-collect",
-        tileX: event.at.x,
-        tileY: event.at.y,
-        powerUpType: event.powerUpType,
-        label: powerUpLabel(event.powerUpType),
-        startMs: nowMs,
-      });
-      powerUpRevealFx.delete(tileKeyOf(event.at));
-      pulseHudStat(event.competitorId, event.powerUpType);
-      queueAnimationLabFx("power-up", { tileX: event.at.x, tileY: event.at.y }, nowMs);
-      queueAnimationLabFx("hud", "hud", nowMs);
-    } else if (event.type === "bomb-placed") {
-      bombPlaceFx.set(event.bombId, nowMs);
-      const slot = slotForCompetitor(event.competitorId);
-      const action = bombAnimationAction(slot);
-      if (action) {
-        championActionAnims.set(event.competitorId, { action, startMs: nowMs });
-      }
-    } else if (event.type === "bomb-exploded") {
-      // Screen shake stacks while a previous one is still decaying.
-      if (!prefersReducedMotion) {
-        screenShakeAmplitudePx = nowMs < screenShakeUntilMs
-          ? Math.min(SCREEN_SHAKE_MAX_PX, screenShakeAmplitudePx + 1)
-          : SCREEN_SHAKE_BASE_PX;
-        screenShakeUntilMs = nowMs + SCREEN_SHAKE_MS;
-      }
-      const originTile = bombTilesById.get(event.bombId)
-        ?? event.flameTiles[0]
-        ?? null;
-      if (originTile) {
-        // Chain link: a recent blast whose flames reached this bomb's tile.
-        for (const previous of recentExplosions) {
-          if (nowMs - previous.startMs > CHAIN_LINK_WINDOW_MS) continue;
-          const linked = previous.flameTiles.some(
-            (tile) => tile.x === originTile.x && tile.y === originTile.y,
-          );
-          if (linked) {
-            chainSparkFx.push({ fromTile: previous.tile, toTile: originTile, startMs: nowMs });
-            break;
-          }
-        }
-        recentExplosions.push({
-          bombId: event.bombId,
-          tile: originTile,
-          flameTiles: event.flameTiles,
-          startMs: nowMs,
-        });
-        queueAnimationLabFx(
-          "bomb",
-          { tileX: originTile.x, tileY: originTile.y },
-          nowMs,
-        );
-        if (recentExplosions.length > 8) recentExplosions.splice(0, recentExplosions.length - 8);
-      }
-      bombPlaceFx.delete(event.bombId);
-      bombTilesById.delete(event.bombId);
-    } else if (event.type === "crate-destroyed") {
-      crateBreakFx.push({ tile: event.at, startMs: nowMs });
-      queueAnimationLabFx("hit", { tileX: event.at.x, tileY: event.at.y }, nowMs);
-    } else if (event.type === "competitor-eliminated") {
-      const pose = lastCompetitorPose.get(event.competitorId);
-      if (pose) {
-        deathAnims.set(event.competitorId, {
-          position: { x: pose.x, y: pose.y },
-          facing: pose.facing,
-          startMs: nowMs,
-        });
-      }
-    } else if (event.type === "pressure-warning") {
-      pressureWarnFx.push({
-        tile: event.tile,
-        startMs: nowMs,
-        durationMs: Math.max(1, event.fallMs || event.remainingMs),
-      });
-      queueAnimationLabFx("arena", { tileX: event.tile.x, tileY: event.tile.y }, nowMs);
-    } else if (event.type === "sudden-death-started") {
-      suddenDeathBannerUntilMs = nowMs + SUDDEN_DEATH_FLASH_MS;
-    } else if (event.type === "round-started" || event.type === "restarted") {
-      clearCombatPresentation();
-    }
+/**
+ * Hand one tick's events to the presentation module.
+ *
+ * Victim destinations come from the snapshot about to be drawn, so a hook pull
+ * knows where the chain ends without the adapter detecting the teleport itself.
+ */
+function observeCombatFx(events: readonly GameEvent[], nowMs: number): void {
+  const destinations = new Map<CompetitorId, { x: number; y: number }>();
+  for (const competitor of game.snapshot().competitors) {
+    destinations.set(competitor.id, { x: competitor.position.x, y: competitor.position.y });
   }
-  // Cap presentation-only FX backlog.
-  if (presentationFx.length > 24) presentationFx.splice(0, presentationFx.length - 24);
-  if (crateBreakFx.length > 24) crateBreakFx.splice(0, crateBreakFx.length - 24);
-  if (chainSparkFx.length > 12) chainSparkFx.splice(0, chainSparkFx.length - 12);
-  if (blinkTrailFx.length > 8) blinkTrailFx.splice(0, blinkTrailFx.length - 8);
-  if (pressureWarnFx.length > 8) pressureWarnFx.splice(0, pressureWarnFx.length - 8);
-  if (animationLabFx.length > 24) animationLabFx.splice(0, animationLabFx.length - 24);
-  if (hookProjectileFx.length > 4) hookProjectileFx.splice(0, hookProjectileFx.length - 4);
-}
-
-/** Detect Thresh hook launches by watching for channel→cooldown transitions. */
-function detectHookLaunches(snapshot: GameSnapshot, nowMs: number): void {
-  for (const competitor of snapshot.competitors) {
-    const skill = competitor.skill;
-    if (!skill || skill.id !== THRESH_DEATH_SENTENCE_SKILL_ID) continue;
-    const prevPhase = prevSkillPhase.get(competitor.id);
-    const currentPhase = skill.phase;
-    prevSkillPhase.set(competitor.id, currentPhase);
-
-    // While channeling, continuously capture aim + origin (kernel clears on cooldown).
-    if (currentPhase === "channeling") {
-      if (skill.aimDirection) lastChannelAim.set(competitor.id, skill.aimDirection);
-      lastChannelOrigin.set(competitor.id, {
-        x: Math.floor(competitor.position.x / UNITS_PER_TILE),
-        y: Math.floor(competitor.position.y / UNITS_PER_TILE),
-      });
-      continue;
-    }
-
-    // Transition from channeling to cooldown = hook was fired.
-    if (prevPhase !== "channeling" || currentPhase !== "cooldown") continue;
-    const originTile = lastChannelOrigin.get(competitor.id) ?? {
-      x: Math.floor(competitor.position.x / UNITS_PER_TILE),
-      y: Math.floor(competitor.position.y / UNITS_PER_TILE),
-    };
-    const aim = lastChannelAim.get(competitor.id) ?? "down";
-    // Full cooldown = hit, reduced = miss.
-    const hit = skill.cooldownRemainingMs > 5000;
-    hookProjectileFx.push({
-      ownerId: competitor.id,
-      originTile,
-      direction: aim,
-      reachTiles: THRESH_HOOK_RANGE,
-      hit,
-      startMs: nowMs,
-    });
-
-    // On hit, find the victim who was teleported and create a pull animation.
-    if (hit) {
-      for (const other of snapshot.competitors) {
-        if (other.id === competitor.id || !other.alive) continue;
-        const prevPose = lastCompetitorPose.get(other.id);
-        if (!prevPose) continue;
-        const jumpTiles = Math.hypot(
-          other.position.x - prevPose.x,
-          other.position.y - prevPose.y,
-        ) / UNITS_PER_TILE;
-        if (jumpTiles >= BLINK_JUMP_TILES) {
-          hookPullFx.push({
-            victimId: other.id,
-            fromPos: { x: prevPose.x, y: prevPose.y },
-            toPos: { x: other.position.x, y: other.position.y },
-            threshTile: originTile,
-            startMs: nowMs,
-          });
-        }
-      }
-    }
-
-    // Clean up captured state.
-    lastChannelAim.delete(competitor.id);
-    lastChannelOrigin.delete(competitor.id);
-  }
+  combatFx.observe(events, nowMs, destinations);
+  const flashUntil = combatFx.suddenDeathFlashUntilMs();
+  if (flashUntil > suddenDeathBannerUntilMs) suddenDeathBannerUntilMs = flashUntil;
 }
 
 function appendEvents(events: readonly GameEvent[], nowMs = performance.now()): void {
-  appendPresentationFx(events, nowMs);
+  observeCombatFx(events, nowMs);
   playSoundsForEvents(events, nowMs);
   for (const event of events) {
     const description = eventDescription(event, copy);
@@ -2126,73 +1785,7 @@ function timedChampionFrameUrl(
   return frames[frameIndex] ?? null;
 }
 
-function detectChampionAnimationStarts(snapshot: GameSnapshot, nowMs: number): void {
-  for (const competitor of snapshot.competitors) {
-    const phase = competitor.skill?.phase ?? "none";
-    const previous = prevChampionSkillPhase.get(competitor.id);
-    prevChampionSkillPhase.set(competitor.id, phase);
-    if (
-      competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
-      && previous === "channeling"
-      && phase !== "channeling"
-    ) {
-      championActionAnims.delete(competitor.id);
-      continue;
-    }
-    // Living Shadow: channeling → cooldown is either valid swap or fail/timeout/death.
-    if (
-      competitor.skill?.id === ZED_LIVING_SHADOW_SKILL_ID
-      && previous === "channeling"
-      && phase === "cooldown"
-    ) {
-      const cooldownMs = competitor.skill.cooldownRemainingMs;
-      const successSwap = didLivingShadowSwapSucceed(
-        cooldownMs,
-        ZED_FAIL_COOLDOWN_MS,
-      );
-      const slot = slotForCompetitor(competitor.id);
-      const recoveryAction = successSwap
-        ? (bombAnimationAction(slot) ?? skillAnimationAction(slot) ?? "cast")
-        : (skillAnimationAction(slot) ?? "cast");
-      championActionAnims.set(competitor.id, {
-        action: recoveryAction,
-        startMs: nowMs,
-        durationMs: successSwap ? ZED_SWAP_RECOVERY_MS : ZED_SHADOW_CANCEL_MS,
-      });
-      continue;
-    }
-    if (phase !== "channeling" || previous === "channeling") continue;
-    const action = skillAnimationAction(slotForCompetitor(competitor.id));
-    if (action) {
-      championActionAnims.set(competitor.id, {
-        action,
-        startMs: nowMs,
-        ...(competitor.skill?.id === RANNI_ICE_BLINK_SKILL_ID
-          ? {
-              durationMs: RANNI_CHANNEL_MS,
-              buildMs: RANNI_FREEZE_BUILD_MS,
-            }
-          : competitor.skill?.id === ZED_LIVING_SHADOW_SKILL_ID
-            ? {
-                durationMs: ZED_CAST_TELEGRAPH_MS,
-                buildMs: ZED_CAST_BUILD_MS,
-              }
-            : {}),
-      });
-    }
-  }
-}
-
-function screenShakeOffset(animMs: number): { x: number; y: number } {
-  if (animMs >= screenShakeUntilMs || screenShakeAmplitudePx <= 0) return { x: 0, y: 0 };
-  const intensity = Math.min(1, (screenShakeUntilMs - animMs) / SCREEN_SHAKE_MS);
-  const amplitude = screenShakeAmplitudePx * intensity;
-  // Deterministic presentation offset from the animation clock (not simulation RNG).
-  return {
-    x: Math.sin(animMs * 0.073) * amplitude,
-    y: Math.cos(animMs * 0.091) * amplitude,
-  };
-}
+const screenShakeOffset = combatFx.screenShakeOffset;
 
 function drawAnimationLabFx(animMs: number): void {
   for (let i = animationLabFx.length - 1; i >= 0; i -= 1) {
@@ -2685,7 +2278,7 @@ function renderCanvas(snapshot: GameSnapshot, animMs: number): void {
       ) / UNITS_PER_TILE;
       if (jumpTiles >= BLINK_JUMP_TILES) {
         // Skip if this teleport is already handled by a Thresh hook pull
-        // (detected in detectHookLaunches to avoid double-firing).
+        // (driven by skill-resolved targets) to avoid double-firing.
         const alreadyPulled = hookPullFx.some(
           (fx) => fx.victimId === competitor.id
             && animMs - fx.startMs < HOOK_PULL_TOTAL_MS,
@@ -3461,66 +3054,25 @@ function renderOverlay(snapshot: GameSnapshot): void {
   }
 }
 
-function updateLolPanel(panel: LolHudPanel, snapshot: GameSnapshot): void {
-  const competitor = snapshot.competitors.find((entry) => entry.id === panel.competitorId);
-  if (!competitor) return;
-  const champ = presentationFor(panel.slot);
-  panel.root.classList.toggle("is-eliminated", !competitor.alive);
-  panel.bombs.textContent = `${Math.max(0, competitor.maxBombs - competitor.activeBombs)}/${competitor.maxBombs}`;
-  panel.range.textContent = String(competitor.flameRange);
-  panel.status.textContent = !competitor.alive
-    ? copy.rivalOut
-    : competitor.spawnProtectionRemainingMs > 0
-      ? copy.protected
-      : "";
-  const hp = !competitor.alive
-    ? 0
-    : competitor.spawnProtectionRemainingMs > 0
-      ? 0.7
-      : 1;
-  panel.statusBar.style.width = `${Math.round(hp * 100)}%`;
-  panel.statusBar.classList.toggle("is-down", !competitor.alive);
-  panel.statusBar.classList.toggle("is-shield", competitor.spawnProtectionRemainingMs > 0);
-
-  const wins = scoreFor(snapshot, competitor.id);
-  const pipNodes: HTMLElement[] = [];
-  for (let i = 0; i < snapshot.targetRoundWins; i += 1) {
-    pipNodes.push(element(
-      document,
-      "span",
-      i < wins ? "hud-pips__pip hud-pips__pip--filled" : "hud-pips__pip",
-    ));
-  }
-  panel.pips.replaceChildren(...pipNodes);
-
-  const skill = competitor.skill;
-  const cooldownMs = champ.skillCooldownMs || RANNI_COOLDOWN_MS;
-  panel.spellR.classList.remove("is-locked");
-  if (!skill) {
-    // No skill snapshot only if seat has no skillId — should not happen for roster picks.
-    panel.spellR.classList.add("is-locked");
-    panel.spellR.classList.remove("is-ready", "is-cast", "is-cooldown");
-    panel.spellRCd.textContent = "";
-    panel.portraitRing.style.setProperty("--cd", "1");
-    return;
-  }
-  const state = skill.phase === "idle"
-    ? "ready"
-    : skill.phase === "channeling"
-      ? "cast"
-      : "cooldown";
-  panel.spellR.classList.toggle("is-ready", state === "ready");
-  panel.spellR.classList.toggle("is-cast", state === "cast");
-  panel.spellR.classList.toggle("is-cooldown", state === "cooldown");
-  panel.spellRCd.textContent = state === "ready"
-    ? copy.ultReady
-    : state === "cast"
-      ? copy.ultCast
-      : copy.skillCooldown(skill.cooldownRemainingMs / 1_000);
-  const progress = state === "ready" || state === "cast"
-    ? 1
-    : 1 - Math.min(1, Math.max(0, skill.cooldownRemainingMs / cooldownMs));
-  panel.portraitRing.style.setProperty("--cd", String(progress));
+/** This tick's numbers for one seat, flattened out of the kernel snapshot. */
+function hudStateFor(seat: ArenaHudSeat, snapshot: GameSnapshot): HudPanelState | null {
+  const competitor = snapshot.competitors.find((entry) => entry.id === seat.competitorId);
+  if (!competitor) return null;
+  return {
+    alive: competitor.alive,
+    maxBombs: competitor.maxBombs,
+    activeBombs: competitor.activeBombs,
+    flameRange: competitor.flameRange,
+    spawnProtectionRemainingMs: competitor.spawnProtectionRemainingMs,
+    wins: scoreFor(snapshot, competitor.id),
+    targetRoundWins: snapshot.targetRoundWins,
+    skill: competitor.skill
+      ? {
+          phase: competitor.skill.phase,
+          cooldownRemainingMs: competitor.skill.cooldownRemainingMs,
+        }
+      : null,
+  };
 }
 
 function renderHud(snapshot: GameSnapshot): void {
@@ -3553,15 +3105,14 @@ function renderHud(snapshot: GameSnapshot): void {
   pauseButton.disabled =
     snapshot.phase === "round-over" || snapshot.phase === "match-over" || !matchStarted;
 
-  updateLolPanel(p1Hud, snapshot);
-  updateLolPanel(p2Hud, snapshot);
-  for (const panel of [p1Hud, p2Hud]) {
-    const playerIndex = playerIndexForSlot(panel.slot);
-    const driver = browserBotDriverForPlayer(botDrivers, playerIndex);
-    const profile = botProfileForPlayer(activeConfiguration, playerIndex);
-    panel.controller.textContent = profile
-      ? `${isEnglish ? "AI" : "IA"} · ${profile.label} · M${Math.trunc((driver?.masteryBasisPoints ?? 0) / 100)} · D${driver?.decisions ?? 0}`
-      : (isEnglish ? "HUMAN" : "HUMANO");
+  for (const seat of [p1Hud, p2Hud]) {
+    const state = hudStateFor(seat, snapshot);
+    if (state) seat.panel.update(state, hudChampionFor(seat.slot));
+    const driver = browserBotDriverForPlayer(botDrivers, playerIndexForSlot(seat.slot));
+    const mastery = Math.trunc((driver?.masteryBasisPoints ?? 0) / 100);
+    seat.panel.setController(
+      hudControllerFor(seat.slot, `M${mastery} · D${driver?.decisions ?? 0}`),
+    );
   }
 
   if (labObservation) {
@@ -3600,8 +3151,6 @@ function render(snapshot = game.snapshot(), animMs = performance.now()): void {
   }
   lastKnownPhase = snapshot.phase;
 
-  detectChampionAnimationStarts(snapshot, animMs);
-  detectHookLaunches(snapshot, animMs);
   renderCanvas(snapshot, animMs);
   renderHud(snapshot);
   renderSuddenDeathBanner(snapshot, animMs);

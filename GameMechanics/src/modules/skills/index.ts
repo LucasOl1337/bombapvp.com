@@ -1,8 +1,10 @@
 import type {
   CompetitorId,
   Direction,
+  GameEvent,
   MatchConfig,
   SkillId,
+  SkillOutcome,
   TileCoord,
   WorldPosition,
 } from "../../contracts.ts";
@@ -315,6 +317,43 @@ function skillHitFacts(
   );
 }
 
+function channelStartedEvent(
+  entry: SkillEntry,
+  aim: Direction,
+  origin: TileCoord,
+): GameEvent {
+  return Object.freeze({
+    type: "skill-channel-started" as const,
+    competitorId: entry.competitorId,
+    skillId: entry.skillId,
+    aim,
+    origin: freezeTile(origin),
+    channelMs: skillChannelMs(entry.skillId),
+  });
+}
+
+/**
+ * The single place a channel outcome is decided. Presentation reads this event
+ * instead of comparing `cooldownRemainingMs` against a magic threshold.
+ */
+function resolvedEvent(
+  entry: SkillEntry,
+  outcome: SkillOutcome,
+  aim: Direction,
+  origin: TileCoord,
+  targets: readonly CompetitorId[] = [],
+): GameEvent {
+  return Object.freeze({
+    type: "skill-resolved" as const,
+    competitorId: entry.competitorId,
+    skillId: entry.skillId,
+    outcome,
+    aim,
+    origin: freezeTile(origin),
+    targets: Object.freeze([...targets]),
+  });
+}
+
 function movementFact(
   competitorId: CompetitorId,
   suppress: boolean,
@@ -383,6 +422,7 @@ function projectionCanFinish(
 type TickWork = {
   entry: SkillEntry;
   facts: TickFact[];
+  events: GameEvent[];
   rejections: CommandRejection[];
 };
 
@@ -410,12 +450,12 @@ function beginSkill(
   command: SystemRunContext["commands"][number] | undefined,
 ): TickWork {
   const rejections: CommandRejection[] = [];
-  if (!command) return { entry, facts: [], rejections };
+  if (!command) return { entry, facts: [], events: [], rejections };
 
   const loco = findLocomotion(ctx.read("locomotion"), entry.competitorId);
   if (!loco) {
     rejections.push(reject(command, "skill-unavailable"));
-    return { entry, facts: [], rejections };
+    return { entry, facts: [], events: [], rejections };
   }
 
   const arena = ctx.read("arena");
@@ -424,11 +464,14 @@ function beginSkill(
   const solid = effectiveSolidKeySet(arena, pressure);
   const crates = new Set(arena.crates.map(tileKey));
   const aim = resolveAim(ctx, entry.competitorId, loco.lastDirection);
+  const origin = tileOf(loco.position);
   const facts: TickFact[] = [];
+  const events: GameEvent[] = [];
 
   switch (entry.skillId) {
     case RANNI_ICE_BLINK_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
+      events.push(channelStartedEvent(entry, aim, origin));
       return {
         entry: startChannel(
           entry,
@@ -438,6 +481,7 @@ function beginSkill(
           [...preOverlappingBombKeys(loco.position, bombs)].sort(),
         ),
         facts,
+        events,
         rejections,
       };
     }
@@ -446,25 +490,31 @@ function beginSkill(
         loco.position, aim, KILLER_BEE_DASH_TILES, solid, crates, bombs,
       );
       facts.push(movementFact(entry.competitorId, true, null));
+      events.push(channelStartedEvent(entry, aim, origin));
       return {
         entry: startChannel(entry, KILLER_BEE_CHANNEL_MS, aim, landing),
         facts,
+        events,
         rejections,
       };
     }
     case CROCODILO_EMERALD_SURGE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
+      events.push(channelStartedEvent(entry, aim, origin));
       return {
         entry: startChannel(entry, CROCODILO_CHANNEL_MS, aim, null),
         facts,
+        events,
         rejections,
       };
     }
     case THRESH_DEATH_SENTENCE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
+      events.push(channelStartedEvent(entry, aim, origin));
       return {
         entry: startChannel(entry, THRESH_CHANNEL_MS, aim, null),
         facts,
+        events,
         rejections,
       };
     }
@@ -474,18 +524,20 @@ function beginSkill(
       );
       if (!landing) {
         rejections.push(reject(command, "skill-unavailable"));
-        return { entry, facts: [], rejections };
+        return { entry, facts: [], events: [], rejections };
       }
+      events.push(channelStartedEvent(entry, aim, origin));
       // Free-move window: do not suppress locomotion. Projection is fixed.
       return {
         entry: startChannel(entry, ZED_CHANNEL_MS, aim, landing),
         facts: [],
+        events,
         rejections,
       };
     }
     default: {
       rejections.push(reject(command, "skill-unavailable"));
-      return { entry, facts: [], rejections };
+      return { entry, facts: [], events: [], rejections };
     }
   }
 }
@@ -508,16 +560,24 @@ function completeSkill(
   switch (entry.skillId) {
     case RANNI_ICE_BLINK_SKILL_ID: {
       const dest = projection;
-      facts.push(movementFact(
-        entry.competitorId,
-        true,
-        dest && projectionCanFinish(ctx, dest, entry.bombEgressKeys) ? dest : null,
-      ));
-      return { entry: cooldown(entry), facts, rejections: [] };
+      // A blink "hits" when the spirit's landing survives validation.
+      const committed = Boolean(dest && projectionCanFinish(ctx, dest, entry.bombEgressKeys));
+      facts.push(movementFact(entry.competitorId, true, committed ? dest : null));
+      return {
+        entry: cooldown(entry),
+        facts,
+        events: [resolvedEvent(entry, committed ? "hit" : "miss", aim, origin)],
+        rejections: [],
+      };
     }
     case KILLER_BEE_WING_DASH_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, projection));
-      return { entry: cooldown(entry), facts, rejections: [] };
+      return {
+        entry: cooldown(entry),
+        facts,
+        events: [resolvedEvent(entry, projection ? "hit" : "miss", aim, origin)],
+        rejections: [],
+      };
     }
     case CROCODILO_EMERALD_SURGE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
@@ -525,7 +585,12 @@ function completeSkill(
         ctx, origin, CROCODILO_SURGE_RANGE, entry.competitorId,
       );
       facts.push(...skillHitFacts(entry.skillId, entry.competitorId, hits, origin));
-      return { entry: cooldown(entry), facts, rejections: [] };
+      return {
+        entry: cooldown(entry),
+        facts,
+        events: [resolvedEvent(entry, hits.length > 0 ? "hit" : "miss", aim, origin, hits)],
+        rejections: [],
+      };
     }
     case THRESH_DEATH_SENTENCE_SKILL_ID: {
       facts.push(movementFact(entry.competitorId, true, null));
@@ -535,7 +600,12 @@ function completeSkill(
       const hits = competitorsOnTiles(ctx, path, entry.competitorId);
       const victimId = hits[0];
       if (!victimId) {
-        return { entry: cooldown(entry, THRESH_MISS_COOLDOWN_MS), facts, rejections: [] };
+        return {
+          entry: cooldown(entry, THRESH_MISS_COOLDOWN_MS),
+          facts,
+          events: [resolvedEvent(entry, "miss", aim, origin)],
+          rejections: [],
+        };
       }
       const victimLoco = findLocomotion(ctx.read("locomotion"), victimId);
       if (victimLoco) {
@@ -549,14 +619,24 @@ function completeSkill(
         );
         facts.push(movementFact(victimId, false, tileCenter(landing)));
       }
-      return { entry: cooldown(entry), facts, rejections: [] };
+      return {
+        entry: cooldown(entry),
+        facts,
+        events: [resolvedEvent(entry, "hit", aim, origin, [victimId])],
+        rejections: [],
+      };
     }
     case ZED_LIVING_SHADOW_SKILL_ID: {
       // Completion is handled in tickChannel (swap vs timeout vs invalid).
-      return { entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS), facts, rejections: [] };
+      return {
+        entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
+        facts,
+        events: [resolvedEvent(entry, "cancelled", aim, origin)],
+        rejections: [],
+      };
     }
     default:
-      return { entry: cooldown(entry), facts, rejections: [] };
+      return { entry: cooldown(entry), facts, events: [], rejections: [] };
   }
 }
 
@@ -568,6 +648,9 @@ function tickChannel(
   const rejections: CommandRejection[] = [];
   const facts: TickFact[] = [];
   const command = ownCommands[0];
+  const loco = findLocomotion(ctx.read("locomotion"), entry.competitorId);
+  const originTile = loco ? tileOf(loco.position) : freezeTile({ x: 0, y: 0 });
+  const entryAim = entry.aimDirection ?? "down";
   for (const duplicate of ownCommands.slice(1)) {
     rejections.push(reject(duplicate, "skill-unavailable"));
   }
@@ -575,7 +658,14 @@ function tickChannel(
   // Ranni: steer projection while channeling.
   if (entry.skillId === RANNI_ICE_BLINK_SKILL_ID) {
     const projection = entry.projection;
-    if (!projection) return { entry: cooldown(entry), facts, rejections };
+    if (!projection) {
+      return {
+        entry: cooldown(entry),
+        facts,
+        events: [resolvedEvent(entry, "cancelled", entryAim, originTile)],
+        rejections,
+      };
+    }
     const canCompleteManually = entry.channelRemainingMs < RANNI_CHANNEL_MS;
     const completionRequested = Boolean(command) && canCompleteManually;
     if (command && !canCompleteManually) {
@@ -603,6 +693,7 @@ function tickChannel(
         projection: attempted,
       }),
       facts,
+      events: [],
       rejections,
     };
   }
@@ -611,7 +702,12 @@ function tickChannel(
   if (entry.skillId === ZED_LIVING_SHADOW_SKILL_ID) {
     const projection = entry.projection;
     if (!projection) {
-      return { entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS), facts, rejections };
+      return {
+        entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
+        facts,
+        events: [resolvedEvent(entry, "cancelled", entryAim, originTile)],
+        rejections,
+      };
     }
     const canCompleteManually = entry.channelRemainingMs < ZED_CHANNEL_MS;
     const swapRequested = Boolean(command) && canCompleteManually;
@@ -636,6 +732,7 @@ function tickChannel(
         return {
           entry: cooldown(entry, ZED_COOLDOWN_MS),
           facts,
+          events: [resolvedEvent(entry, "hit", entryAim, originTile)],
           rejections,
         };
       }
@@ -643,6 +740,7 @@ function tickChannel(
       return {
         entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
         facts,
+        events: [resolvedEvent(entry, "miss", entryAim, originTile)],
         rejections,
       };
     }
@@ -652,6 +750,7 @@ function tickChannel(
       return {
         entry: cooldown(entry, ZED_FAIL_COOLDOWN_MS),
         facts,
+        events: [resolvedEvent(entry, "cancelled", entryAim, originTile)],
         rejections,
       };
     }
@@ -663,6 +762,7 @@ function tickChannel(
         channelRemainingMs: remaining,
       }),
       facts,
+      events: [],
       rejections,
     };
   }
@@ -702,6 +802,7 @@ function tickChannel(
   return {
     entry: freezeEntry({ ...entry, channelRemainingMs: remaining, aimDirection }),
     facts,
+    events: [],
     rejections,
   };
 }
@@ -737,7 +838,8 @@ function runSkillsReset(ctx: SystemRunContext): SystemRunResult {
 function runSkillsDeathCleanup(ctx: SystemRunContext): SystemRunResult {
   const skills = ctx.read("skills");
   const vitals = ctx.read("vitals");
-  let changed = false;
+  const locomotion = ctx.read("locomotion");
+  const events: GameEvent[] = [];
   const entries = skills.entries.map((entry) => {
     if (
       entry.skillId !== ZED_LIVING_SHADOW_SKILL_ID
@@ -746,12 +848,21 @@ function runSkillsDeathCleanup(ctx: SystemRunContext): SystemRunResult {
     ) {
       return entry;
     }
-    changed = true;
+    // Dying mid-channel is a cancel, not a miss — presentation must not play
+    // the failed-swap recovery for a competitor who is already down.
+    const loco = findLocomotion(locomotion, entry.competitorId);
+    events.push(resolvedEvent(
+      entry,
+      "cancelled",
+      entry.aimDirection ?? "down",
+      loco ? tileOf(loco.position) : freezeTile({ x: 0, y: 0 }),
+    ));
     return cooldown(entry, ZED_FAIL_COOLDOWN_MS);
   });
-  if (!changed) return {};
+  if (events.length === 0) return {};
   return {
     writes: { skills: Object.freeze({ entries: Object.freeze(entries) }) },
+    events: Object.freeze(events),
   };
 }
 
@@ -771,6 +882,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
   }
   const rejections: CommandRejection[] = [];
   const allFacts: TickFact[] = [];
+  const allEvents: GameEvent[] = [];
 
   if (!isGameplayActive(match.phase)) {
     for (const command of commands) rejections.push(reject(command, "not-playing"));
@@ -800,6 +912,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
         const work = beginSkill(ctx, idle(current), ownCommands[0]);
         rejections.push(...work.rejections);
         allFacts.push(...work.facts);
+        allEvents.push(...work.events);
         return work.entry;
       }
       for (const command of ownCommands) rejections.push(reject(command, "skill-unavailable"));
@@ -814,6 +927,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
       const work = beginSkill(ctx, current, ownCommands[0]);
       rejections.push(...work.rejections);
       allFacts.push(...work.facts);
+      allEvents.push(...work.events);
       return work.entry;
     }
 
@@ -821,6 +935,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
     const work = tickChannel(ctx, current, ownCommands);
     rejections.push(...work.rejections);
     allFacts.push(...work.facts);
+    allEvents.push(...work.events);
     return work.entry;
   });
 
@@ -834,6 +949,7 @@ function runSkills(ctx: SystemRunContext): SystemRunResult {
   return {
     writes: { skills: Object.freeze({ entries: Object.freeze(nextEntries) }) },
     facts: Object.freeze(allFacts),
+    events: Object.freeze(allEvents),
     rejections,
   };
 }
@@ -949,7 +1065,7 @@ export const skillsModule: ModuleSpec = Object.freeze({
     Object.freeze({
       id: "skills-death-cleanup-system",
       phase: "round" as const,
-      reads: Object.freeze(["skills", "vitals"] as const),
+      reads: Object.freeze(["skills", "vitals", "locomotion"] as const),
       writes: Object.freeze(["skills"] as const),
       run: runSkillsDeathCleanup,
     }),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SKILL_IDS,
   TICK_DURATION_MS,
+  type GameEvent,
   type MatchConfig,
   type SkillId,
 } from "../src/contracts.ts";
@@ -109,5 +110,82 @@ describe("multi-skill roster (all ultimate IDs)", () => {
       expect(after.x, skillId).toBeGreaterThan(before.x);
       expect(state.slices.skills.entries[0]!.phase).toBe("cooldown");
     }
+  });
+});
+
+/**
+ * The kernel is the sole authority on how a channel ended. These tests exist so
+ * the outcome is verifiable here — presentation used to infer it from cooldown
+ * magnitude, where nothing could assert it.
+ */
+describe("skill events carry authoritative outcomes", () => {
+  type ChannelStarted = Extract<GameEvent, { type: "skill-channel-started" }>;
+  type Resolved = Extract<GameEvent, { type: "skill-resolved" }>;
+
+  /** Cast, then run to cooldown, collecting every skill event on the way. */
+  function castAndCollect(skillId: SkillId, seed: string) {
+    const program = createDefaultMechanicsProgram();
+    const config = skillDuel(skillId, seed);
+    let state = enterPlaying(program, program.initial(config));
+    const events: GameEvent[] = [];
+
+    state = program.step(state, { commands: [press(state, config, "right", 0)] }).state;
+    const activated = program.step(state, { commands: [useSkill(state, config, 1)] });
+    state = activated.state;
+    events.push(...activated.events);
+
+    for (let i = 0; i < 200; i += 1) {
+      if (events.some((event) => event.type === "skill-resolved")) break;
+      const stepped = program.step(state, { commands: [] });
+      state = stepped.state;
+      events.push(...stepped.events);
+    }
+
+    return {
+      state,
+      started: events.filter((e): e is ChannelStarted => e.type === "skill-channel-started"),
+      resolved: events.filter((e): e is Resolved => e.type === "skill-resolved"),
+    };
+  }
+
+  it("opens exactly one channel and closes it exactly once, for every skill id", () => {
+    for (const skillId of SKILL_IDS) {
+      const { started, resolved } = castAndCollect(skillId, `events-${skillId}`);
+      expect(started, skillId).toHaveLength(1);
+      expect(started[0]!.skillId, skillId).toBe(skillId);
+      expect(started[0]!.aim, skillId).toBe("right");
+      expect(started[0]!.channelMs, skillId).toBeGreaterThanOrEqual(0);
+
+      expect(resolved, skillId).toHaveLength(1);
+      const end = resolved[0]!;
+      expect(end.skillId, skillId).toBe(skillId);
+      // The aim the kernel actually used — not resampled from a later snapshot.
+      expect(end.aim, skillId).toBe(started[0]!.aim);
+      // Origin is the resolution tile; skills that move mid-channel may differ.
+      expect(Number.isInteger(end.origin.x), skillId).toBe(true);
+      expect(Number.isInteger(end.origin.y), skillId).toBe(true);
+      expect(["hit", "miss", "cancelled"], skillId).toContain(end.outcome);
+    }
+  });
+
+  it("reports a Thresh hook that catches nobody as a miss with no targets", () => {
+    // Opposite corners in the default duel: nothing stands in the hook's path.
+    const { resolved } = castAndCollect("thresh-death-sentence", "hook-whiff");
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.outcome).toBe("miss");
+    expect(resolved[0]!.targets).toEqual([]);
+  });
+
+  it("reports a committed dash as a hit", () => {
+    const { resolved } = castAndCollect("killer-bee-wing-dash", "dash-outcome");
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.outcome).toBe("hit");
+  });
+
+  it("reports a Living Shadow that is never re-triggered as cancelled", () => {
+    // Zed's channel expires untouched — a cancel, never a miss.
+    const { resolved } = castAndCollect("zed-living-shadow", "shadow-timeout");
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.outcome).toBe("cancelled");
   });
 });
