@@ -1,32 +1,20 @@
 # Zed
 
-Assassino de sombra com presença dupla — máscara clássica, fendas âmbar, placas preto/carmesim e lâminas gêmeas. Vertical slice **Living Shadow** para playtest local.
-
-- Identidade, skill e cooldown: `../membership.ts` e `definition.ts`
-- Regras e seleção local: [`docs/gameplay.md`](../../docs/gameplay.md)
+- Identidade e definição: `identity.ts`, `definition.ts`
+- Assets finais: `assets/` (retrato 256², animações 160²)
 - Mecânica executável: `GameMechanics/src/modules/skills/` (`zed-living-shadow`)
-- Apresentação dual-body allowlisted: `GameMechanics/src/browser/main.ts`
-- Retrato 256² + sprites densos 160×160: `assets/`
+- Apresentação Living Shadow (spectral crimson, cast/swap/cancel timing):
+  `GameMechanics/src/browser/main.ts` — mecânica de kernel inalterada neste pack visual
 
-## Animation density (installed)
+## Pack visual (gate v2)
 
-Pacote 160×160 com poses limpas, fundo transparente e fases de membro legíveis
-(edit-chain a partir da identidade aprovada). QA exige energia de movimento e
-integridade single-pose em `GameMechanics/tests/zed-sprite-assets.test.ts`.
+Substitui o pack genérico rejeitado pelo pacote aprovado no scout
+`bombpvp-zed-visual-redesign-gate-v2` (identidade angular + animação de pose real).
 
-| Slot | Frames / dir | Notes |
-| --- | --- | --- |
-| idle | 6 | S/E/N/W, bob / micro-fase |
-| walk | 8 | S/E/N/W, passadas alternadas legíveis |
-| run | 8 | S/E/N/W, ciclo acelerado |
-| cast | 8 | S/E/N/W, antecipação → ação → recuperação |
-| attack | 8 | S/E/N/W, plantio/golpe sem sprite de bomba |
-| death | 8 | S/E/N/W, queda / dissipação |
-
-As regras e a apresentação de Living Shadow estão descritas em
-[`docs/gameplay.md`](../../docs/gameplay.md).
-
-## Posture
+- `idle` 6 · `walk`/`run`/`cast`/`attack`/`death` 8 frames · 4 direções
+- `attack` = plant de bomba (frames sem bomba desenhada; a engine desenha a bomba)
+- Living Shadow reutiliza os mesmos frames do corpo com tratamento espectral no render
+- QA de integridade single-pose: `GameMechanics/tests/zed-sprite-assets.test.ts`
 
 Protótipo fan restrito e não monetizado. Deploy, divulgação ou monetização
-exigem autorização separada do capitão.
+não autorizados sem ordem explícita do dono.
