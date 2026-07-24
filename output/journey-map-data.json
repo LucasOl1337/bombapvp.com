@@ -1,0 +1,308 @@
+{
+  "actors": [
+    {
+      "id": "visitante-site",
+      "name": "Visitante do site",
+      "description": "Chega pela landing sem saber o que é o jogo; decide em segundos se experimenta."
+    },
+    {
+      "id": "dupla-local",
+      "name": "Dupla no mesmo teclado",
+      "description": "Duas pessoas na mesma máquina querendo duelar sem instalar nada."
+    },
+    {
+      "id": "jogador-solo",
+      "name": "Jogador solo",
+      "description": "Joga contra bots para aprender os campeões e treinar mecânicas."
+    },
+    {
+      "id": "pesquisador-ia",
+      "name": "Pesquisador de IA",
+      "description": "Usa o laboratório para observar bots duelando de forma determinística e reprodutível."
+    }
+  ],
+  "categories": [
+    { "id": "descoberta", "title": "Descoberta" },
+    { "id": "duelo", "title": "Duelo local" },
+    { "id": "treino", "title": "Treino contra bot" },
+    { "id": "laboratorio", "title": "Laboratório de IA" },
+    { "id": "aprendizado", "title": "Aprendizado e campeões" }
+  ],
+  "journeys": [
+    {
+      "id": "landing-primeira-partida",
+      "title": "Da landing à primeira partida",
+      "actor": "visitante-site",
+      "category": "descoberta",
+      "scenario": "Alguém recebe o link do jogo e abre no navegador sem contexto nenhum sobre o que vai encontrar.",
+      "goal": "Estar dentro de uma partida em menos de um minuto, sem cadastro nem download.",
+      "stages": [
+        {
+          "title": "Chegar",
+          "moments": [
+            {
+              "id": "bmb-landing",
+              "title": "Abre a landing",
+              "doing": "Lê a proposta do jogo e os benefícios listados na página inicial.",
+              "thinking": "[Assumption] Roda no navegador mesmo? Sem instalar nada?",
+              "feeling": 3,
+              "pain": "[Assumption] Texto compete com o que o jogo faria melhor: mostrar-se em movimento.",
+              "opportunity": "[Assumption] Colocar uma partida de bots rodando ao vivo na primeira dobra, como demonstração.",
+              "evidence": "",
+              "frontstage": "Site institucional (`Site/`) com os blocos de benefício de `content.ts`.",
+              "backstage": "Build estático do site, totalmente isolado do pacote de mecânicas do jogo.",
+              "support": "Hospedagem estática."
+            },
+            {
+              "id": "bmb-idioma",
+              "title": "Recebe o idioma pelo domínio",
+              "doing": "Vê a página em português ou inglês conforme o domínio pelo qual entrou.",
+              "thinking": "[Assumption] Está no meu idioma, ótimo — mas e se eu quiser o outro?",
+              "feeling": 3,
+              "pain": "[Assumption] Idioma amarrado ao domínio: sem seletor, quem chegou pelo domínio errado não tem como trocar.",
+              "opportunity": "[Assumption] Seletor de idioma explícito, com o domínio apenas definindo o padrão.",
+              "evidence": "",
+              "frontstage": "Conteúdo do site no idioma do domínio de entrada.",
+              "backstage": "Resolução de idioma pelo hostname na inicialização do site.",
+              "support": "DNS dos dois domínios."
+            },
+            {
+              "id": "bmb-escolher-modo",
+              "title": "Escolhe entre arena, treino e laboratório",
+              "doing": "Clica em um dos três destinos oferecidos pelo site.",
+              "thinking": "[Assumption] Qual desses é 'jogar'? Laboratório parece coisa de gente avançada.",
+              "feeling": 3,
+              "pain": "[Assumption] Três portas de entrada equivalentes fazem o visitante hesitar em vez de jogar.",
+              "opportunity": "[Assumption] Um botão primário claro para jogar agora, com treino e laboratório como caminhos secundários.",
+              "evidence": "",
+              "frontstage": "Botões de arena, treino e laboratório no site.",
+              "backstage": "Links carregam o jogo com parâmetros de modo na URL, pulando ou não a seleção.",
+              "support": "Roteamento por parâmetros de URL."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "duelo-mesmo-teclado",
+      "title": "Duelar a dois no mesmo teclado",
+      "actor": "dupla-local",
+      "category": "duelo",
+      "scenario": "Duas pessoas sentadas na mesma máquina querem uma partida rápida uma contra a outra.",
+      "goal": "Terminar um duelo completo sem consultar documentação nenhuma.",
+      "stages": [
+        {
+          "title": "Preparar",
+          "moments": [
+            {
+              "id": "bmb-selecao",
+              "title": "Cada um escolhe seu campeão",
+              "doing": "Os dois jogadores selecionam campeões na tela de escolha.",
+              "thinking": "[Assumption] Não sei o que cada um faz. Vou pelo visual mesmo.",
+              "feeling": 3,
+              "pain": "[Assumption] Escolher sem entender a habilidade transforma o primeiro duelo em sorteio.",
+              "opportunity": "[Assumption] Prévia animada da habilidade na própria tela de seleção.",
+              "evidence": "",
+              "frontstage": "Tela de seleção de campeões.",
+              "backstage": "Catálogo carregado dinamicamente a partir das definições de cada campeão.",
+              "support": "Bundle do jogo (Vite)."
+            },
+            {
+              "id": "bmb-controles",
+              "title": "Descobre os controles no ar",
+              "doing": "Cada jogador testa as teclas do próprio lado até entender o esquema.",
+              "thinking": "[Assumption] Qual tecla é a minha habilidade mesmo?",
+              "feeling": 2,
+              "pain": "[Assumption] Dois esquemas de teclado distintos precisam ser memorizados durante a partida, sem lembrete na tela.",
+              "opportunity": "[Assumption] Sobreposição discreta com os controles de cada lado nos primeiros segundos.",
+              "evidence": "",
+              "frontstage": "Arena com os dois jogadores no mesmo teclado; pausa e reinício disponíveis.",
+              "backstage": "Adaptador de modo do navegador mapeia entradas para os dois controladores locais.",
+              "support": "Eventos de teclado do navegador."
+            }
+          ]
+        },
+        {
+          "title": "Duelar",
+          "moments": [
+            {
+              "id": "bmb-partida",
+              "title": "Joga a partida",
+              "doing": "Movimenta, posiciona bombas e usa a habilidade do campeão até um dos dois vencer.",
+              "thinking": "[Assumption] Isso é rápido e responsivo. Uma revanche?",
+              "feeling": 4,
+              "pain": "[Assumption] Sem placar acumulado entre partidas, cada revanche recomeça do zero simbólico.",
+              "opportunity": "[Assumption] Placar da série na tela de fim de partida, com revanche em uma tecla.",
+              "evidence": "",
+              "frontstage": "Arena renderizada; efeitos de habilidade e resolução da vitória.",
+              "backstage": "Núcleo determinístico avança em passos fixos de 20 ms; nenhum estado depende de taxa de quadros.",
+              "support": "Motor local no navegador — sem servidor."
+            },
+            {
+              "id": "bmb-revanche",
+              "title": "Reinicia para a revanche",
+              "doing": "Aperta a tecla de reinício e a partida seguinte começa imediatamente.",
+              "thinking": "[Assumption] Reinício instantâneo é exatamente o que eu queria.",
+              "feeling": 5,
+              "pain": "[Assumption] O reinício também descarta a possibilidade de rever o que acabou de acontecer.",
+              "opportunity": "[Assumption] Repetição curta do lance final antes de reiniciar.",
+              "evidence": "",
+              "frontstage": "Reinício imediato pela tecla dedicada.",
+              "backstage": "Estado da partida é reconstruído do zero pelo núcleo determinístico.",
+              "support": "Motor local no navegador."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "treinar-contra-bot",
+      "title": "Treinar contra um bot",
+      "actor": "jogador-solo",
+      "category": "treino",
+      "scenario": "Um jogador sozinho quer aprender o campeão e treinar mecânicas antes de duelar com gente.",
+      "goal": "Ganhar confiança no campeão sem depender de outra pessoa.",
+      "stages": [
+        {
+          "title": "Entrar",
+          "moments": [
+            {
+              "id": "bmb-treino-entrada",
+              "title": "Entra direto no treino pela URL",
+              "doing": "Abre o link de treino, que já pula a seleção e começa a partida.",
+              "thinking": "[Assumption] Nem precisei escolher nada. Já estou jogando.",
+              "feeling": 4,
+              "pain": "[Assumption] Pular a seleção também tira do jogador a escolha do campeão que ele queria treinar.",
+              "opportunity": "[Assumption] Troca rápida de campeão dentro do próprio treino, sem sair da partida.",
+              "evidence": "",
+              "frontstage": "Arena de treino já carregada, com bot no lado oposto.",
+              "backstage": "Parâmetros de URL definem o modo e pulam a tela de seleção.",
+              "support": "Roteamento por parâmetros de URL."
+            },
+            {
+              "id": "bmb-bot-comportamento",
+              "title": "Enfrenta o bot",
+              "doing": "Duela contra o oponente controlado por IA e observa como ele reage.",
+              "thinking": "[Assumption] Ele é difícil demais ou fácil demais? Não tenho como ajustar.",
+              "feeling": 3,
+              "pain": "[Assumption] Sem níveis de dificuldade, o treino não acompanha a evolução do jogador.",
+              "opportunity": "[Assumption] Escala de dificuldade selecionável antes ou durante o treino.",
+              "evidence": "",
+              "frontstage": "Bot jogando na arena.",
+              "backstage": "Bots decidem sobre instantâneos congelados do estado, sem acesso a informação privilegiada.",
+              "support": "Módulo de bots do motor."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "laboratorio-ia",
+      "title": "Observar bots no laboratório determinístico",
+      "actor": "pesquisador-ia",
+      "category": "laboratorio",
+      "scenario": "Alguém interessado em comportamento de agentes quer rodar duelos de bots que possam ser repetidos exatamente.",
+      "goal": "Reproduzir a mesma partida quantas vezes quiser e comparar mudanças com confiança.",
+      "stages": [
+        {
+          "title": "Rodar",
+          "moments": [
+            {
+              "id": "bmb-lab-abrir",
+              "title": "Abre o laboratório",
+              "doing": "Entra pelo link do modo laboratório e assiste a dois bots duelando.",
+              "thinking": "[Assumption] Isso é observação, não jogo. Que controle eu tenho aqui?",
+              "feeling": 3,
+              "pain": "[Assumption] A natureza determinística — o principal diferencial — não é explicada na tela.",
+              "opportunity": "[Assumption] Exibir a semente da partida e o número do passo durante a execução.",
+              "evidence": "",
+              "frontstage": "Arena em modo laboratório, com bots nos dois lados.",
+              "backstage": "Gerador pseudoaleatório semeado e passos fixos de 20 ms tornam a execução reprodutível.",
+              "support": "Motor local no navegador."
+            },
+            {
+              "id": "bmb-lab-repetir",
+              "title": "Repete a mesma semente",
+              "doing": "Reinicia com a mesma semente e vê exatamente a mesma partida acontecer de novo.",
+              "thinking": "[Assumption] Reproduziu igual. Agora dá para comparar mudanças de verdade.",
+              "feeling": 5,
+              "pain": "[Assumption] Sem exportar o resultado, a comparação entre execuções fica na memória de quem assistiu.",
+              "opportunity": "[Assumption] Exportar o resultado da partida com a semente, para diferença entre execuções.",
+              "evidence": "",
+              "frontstage": "Distinção entre reiniciar a mesma partida e sortear uma nova.",
+              "backstage": "Semente preservada no reinício; mesma sequência de decisões dos bots.",
+              "support": "Motor local no navegador."
+            },
+            {
+              "id": "bmb-lab-novo-bot",
+              "title": "Compara comportamentos de bots",
+              "doing": "Troca os bots dos dois lados pelos parâmetros da URL e roda de novo.",
+              "thinking": "[Assumption] Configurar por URL funciona, mas eu preciso saber os nomes de cor.",
+              "feeling": 2,
+              "pain": "[Assumption] Configuração exclusivamente por parâmetro de URL exige conhecimento não descoberto pela interface.",
+              "opportunity": "[Assumption] Painel de configuração do laboratório que monte a URL para o pesquisador.",
+              "evidence": "",
+              "frontstage": "Nenhuma: a configuração vive na barra de endereços.",
+              "backstage": "Parâmetros da URL selecionam a implementação de bot de cada lado.",
+              "support": "Roteamento por parâmetros de URL."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aprender-campeoes",
+      "title": "Aprender controles e campeões",
+      "actor": "jogador-solo",
+      "category": "aprendizado",
+      "scenario": "Depois de algumas partidas confusas, o jogador procura o material que explica o jogo.",
+      "goal": "Entender as habilidades e voltar à arena jogando melhor.",
+      "stages": [
+        {
+          "title": "Estudar",
+          "moments": [
+            {
+              "id": "bmb-guia",
+              "title": "Lê o guia de controles",
+              "doing": "Abre a página de guia e confere as teclas dos dois jogadores.",
+              "thinking": "[Assumption] Precisei sair do jogo para descobrir como jogar.",
+              "feeling": 2,
+              "pain": "[Assumption] O guia é uma página separada: aprender exige interromper a partida.",
+              "opportunity": "[Assumption] Guia acessível de dentro da pausa, sem abandonar a partida.",
+              "evidence": "",
+              "frontstage": "Página de guia com esquema de teclas e regras.",
+              "backstage": "Conteúdo estático servido junto do site.",
+              "support": "Hospedagem estática."
+            },
+            {
+              "id": "bmb-champions",
+              "title": "Estuda a página de campeões",
+              "doing": "Lê a identidade, o papel e a habilidade de cada campeão.",
+              "thinking": "[Assumption] Agora entendi por que perdi. A habilidade dele tem janela própria.",
+              "feeling": 4,
+              "pain": "[Assumption] Os números de habilidade vivem em dois lugares (site e definição do campeão) e podem divergir se um for atualizado sozinho.",
+              "opportunity": "[Assumption] Gerar o conteúdo do site a partir das definições do jogo, eliminando a duplicação.",
+              "evidence": "",
+              "frontstage": "Página de campeões com papel, habilidade e tempos.",
+              "backstage": "Dados do site espelham manualmente as definições de cada campeão no pacote de mecânicas.",
+              "support": "Build estático do site."
+            },
+            {
+              "id": "bmb-volta-arena",
+              "title": "Volta para a arena aplicando o que aprendeu",
+              "doing": "Reentra na partida e usa a habilidade no momento certo.",
+              "thinking": "[Assumption] Funcionou. Agora o jogo faz sentido.",
+              "feeling": 5,
+              "pain": "[Assumption] Não há como medir a própria evolução entre sessões.",
+              "opportunity": "[Assumption] Estatísticas locais simples de partidas e vitórias por campeão.",
+              "evidence": "",
+              "frontstage": "Arena com uso bem-sucedido da habilidade.",
+              "backstage": "Mesmo núcleo determinístico; nenhum estado é persistido entre sessões.",
+              "support": "Motor local no navegador."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
